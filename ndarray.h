@@ -11,7 +11,10 @@
 #include <optional>
 
 #include "__ndarray_internal.h"
+//#include "__ndarray_proxy_internal.h"
+
 #include "dtype.h"
+#include "array.h"
 
 namespace np {
     namespace matrix {
@@ -21,7 +24,7 @@ namespace np {
         };
     }
 
-    template<typename _Tp>
+    template<typename _Tp = double>
     /**
      * @brief A class representing a multidimensional array (ndarray).
      * 
@@ -34,6 +37,13 @@ namespace np {
     public:
         Ndarray() = default;
         /**
+         * @brief Constructs an Ndarray object from an initializer list.
+         * 
+         * @param il An initializer list to initialize the ndarray.
+         */
+        Ndarray(std::initializer_list<_Tp> il);
+
+        /**
          * @brief Constructs an Ndarray object.
          * 
          * @param shape A tuple representing the shape of the ndarray.
@@ -43,7 +53,7 @@ namespace np {
          * @param strides An optional tuple representing the strides of the ndarray.
          * @param order The memory layout order of the ndarray.
          */
-        Ndarray(std::tuple<int,int,int> shape, 
+        Ndarray(std::vector<int> shape, 
                 np::dtype type, 
                 std::optional<std::vector<_Tp>> buffer = std::nullopt,
                 std::optional<off_t> offset = std::nullopt,
@@ -57,9 +67,51 @@ namespace np {
          * @param sizes The index of the element to access.
          * @return Reference to the element at the specified index.
          */
-        _Tp& operator[](std::size_t sizes);
 
-        _Tp& operator()(std::vector<int> indexes);
+        //_Tp& operator[](std::size_t sizes);
+        //_Tp& operator()(std::vector<int> indexes);
+        
+        template <std::size_t Size>
+        void set(const std::array<std::size_t, Size>& indices, _Tp value);
+
+
+        template <std::size_t Size>
+        _Tp get(const std::array<std::size_t, Size>& indices) const;
+
+        /*np::_Numpy_ndarray_proxy operator[](std::size_t index) {
+            return np::_Numpy_ndarray_proxy(*this, index * strides[0], 1);
+        }*/
+        
+        
+        /**
+         * @brief The data type of the elements in the ndarray.
+         */
+        np::dtype type;
+
+        /**
+         * @brief A tuple representing the shape of the ndarray.
+         */
+        std::vector<int> shape;
+
+        /**
+         * @brief An optional 2D vector representing the buffer of the ndarray.
+         */
+        std::optional<std::vector<_Tp>> buffer;
+
+        /**
+         * @brief An optional offset for the ndarray.
+         */
+        std::optional<off_t> offset;
+
+        /**
+         * @brief An optional tuple representing the strides of the ndarray.
+         */
+        std::vector<_Tp> strides;
+
+        /**
+         * @brief The memory layout order of the ndarray.
+         */
+        np::matrix::Order order;
 
         /**
          * @brief Checks if all elements along the specified axis evaluate to true.
@@ -70,7 +122,12 @@ namespace np {
          * @param where Optional condition array to apply the check.
          * @return True if all elements evaluate to true, otherwise false.
          */
+
         bool all(size_t axis, std::optional<Ndarray> out, bool keepdims, std::vector<bool> where) const;
+
+        friend std::ostream& operator<<<>(std::ostream& output, Ndarray<_Tp> array);
+
+        
 
         /**
          * @brief Checks if any element along the specified axis evaluates to true.
@@ -337,16 +394,8 @@ namespace np {
         /**
          * @brief Returns a view of the array with the same data.
          */
-        void view();
-
-        np::dtype type;
-        std::tuple<int, int, int> shape;    
-        std::optional<std::vector<_Tp>> buffer;
-        std::optional<off_t> offset;
-        std::optional<std::tuple<int>> strides;
-        np::matrix::Order order;
-    
-    //private:
+        void view();    
+    private:
         /**
          * @brief Computes the strides for the ndarray.
          * 
@@ -355,11 +404,31 @@ namespace np {
          * @param std::index_sequence<Is...> A sequence of indices.
          * @return The computed strides as a tuple.
          */
-        template <typename Tuple,  std::size_t... Is>
-        constexpr Tuple _compute_strides(std::index_sequence<Is...>) const;
+  
+        std::vector<int> _compute_strides() const;
+
+        /**
+         * @brief Recursively prints the elements of the ndarray.
+         * 
+         * @param dim The current dimension being printed.
+         * @param offset The offset to the current element in the buffer.
+         */
+        void _print_recursive(std::size_t dim, std::size_t offset, std::ostream& output) const;
+        
+        /**
+         * @brief Computes the flat index in a multi-dimensional array given the indices for each dimension.
+         * 
+         * @tparam Size The number of dimensions in the array.
+         * @param indices An array containing the indices for each dimension.
+         * @return std::size_t The flat index corresponding to the provided multi-dimensional indices.
+         */
+        template <std::size_t Size>
+        std::size_t _get_flat_index(const std::array<std::size_t, Size>& indices) const;
     };
 }
 
 #include "ndarray.tpp"
+#include "__ndarray_methods.tpp"
+#include "__ndarray_representation.tpp"
 
 #endif

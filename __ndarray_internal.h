@@ -2,12 +2,13 @@
 #define _NDARRAY_INTERNAL_H
 
 #include <map>
+#include <vector>
 #include <string_view>
 
 #include "dtype.h"
 
 namespace np {
-    template <typename _Tp>
+    template <typename _Tp = double>
     /**
      * @class _Numpy_ndarray_internal
      * @brief Internal representation of a Numpy ndarray.
@@ -57,7 +58,7 @@ namespace np {
     */
 
         std::string_view T;
-        std::optional<std::vector<_Tp>> data;
+        std::vector<_Tp> data;
         np::dtype dtype;
         std::map<_Tp, _Tp*> flags;
         _Tp imag;
@@ -66,7 +67,7 @@ namespace np {
         int itemsize;
         int nbytes;
         int ndim;
-        std::tuple<int> strides;
+        std::vector<int> strides;
     };  
 }
 

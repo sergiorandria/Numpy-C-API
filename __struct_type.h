@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-typedef struct __dtype_struct
+typedef struct _dtype_struct
 {
     std::uint32_t size;
     std::uint32_t val;
@@ -11,10 +11,10 @@ typedef struct __dtype_struct
     bool atomic;
     bool align;
 
-    __dtype_struct();
-    __dtype_struct(std::uint32_t size);
-    __dtype_struct(std::uint32_t val);
-    __dtype_struct(std::uint32_t size, std::uint32_t val);
+    _dtype_struct();
+    _dtype_struct(std::uint32_t size);
+    _dtype_struct(std::uint32_t val);
+    _dtype_struct(std::uint32_t size, std::uint32_t val);
 } TpStruct;
 
 #endif

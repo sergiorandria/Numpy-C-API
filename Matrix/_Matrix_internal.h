@@ -24,7 +24,7 @@ namespace np {
 
     private:
         std::vector<vector<_Tp>> data;      // Interpreted as a matrix with commas or spaces separating
-        std::optional<np::dtype> type;      // data type of the output matrix
+        np::dtype type;      // data type of the output matrix
         std::bool_constant<false> copy;     //determines whether the data is copied or whether a view is constructed
     };
 }

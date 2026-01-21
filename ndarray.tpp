@@ -1,5 +1,7 @@
 #include <stdexcept>
 #include <iostream>
+#include <ranges>
+#include <utility>
 
 #include "ndarray.h"
 #include "numpy/exceptions/__visible_deprecation.h"
@@ -16,13 +18,31 @@ template<typename _Tp>
  * @param strides An optional parameter that specifies the strides for each dimension.
  * @param order The memory layout order of the Ndarray (C or Fortran order).
  */
-np::Ndarray<_Tp>::Ndarray(std::tuple<int,int,int> shape, 
+
+np::Ndarray<_Tp>::Ndarray(std::initializer_list<_Tp> il)
+{
+    this->shape = il;
+    this->ndim = this->shape.size();
+    this->itemsize = sizeof(_Tp);
+
+    int n = 1; 
+    for(auto _elem: il)
+        n *= _elem;
+
+    this->data.resize(n);
+    this->strides.resize(this->ndim);
+}
+
+template<typename _Tp>
+np::Ndarray<_Tp>::Ndarray(std::vector<int> shape, 
                             np::dtype type,
                             std::optional<std::vector<_Tp>> buffer,
                             std::optional<off_t> offset,
                             std::optional<std::tuple<int>> strides,
                             np::matrix::Order order) noexcept 
 {
+
+    
     // Assign the shape of the Ndarray
     this->shape = shape;
     
@@ -42,7 +62,7 @@ np::Ndarray<_Tp>::Ndarray(std::tuple<int,int,int> shape,
     this->order = order;
 
     /*T 
-    data 
+    data ::emplace()
     dtype
     flags 
     size 
@@ -156,56 +176,111 @@ np::Ndarray<_Tp>::Ndarray(std::tuple<int,int,int> shape,
     {
 
     }*/
-    if (!strides.has_value())
+    /*if (!strides.has_value())
     {
         auto size = std::tuple_size<decltype(this->shape)>::value;
-    }
+    }*/
 }
 
 template <typename _Tp>
-template <typename Tuple, std::size_t... Is>
-constexpr Tuple np::Ndarray<_Tp>::_compute_strides(std::index_sequence<Is...>) const {
-    Tuple strides{};
-    std::size_t stride = 1;
-
-    auto compute_stride = [&](auto I) {
-        constexpr std::size_t index = sizeof...(Is) - 1 - I;
-        
-        std::get<index>(strides) = stride;
-        stride *= std::get<index>(shape);
-    };
-
-    (compute_stride(std::integral_constant<std::size_t, Is>{}), ...);
-
-    return strides;
+std::vector<int> np::Ndarray<_Tp>::_compute_strides() const {
+    int n = this->shape.size();
+    std::vector<int> computed_strides(n, 1);
+    
+    int stride = 1;
+    for (int i = n - 1; i >= 0; --i) {
+        computed_strides[i] = stride;
+        stride *= this->shape[i];
+    }
+    
+    return computed_strides;
 }
 
-template<typename _Tp>
-bool np::Ndarray<_Tp>::all(size_t axis, 
-                            std::optional<Ndarray> out, 
-                            bool keepdims,
-                            std::vector<bool> where) const
-{
+template <typename _Tp>
+template <std::size_t Size>
+std::size_t np::Ndarray<_Tp>::_get_flat_index(const std::array<std::size_t, Size>& indices) const {
+    std::vector<int> computed_strides = _compute_strides();
+    
+    std::size_t flatIndex = 0;
+    for (std::size_t i = 0; i < Size; i++) {
+        flatIndex += indices[i] * computed_strides[i];
+    }
 
-    return true;
+    return flatIndex;
 }
 
-template<typename _Tp>
+template <typename _Tp> 
+template <std::size_t Size>
+void np::Ndarray<_Tp>::set(const std::array<std::size_t, Size>& indices, _Tp value) {
+    std::size_t index = _get_flat_index(indices);
+    this->data[index] = value;
+}
+
+template <typename _Tp>
+template <std::size_t Size>
+_Tp np::Ndarray<_Tp>::get(const std::array<std::size_t, Size>& indices) const {
+    return this->data[_get_flat_index(indices)];
+}
+
+/*template<typename _Tp>
 _Tp& np::Ndarray<_Tp>::operator[](std::size_t sizes)
 {
     return this->buffer.value()[sizes];
-}
+}*/
 
-template<typename _Tp>
+/*template<typename _Tp>
 _Tp& np::Ndarray<_Tp>::operator()(std::vector<int> indexes) 
 {
-    //auto _strideSize = std::tuple_size<_Tp>(this->strides)::value;
-
     try {
         return this->data[0];
     }
+
     catch (exceptions::Visible_Deprecation<void>& e)
     {
         std::cout << "Exception as e:" << e.what() << std::endl;
     }
+}*/
+
+template <typename _Tp>
+void np::Ndarray<_Tp>::_print_recursive(std::size_t dim, std::size_t offset, std::ostream& output) const {
+    std::vector<int> strides = _compute_strides();
+
+    if (dim == this->shape.size() - 1) 
+    {
+        output << "[";
+        for (std::size_t i = 0; i < this->shape[dim]; i++) 
+        {
+            if (i != this->shape[dim] - 1)
+                output << this->data[offset + i] << ",";
+            else output << this->data[offset + i];
+            
+        }   
+        output << "]";
+    }
+
+    else 
+    {
+        output << "[";
+        for (std::size_t i = 0; i < this->shape[dim]; i++) 
+        {
+            _print_recursive(dim + 1, offset + i * strides[dim],output);
+            if (i < this->shape[dim] - 1) 
+                output << ",";
+        }
+        output << "]";
+    }
 }
+
+template <typename _Tp>
+std::ostream& operator<<(std::ostream& output, np::Ndarray<_Tp> array)
+{
+    output << "ndarray(";
+    array._print_recursive(0, 0, output);
+    output << ")" << std::endl;   
+    return output; 
+}
+
+/*template <typename _Tp = double>
+np::_Numpy_ndarray_proxy np::Ndarray::operator[](std::size_t index) {
+    return np::_Numpy_ndarray_proxy(*this, index * strides[0], 1);
+}*/

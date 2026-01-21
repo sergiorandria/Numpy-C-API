@@ -88,10 +88,14 @@ namespace np {
         std::unordered_map<_Tp, std::optional<_Tp>> metadata;
     };
 
+constexpr dtype float32 = dtype::float32;
+constexpr dtype float64 = dtype::float64;
+constexpr dtype int32 = dtype::int32;
+constexpr dtype int64 = dtype::int64;
+constexpr dtype bool_ = dtype::bool_;
+
 //Integer types
 #define int16 dtype::int16
-#define int32 dtype::int32
-#define int64 dtype::int64
 #define uint8 dtype::uint8 
 #define uint16 dtype::uint16
 #define uint32 dtype::uint32 
@@ -99,8 +103,6 @@ namespace np {
 
 //Floating-Point types
 #define float16 dtype::float16
-#define float32 dtype::float32 
-#define float64 dtype::float64
 #define longdouble dtype::longdouble 
 
 //Complex types
@@ -109,7 +111,6 @@ namespace np {
 #define clongdouble dtype::clongdouble 
 
 //Boolean types
-#define bool_ dtype::bool_ 
 #define string_ dtype::string_ 
 #define unicode_ dtype::unicode_
 

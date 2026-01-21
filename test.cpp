@@ -5,6 +5,7 @@
 int main() {
     using Shape = std::tuple<int, int, int>;
     using Strides = std::tuple<std::size_t, std::size_t, std::size_t>;
+    auto arr = np::Ndarray({1,2}, np::int32, std::nullopt);
 
     np::Ndarray<int> ndarray;
     ndarray.shape = Shape{4, 3, 2};

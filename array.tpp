@@ -2,6 +2,7 @@
 #include "numpy/exceptions/__visible_deprecation.h"
 
 #include <ranges>
+#include <utility>
 
 template<typename _Tp>
 template<typename Container>
@@ -37,17 +38,19 @@ _Tp& np::Array<_Tp>::operator[](int i)
 }
 
 template <typename _Tp>
-np::Array& np::Array<_Tp>::operator=(const Array&& array) 
+np::Array<_Tp>& np::Array<_Tp>::operator=(const Array<_Tp>&& array) 
 {
-    this->T = array.T;
-    this->data = array.data;
-    this->dtype = array.dtype;
-    this->flags = array.flags; 
-    this->imag = array.imag;
-    this->real = array.real;
-    this->size = array.size;
-    this->itemsize = array.itemsize;
-    this->nbytes = array.nbytes;
-    this->ndim = array.ndim; 
-    this->strides = array.strides;
+    this->T        = std::move(array.T);
+    this->data     = std::move(array.data);
+    this->dtype    = std::move(array.dtype);
+    this->flags    = std::move(array.flags); 
+    this->imag     = std::move(array.imag);
+    this->real     = std::move(array.real);
+    this->size     = std::move(array.size);
+    this->itemsize = std::move(array.itemsize);
+    this->nbytes   = std::move(array.nbytes);
+    this->ndim     = std::move(array.ndim); 
+    this->strides  = std::move(array.strides);
+
+    return *this;
 }
