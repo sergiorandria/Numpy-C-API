@@ -3,10 +3,11 @@
 
 namespace np 
 {
-    namespace linalg {
+namespace linalg 
+{
 
-    }
+} // namespace linalg
     
-}
+} // namespace np
 
 #endif 

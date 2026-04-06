@@ -1,0 +1,16 @@
+CompileFlags:
+  Add:
+    - "-std=c++20"
+    - "-Wall"
+    - "-x"
+    - "c++"  # Force le traitement comme C++
+  Remove:
+    - "-x"
+    - "-xc"
+
+Index:
+  Background: Build
+
+Diagnostics:
+  ClangTidy:
+    Add: "*"

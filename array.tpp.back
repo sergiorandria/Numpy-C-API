@@ -1,0 +1,223 @@
+#ifndef NP_ARRAY_TPP
+#define NP_ARRAY_TPP
+
+#include "array.h"
+#include "numpy/exceptions/__visible_deprecation.h"
+
+#include <ranges>
+#include <utility>
+
+#include <algorithm>
+#include <iterator>
+#include <stdexcept>
+#include <type_traits>
+
+namespace np {
+
+// Constructor from range-like container
+// Complexity: Linear in container.size()
+// Exception guarantee: Strong (no changes if exception thrown)
+template<typename _Tp>
+template<typename Container>
+    requires std::ranges::range<Container>
+Array<_Tp>::Array(const Container& container, std::optional<dtype> type)
+{
+    this->data.emplace(); 
+
+    // Reserve space if container supports size() for efficiency
+    if constexpr (std::ranges::sized_range<Container>) {
+        this->data->reserve(std::ranges::size(container));
+    }
+    
+    // Use range-based copy for cleaner, more idiomatic code
+    std::ranges::copy(container, std::back_inserter(*this->data));
+    
+    // Initialize dtype if provided
+    if (type) {
+        dtype = *type;
+    }
+}
+
+template<typename _Tp>
+Array<_Tp>::Array(std::initializer_list<_Tp> initList, std::optional<dtype> type)
+{
+    this->data.emplace();
+    this->data->reserve(initList.size());
+    this->data->assign(initList.begin(), initList.end());
+    
+    if (type) {
+        this->dtype = *type;
+    }
+}
+
+template<typename _Tp>
+typename Array<_Tp>::reference Array<_Tp>::operator[](size_type i) noexcept
+{
+    if (!this->data) [[unlikely]] {
+        this->data.emplace();
+    }
+    
+    return (*this->data)[i];
+}
+
+template<typename _Tp>
+typename Array<_Tp>::const_reference Array<_Tp>::operator[](size_type i) const noexcept
+{
+    return (*this->data)[i];
+}
+
+// Constructor from initializer list
+// Complexity: Linear in initList.size()
+// Exception guarantee: Strong
+template<typename _Tp>
+Array<_Tp>::Array(std::initializer_list<_Tp> initList, std::optional<dtype> type)
+{
+    this->data.emplace(); 
+    this->data->reserve(initList.size());
+    this->data->assign(initList.begin(), initList.end());
+    
+    if (type) {
+        dtype = *type;
+    }
+}
+
+// Subscript operator with bounds checking
+// Complexity: Constant
+// Exception guarantee: Strong (throws std::out_of_range on invalid access)
+template<typename _Tp>
+_Tp& Array<_Tp>::operator[](int i)
+{
+    // Lazy initialization with proper error handling
+    if (!this->data) [[unlikely]] {
+        this->data.emplace();
+    }
+    
+    // Use at() for bounds checking, or add manual check for negative indices
+    if (i < 0 || static_cast<std::size_t>(i) >= this->data->size()) {
+        throw std::out_of_range("Array index out of bounds");
+    }
+    
+    return (*this->data)[i];
+}
+
+// Const subscript operator
+// Complexity: Constant
+template<typename _Tp>
+const _Tp& Array<_Tp>::operator[](int i) const
+{
+    if (!this->data) [[unlikely]] {
+        throw std::logic_error("Cannot access element of uninitialized Array");
+    }
+    
+    if (i < 0 || static_cast<std::size_t>(i) >= this->data->size()) {
+        throw std::out_of_range("Array index out of bounds");
+    }
+    
+    return (*this->data)[i];
+}
+
+// Move assignment operator
+// Complexity: Constant
+// Exception guarantee: No-throw
+template<typename _Tp>
+Array<_Tp>& Array<_Tp>::operator=(Array<_Tp>&& other) noexcept
+{
+    // Self-assignment check
+    if (this != &other) {
+        // Move all members efficiently
+        T        = std::move(other.T);
+        this->data     = std::move(other.data);
+        this->dtype    = std::move(other.dtype);
+        this->flags    = std::move(other.flags); 
+        this->imag     = std::move(other.imag);
+        this->real     = std::move(other.real);
+        this->size     = std::move(other.size);
+        this->itemsize = std::move(other.itemsize);
+        this->nbytes   = std::move(other.nbytes);
+        this->ndim     = std::move(other.ndim); 
+        this->strides  = std::move(other.strides);
+    }
+    return *this;
+}
+
+// Copy assignment operator (if not already defined)
+// Complexity: Linear in other.this->data->size()
+// Exception guarantee: Strong
+template<typename _Tp>
+Array<_Tp>& Array<_Tp>::operator=(const Array<_Tp>& other)
+{
+    // Copy-and-swap idiom for exception safety
+    if (this != &other) {
+        Array temp(other);  // Copy constructor
+        swap(*this, temp);   // No-throw swap
+    }
+    return *this;
+}
+
+// Friend swap function for efficient swapping
+// Complexity: Constant
+// Exception guarantee: No-throw
+template<typename _Tp>
+void swap(Array<_Tp>& lhs, Array<_Tp>& rhs) noexcept
+{
+    using std::swap;
+    swap(lhs.T,        rhs.T);
+    swap(lhs.this->data,     rhs.data);
+    swap(lhs.dtype,    rhs.dtype);
+    swap(lhs.flags,    rhs.flags);
+    swap(lhs.imag,     rhs.imag);
+    swap(lhs.real,     rhs.real);
+    swap(lhs.size,     rhs.size);
+    swap(lhs.itemsize, rhs.itemsize);
+    swap(lhs.nbytes,   rhs.nbytes);
+    swap(lhs.ndim,     rhs.ndim);
+    swap(lhs.strides,  rhs.strides);
+}
+
+// Range-based for loop support
+template<typename _Tp>
+auto Array<_Tp>::begin() noexcept
+{
+    return this->data ? data->begin() : typename std::vector<_Tp>::iterator{};
+}
+
+template<typename _Tp>
+auto Array<_Tp>::end() noexcept
+{
+    return this->data ? data->end() : typename std::vector<_Tp>::iterator{};
+}
+
+template<typename _Tp>
+auto Array<_Tp>::begin() const noexcept
+{
+    return this->data ? data->begin() : typename std::vector<_Tp>::const_iterator{};
+}
+
+template<typename _Tp>
+auto Array<_Tp>::end() const noexcept
+{
+    return this->data ? data->end() : typename std::vector<_Tp>::const_iterator{};
+}
+
+// Utility: bounds-checked access
+template<typename _Tp>
+_Tp& Array<_Tp>::at(std::size_t i)
+{
+    if (!this->data) {
+        throw std::logic_error("Cannot access element of uninitialized Array");
+    }
+    return this->data->at(i);  // Let std::vector handle bounds checking
+}
+
+template<typename _Tp>
+const _Tp& Array<_Tp>::at(std::size_t i) const
+{
+    if (!this->data) {
+        throw std::logic_error("Cannot access element of uninitialized Array");
+    }
+    return this->data->at(i);
+}
+
+} // namespace np
+
+#endif // NP_ARRAY_TPP

@@ -1,8 +1,8 @@
 #ifndef _MATRIX_INTERNAL
 #define _MATRIX_INTERNAL
-/* 
-    numpy::Matrix: 
-        returns a matrix from an array-like object, 
+/*
+    numpy::Matrix:
+        returns a matrix from an array-like object,
         or from a string data
 */
 
@@ -11,22 +11,31 @@
 #include <vector>
 #include <string_view>
 
-#include "../dtype.h"
-#include "../__ndarray_internal.h"
+#include "../dtype.hpp"
+#include "../ndarray.hpp"
 
-namespace np {
-    template<typename _Tp>
-    class _Matrix_internal: public np::_Numpy_ndarray_internal<_Tp>
+namespace np
+{
+    template<typename Tp>
+    class MatrixInternal: public np::Ndarray<Tp>
     {
-    public: 
-        virtual _Matrix_internal() = 0;
-        virtual ~_Matrix_internal() = 0;
+      public:
+        virtual ~MatrixInternal() = 0;
 
-    private:
-        std::vector<vector<_Tp>> data;      // Interpreted as a matrix with commas or spaces separating
+        virtual auto operator*(const MatrixInternal<Tp> other)
+        -> MatrixInternal<Tp>;
+        virtual auto operator+(const MatrixInternal<Tp> other)
+        -> MatrixInternal<Tp>;
+        virtual auto operator-(const MatrixInternal<Tp> other)
+        -> MatrixInternal<Tp>;
+        virtual auto operator*(const double value)
+        -> MatrixInternal<Tp>;
+
+      protected:
         np::dtype type;      // data type of the output matrix
-        std::bool_constant<false> copy;     //determines whether the data is copied or whether a view is constructed
+        std::bool_constant<false>
+        copy;     //determines whether the data is copied or whether a view is constructed
     };
-}
+}  // namespace np
 
 #endif
