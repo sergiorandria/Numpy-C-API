@@ -1,0 +1,412 @@
+/**
+ * @file logic.hpp
+ * @brief Logic functions (truth value testing, type checks, comparisons).
+ *
+ * Provides NumPy-compatible logical operations:
+ *   Type checks: isfinite, isinf, isnan, isreal, iscomplex
+ *   Logical ops: logical_and, logical_or, logical_not, logical_xor
+ *   Comparisons: allclose, isclose, array_equal, array_equiv
+ *   Element-wise comparisons: greater, less, equal, not_equal, etc.
+ *
+ * Reference: numpy-reference/reference/routines.logic.html
+ *
+ * @author Sergio Randriamihoatra (sergiorandriamihoatra@gmail.com)
+ */
+#ifndef NP_LOGIC_HPP
+#define NP_LOGIC_HPP
+
+#include <cmath>
+#include <limits>
+#include <type_traits>
+
+#include "ndarray.hpp"
+
+namespace np {
+
+    // =================================================================
+    // Type checks
+    // Reference: numpy-reference/reference/generated/numpy.isfinite.html (etc.)
+    // =================================================================
+
+    /** @brief Test element-wise for finiteness (not infinity and not NaN). */
+    template <typename T>
+    auto isfinite(const Ndarray<T>& x) -> Ndarray<bool> {
+        Ndarray<bool> result(x.shape, dtype::bool_);
+        auto it_in = x.begin();
+        auto it_out = result.begin();
+        for (; it_in != x.end(); ++it_in, ++it_out) {
+            *it_out = std::isfinite(*it_in);
+        }
+        return result;
+    }
+
+    /** @brief Test element-wise for positive or negative infinity. */
+    template <typename T>
+    auto isinf(const Ndarray<T>& x) -> Ndarray<bool> {
+        Ndarray<bool> result(x.shape, dtype::bool_);
+        auto it_in = x.begin();
+        auto it_out = result.begin();
+        for (; it_in != x.end(); ++it_in, ++it_out) {
+            *it_out = std::isinf(*it_in);
+        }
+        return result;
+    }
+
+    /** @brief Test element-wise for NaN. */
+    template <typename T>
+    auto isnan(const Ndarray<T>& x) -> Ndarray<bool> {
+        Ndarray<bool> result(x.shape, dtype::bool_);
+        auto it_in = x.begin();
+        auto it_out = result.begin();
+        for (; it_in != x.end(); ++it_in, ++it_out) {
+            *it_out = std::isnan(*it_in);
+        }
+        return result;
+    }
+
+    /** @brief Test element-wise for negative infinity. */
+    template <typename T>
+    auto isneginf(const Ndarray<T>& x) -> Ndarray<bool> {
+        Ndarray<bool> result(x.shape, dtype::bool_);
+        auto it_in = x.begin();
+        auto it_out = result.begin();
+        for (; it_in != x.end(); ++it_in, ++it_out) {
+            *it_out = std::isinf(*it_in) && (*it_in < T{0});
+        }
+        return result;
+    }
+
+    /** @brief Test element-wise for positive infinity. */
+    template <typename T>
+    auto isposinf(const Ndarray<T>& x) -> Ndarray<bool> {
+        Ndarray<bool> result(x.shape, dtype::bool_);
+        auto it_in = x.begin();
+        auto it_out = result.begin();
+        for (; it_in != x.end(); ++it_in, ++it_out) {
+            *it_out = std::isinf(*it_in) && (*it_in > T{0});
+        }
+        return result;
+    }
+
+    /** @brief Returns True if input is complex. */
+    template <typename T>
+    auto iscomplex(const Ndarray<T>& x) -> Ndarray<bool> {
+        Ndarray<bool> result(x.shape, dtype::bool_);
+        result.fill(detail::is_complex_v<T>);
+        return result;
+    }
+
+    /** @brief Returns True if input is real (not complex). */
+    template <typename T>
+    auto isreal(const Ndarray<T>& x) -> Ndarray<bool> {
+        Ndarray<bool> result(x.shape, dtype::bool_);
+        result.fill(!detail::is_complex_v<T>);
+        return result;
+    }
+
+    /** @brief Returns True if input is a scalar type. */
+    template <typename T>
+    constexpr bool isscalar([[maybe_unused]] const T& x) {
+        return std::is_arithmetic_v<T> || detail::is_complex_v<T>;
+    }
+
+    // =================================================================
+    // Logical operations
+    // Reference: numpy-reference/reference/generated/numpy.logical_and.html (etc.)
+    // =================================================================
+
+    /** @brief Compute truth value of x1 AND x2 element-wise. */
+    template <typename T, typename U>
+    auto logical_and(const Ndarray<T>& x1, const Ndarray<U>& x2)
+        -> Ndarray<bool> {
+        const auto out_shape = detail::broadcast_shapes(x1.shape, x2.shape);
+        Ndarray<bool> result(out_shape, dtype::bool_);
+        
+        const auto ndim_out = out_shape.size();
+        std::vector<std::size_t> idx(ndim_out, 0);
+        
+        for (std::size_t i = 0; i < result.size(); ++i) {
+            std::vector<std::size_t> idx1(x1.ndim(), 0);
+            std::vector<std::size_t> idx2(x2.ndim(), 0);
+            
+            for (std::size_t d = 0; d < ndim_out; ++d) {
+                if (d >= ndim_out - x1.ndim()) {
+                    const auto d1 = d - (ndim_out - x1.ndim());
+                    idx1[d1] = (x1.shape[d1] == 1) ? 0 : idx[d];
+                }
+                if (d >= ndim_out - x2.ndim()) {
+                    const auto d2 = d - (ndim_out - x2.ndim());
+                    idx2[d2] = (x2.shape[d2] == 1) ? 0 : idx[d];
+                }
+            }
+            
+            const bool val1 = static_cast<bool>(x1.get(idx1));
+            const bool val2 = static_cast<bool>(x2.get(idx2));
+            result.set(idx, val1 && val2);
+            
+            for (std::size_t d = ndim_out; d-- > 0;) {
+                if (++idx[d] < static_cast<std::size_t>(out_shape[d])) {
+                    break;
+                }
+                idx[d] = 0;
+            }
+        }
+        
+        return result;
+    }
+
+    /** @brief Compute truth value of x1 OR x2 element-wise. */
+    template <typename T, typename U>
+    auto logical_or(const Ndarray<T>& x1, const Ndarray<U>& x2)
+        -> Ndarray<bool> {
+        const auto out_shape = detail::broadcast_shapes(x1.shape, x2.shape);
+        Ndarray<bool> result(out_shape, dtype::bool_);
+        
+        const auto ndim_out = out_shape.size();
+        std::vector<std::size_t> idx(ndim_out, 0);
+        
+        for (std::size_t i = 0; i < result.size(); ++i) {
+            std::vector<std::size_t> idx1(x1.ndim(), 0);
+            std::vector<std::size_t> idx2(x2.ndim(), 0);
+            
+            for (std::size_t d = 0; d < ndim_out; ++d) {
+                if (d >= ndim_out - x1.ndim()) {
+                    const auto d1 = d - (ndim_out - x1.ndim());
+                    idx1[d1] = (x1.shape[d1] == 1) ? 0 : idx[d];
+                }
+                if (d >= ndim_out - x2.ndim()) {
+                    const auto d2 = d - (ndim_out - x2.ndim());
+                    idx2[d2] = (x2.shape[d2] == 1) ? 0 : idx[d];
+                }
+            }
+            
+            const bool val1 = static_cast<bool>(x1.get(idx1));
+            const bool val2 = static_cast<bool>(x2.get(idx2));
+            result.set(idx, val1 || val2);
+            
+            for (std::size_t d = ndim_out; d-- > 0;) {
+                if (++idx[d] < static_cast<std::size_t>(out_shape[d])) {
+                    break;
+                }
+                idx[d] = 0;
+            }
+        }
+        
+        return result;
+    }
+
+    /** @brief Compute truth value of NOT x element-wise. */
+    template <typename T>
+    auto logical_not(const Ndarray<T>& x) -> Ndarray<bool> {
+        Ndarray<bool> result(x.shape, dtype::bool_);
+        auto it_in = x.begin();
+        auto it_out = result.begin();
+        for (; it_in != x.end(); ++it_in, ++it_out) {
+            *it_out = !static_cast<bool>(*it_in);
+        }
+        return result;
+    }
+
+    /** @brief Compute truth value of x1 XOR x2 element-wise. */
+    template <typename T, typename U>
+    auto logical_xor(const Ndarray<T>& x1, const Ndarray<U>& x2)
+        -> Ndarray<bool> {
+        const auto out_shape = detail::broadcast_shapes(x1.shape, x2.shape);
+        Ndarray<bool> result(out_shape, dtype::bool_);
+        
+        const auto ndim_out = out_shape.size();
+        std::vector<std::size_t> idx(ndim_out, 0);
+        
+        for (std::size_t i = 0; i < result.size(); ++i) {
+            std::vector<std::size_t> idx1(x1.ndim(), 0);
+            std::vector<std::size_t> idx2(x2.ndim(), 0);
+            
+            for (std::size_t d = 0; d < ndim_out; ++d) {
+                if (d >= ndim_out - x1.ndim()) {
+                    const auto d1 = d - (ndim_out - x1.ndim());
+                    idx1[d1] = (x1.shape[d1] == 1) ? 0 : idx[d];
+                }
+                if (d >= ndim_out - x2.ndim()) {
+                    const auto d2 = d - (ndim_out - x2.ndim());
+                    idx2[d2] = (x2.shape[d2] == 1) ? 0 : idx[d];
+                }
+            }
+            
+            const bool val1 = static_cast<bool>(x1.get(idx1));
+            const bool val2 = static_cast<bool>(x2.get(idx2));
+            result.set(idx, val1 != val2);
+            
+            for (std::size_t d = ndim_out; d-- > 0;) {
+                if (++idx[d] < static_cast<std::size_t>(out_shape[d])) {
+                    break;
+                }
+                idx[d] = 0;
+            }
+        }
+        
+        return result;
+    }
+
+    // =================================================================
+    // Comparison functions
+    // Reference: numpy-reference/reference/generated/numpy.greater.html (etc.)
+    // =================================================================
+
+    /** @brief Return (x1 > x2) element-wise. */
+    template <typename T, typename U>
+    auto greater(const Ndarray<T>& x1, const Ndarray<U>& x2)
+        -> Ndarray<bool> {
+        return x1 > x2;
+    }
+
+    /** @brief Return (x1 >= x2) element-wise. */
+    template <typename T, typename U>
+    auto greater_equal(const Ndarray<T>& x1, const Ndarray<U>& x2)
+        -> Ndarray<bool> {
+        return x1 >= x2;
+    }
+
+    /** @brief Return (x1 < x2) element-wise. */
+    template <typename T, typename U>
+    auto less(const Ndarray<T>& x1, const Ndarray<U>& x2)
+        -> Ndarray<bool> {
+        return x1 < x2;
+    }
+
+    /** @brief Return (x1 <= x2) element-wise. */
+    template <typename T, typename U>
+    auto less_equal(const Ndarray<T>& x1, const Ndarray<U>& x2)
+        -> Ndarray<bool> {
+        return x1 <= x2;
+    }
+
+    /** @brief Return (x1 == x2) element-wise. */
+    template <typename T, typename U>
+    auto equal(const Ndarray<T>& x1, const Ndarray<U>& x2)
+        -> Ndarray<bool> {
+        return x1 == x2;
+    }
+
+    /** @brief Return (x1 != x2) element-wise. */
+    template <typename T, typename U>
+    auto not_equal(const Ndarray<T>& x1, const Ndarray<U>& x2)
+        -> Ndarray<bool> {
+        return x1 != x2;
+    }
+
+    // =================================================================
+    // Array comparison
+    // Reference: numpy-reference/reference/generated/numpy.array_equal.html (etc.)
+    // =================================================================
+
+    /** @brief True if two arrays have the same shape and elements. */
+    template <typename T, typename U>
+    bool array_equal(const Ndarray<T>& a1, const Ndarray<U>& a2) {
+        if (a1.shape != a2.shape) {
+            return false;
+        }
+        auto it1 = a1.begin();
+        auto it2 = a2.begin();
+        for (; it1 != a1.end(); ++it1, ++it2) {
+            if (*it1 != static_cast<T>(*it2)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** @brief True if two arrays are element-wise equal within a tolerance. */
+    template <typename T, typename U>
+    auto isclose(const Ndarray<T>& a, const Ndarray<U>& b,
+                 double rtol = 1e-5, double atol = 1e-8)
+        -> Ndarray<bool> {
+        const auto out_shape = detail::broadcast_shapes(a.shape, b.shape);
+        Ndarray<bool> result(out_shape, dtype::bool_);
+        
+        const auto ndim_out = out_shape.size();
+        std::vector<std::size_t> idx(ndim_out, 0);
+        
+        for (std::size_t i = 0; i < result.size(); ++i) {
+            std::vector<std::size_t> idx_a(a.ndim(), 0);
+            std::vector<std::size_t> idx_b(b.ndim(), 0);
+            
+            for (std::size_t d = 0; d < ndim_out; ++d) {
+                if (d >= ndim_out - a.ndim()) {
+                    const auto da = d - (ndim_out - a.ndim());
+                    idx_a[da] = (a.shape[da] == 1) ? 0 : idx[d];
+                }
+                if (d >= ndim_out - b.ndim()) {
+                    const auto db = d - (ndim_out - b.ndim());
+                    idx_b[db] = (b.shape[db] == 1) ? 0 : idx[d];
+                }
+            }
+            
+            const double val_a = static_cast<double>(a.get(idx_a));
+            const double val_b = static_cast<double>(b.get(idx_b));
+            const double diff = std::abs(val_a - val_b);
+            const double threshold = atol + rtol * std::abs(val_b);
+            
+            result.set(idx, diff <= threshold);
+            
+            for (std::size_t d = ndim_out; d-- > 0;) {
+                if (++idx[d] < static_cast<std::size_t>(out_shape[d])) {
+                    break;
+                }
+                idx[d] = 0;
+            }
+        }
+        
+        return result;
+    }
+
+    /** @brief True if two arrays are element-wise equal within a tolerance. */
+    template <typename T, typename U>
+    bool allclose(const Ndarray<T>& a, const Ndarray<U>& b,
+                  double rtol = 1e-5, double atol = 1e-8) {
+        return isclose(a, b, rtol, atol).all();
+    }
+
+    /** @brief True if two arrays are broadcastable and element-wise equal. */
+    template <typename T, typename U>
+    bool array_equiv(const Ndarray<T>& a1, const Ndarray<U>& a2) {
+        try {
+            const auto out_shape = detail::broadcast_shapes(a1.shape, a2.shape);
+            const auto ndim_out = out_shape.size();
+            std::vector<std::size_t> idx(ndim_out, 0);
+            
+            for (std::size_t i = 0; i < detail::product(out_shape); ++i) {
+                std::vector<std::size_t> idx1(a1.ndim(), 0);
+                std::vector<std::size_t> idx2(a2.ndim(), 0);
+                
+                for (std::size_t d = 0; d < ndim_out; ++d) {
+                    if (d >= ndim_out - a1.ndim()) {
+                        const auto d1 = d - (ndim_out - a1.ndim());
+                        idx1[d1] = (a1.shape[d1] == 1) ? 0 : idx[d];
+                    }
+                    if (d >= ndim_out - a2.ndim()) {
+                        const auto d2 = d - (ndim_out - a2.ndim());
+                        idx2[d2] = (a2.shape[d2] == 1) ? 0 : idx[d];
+                    }
+                }
+                
+                if (a1.get(idx1) != static_cast<T>(a2.get(idx2))) {
+                    return false;
+                }
+                
+                for (std::size_t d = ndim_out; d-- > 0;) {
+                    if (++idx[d] < static_cast<std::size_t>(out_shape[d])) {
+                        break;
+                    }
+                    idx[d] = 0;
+                }
+            }
+            
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+} // namespace np
+
+#endif // NP_LOGIC_HPP
