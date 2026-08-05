@@ -32,10 +32,16 @@ namespace np {
     template <typename T>
     auto isfinite(const Ndarray<T>& x) -> Ndarray<bool> {
         Ndarray<bool> result(x.shape, dtype::bool_);
-        auto it_in = x.begin();
-        auto it_out = result.begin();
-        for (; it_in != x.end(); ++it_in, ++it_out) {
-            *it_out = std::isfinite(*it_in);
+        std::vector<std::size_t> idx(x.ndim(), 0);
+        for (std::size_t i = 0; i < x.size(); ++i) {
+            result.set(idx, std::isfinite(x.get(idx)));
+            // Increment index
+            for (std::size_t d = x.ndim(); d-- > 0;) {
+                if (++idx[d] < static_cast<std::size_t>(x.shape[d])) {
+                    break;
+                }
+                idx[d] = 0;
+            }
         }
         return result;
     }
@@ -44,10 +50,15 @@ namespace np {
     template <typename T>
     auto isinf(const Ndarray<T>& x) -> Ndarray<bool> {
         Ndarray<bool> result(x.shape, dtype::bool_);
-        auto it_in = x.begin();
-        auto it_out = result.begin();
-        for (; it_in != x.end(); ++it_in, ++it_out) {
-            *it_out = std::isinf(*it_in);
+        std::vector<std::size_t> idx(x.ndim(), 0);
+        for (std::size_t i = 0; i < x.size(); ++i) {
+            result.set(idx, std::isinf(x.get(idx)));
+            for (std::size_t d = x.ndim(); d-- > 0;) {
+                if (++idx[d] < static_cast<std::size_t>(x.shape[d])) {
+                    break;
+                }
+                idx[d] = 0;
+            }
         }
         return result;
     }
@@ -56,10 +67,15 @@ namespace np {
     template <typename T>
     auto isnan(const Ndarray<T>& x) -> Ndarray<bool> {
         Ndarray<bool> result(x.shape, dtype::bool_);
-        auto it_in = x.begin();
-        auto it_out = result.begin();
-        for (; it_in != x.end(); ++it_in, ++it_out) {
-            *it_out = std::isnan(*it_in);
+        std::vector<std::size_t> idx(x.ndim(), 0);
+        for (std::size_t i = 0; i < x.size(); ++i) {
+            result.set(idx, std::isnan(x.get(idx)));
+            for (std::size_t d = x.ndim(); d-- > 0;) {
+                if (++idx[d] < static_cast<std::size_t>(x.shape[d])) {
+                    break;
+                }
+                idx[d] = 0;
+            }
         }
         return result;
     }
@@ -68,10 +84,16 @@ namespace np {
     template <typename T>
     auto isneginf(const Ndarray<T>& x) -> Ndarray<bool> {
         Ndarray<bool> result(x.shape, dtype::bool_);
-        auto it_in = x.begin();
-        auto it_out = result.begin();
-        for (; it_in != x.end(); ++it_in, ++it_out) {
-            *it_out = std::isinf(*it_in) && (*it_in < T{0});
+        std::vector<std::size_t> idx(x.ndim(), 0);
+        for (std::size_t i = 0; i < x.size(); ++i) {
+            const T val = x.get(idx);
+            result.set(idx, std::isinf(val) && (val < T{0}));
+            for (std::size_t d = x.ndim(); d-- > 0;) {
+                if (++idx[d] < static_cast<std::size_t>(x.shape[d])) {
+                    break;
+                }
+                idx[d] = 0;
+            }
         }
         return result;
     }
@@ -80,10 +102,16 @@ namespace np {
     template <typename T>
     auto isposinf(const Ndarray<T>& x) -> Ndarray<bool> {
         Ndarray<bool> result(x.shape, dtype::bool_);
-        auto it_in = x.begin();
-        auto it_out = result.begin();
-        for (; it_in != x.end(); ++it_in, ++it_out) {
-            *it_out = std::isinf(*it_in) && (*it_in > T{0});
+        std::vector<std::size_t> idx(x.ndim(), 0);
+        for (std::size_t i = 0; i < x.size(); ++i) {
+            const T val = x.get(idx);
+            result.set(idx, std::isinf(val) && (val > T{0}));
+            for (std::size_t d = x.ndim(); d-- > 0;) {
+                if (++idx[d] < static_cast<std::size_t>(x.shape[d])) {
+                    break;
+                }
+                idx[d] = 0;
+            }
         }
         return result;
     }
@@ -199,10 +227,15 @@ namespace np {
     template <typename T>
     auto logical_not(const Ndarray<T>& x) -> Ndarray<bool> {
         Ndarray<bool> result(x.shape, dtype::bool_);
-        auto it_in = x.begin();
-        auto it_out = result.begin();
-        for (; it_in != x.end(); ++it_in, ++it_out) {
-            *it_out = !static_cast<bool>(*it_in);
+        std::vector<std::size_t> idx(x.ndim(), 0);
+        for (std::size_t i = 0; i < x.size(); ++i) {
+            result.set(idx, !static_cast<bool>(x.get(idx)));
+            for (std::size_t d = x.ndim(); d-- > 0;) {
+                if (++idx[d] < static_cast<std::size_t>(x.shape[d])) {
+                    break;
+                }
+                idx[d] = 0;
+            }
         }
         return result;
     }
@@ -374,7 +407,13 @@ namespace np {
             const auto ndim_out = out_shape.size();
             std::vector<std::size_t> idx(ndim_out, 0);
             
-            for (std::size_t i = 0; i < detail::product(out_shape); ++i) {
+            // Compute total elements
+            std::size_t total_elems = 1;
+            for (int d : out_shape) {
+                total_elems *= static_cast<std::size_t>(d);
+            }
+            
+            for (std::size_t i = 0; i < total_elems; ++i) {
                 std::vector<std::size_t> idx1(a1.ndim(), 0);
                 std::vector<std::size_t> idx2(a2.ndim(), 0);
                 

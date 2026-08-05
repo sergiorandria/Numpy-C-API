@@ -18,6 +18,7 @@
 namespace np::exceptions {
 
     namespace detail {
+        // Prefix a message with its throw site, formatted like a Python traceback line.
         [[nodiscard]] inline std::string format_message(
             const std::string& msg,
             const std::source_location& loc) {
@@ -27,9 +28,7 @@ namespace np::exceptions {
         }
     } // namespace detail
 
-    /**
-     * @brief Base class for all np exceptions.
-     */
+    // Base class for all np exceptions; what() carries "file:line: function: msg".
     class NumpyError : public std::exception {
       public:
         explicit NumpyError(const std::string& msg,
@@ -45,9 +44,8 @@ namespace np::exceptions {
         std::string what_msg_;
     };
 
-    /**
-     * @brief Raised when an axis parameter is out of bounds for the array.
-     */
+    // Raised when an axis parameter is out of bounds for the array.
+    // Reference: numpy-reference/reference/generated/numpy.exceptions.AxisError.html
     class AxisError : public NumpyError {
       public:
         explicit AxisError(const std::string& msg,
@@ -56,9 +54,8 @@ namespace np::exceptions {
             : NumpyError(msg, loc) {}
     };
 
-    /**
-     * @brief Non-fatal warning emitted for invalid axis/rank usage.
-     */
+    // Non-fatal warning emitted for invalid axis/rank usage.
+    // Reference: numpy-reference/reference/generated/numpy.RankWarning.html
     class RankWarning : public NumpyError {
       public:
         explicit RankWarning(const std::string& msg,
@@ -67,9 +64,7 @@ namespace np::exceptions {
             : NumpyError(msg, loc) {}
     };
 
-    /**
-     * @brief Raised when matrix dimensions are incompatible.
-     */
+    // Raised when matrix dimensions are incompatible.
     class MatrixDimError : public NumpyError {
       public:
         explicit MatrixDimError(const std::string& msg,
@@ -78,9 +73,7 @@ namespace np::exceptions {
             : NumpyError(msg, loc) {}
     };
 
-    /**
-     * @brief Raised when two dtypes cannot be promoted.
-     */
+    // Raised when two dtypes cannot be promoted.
     class DtypePromotionError : public NumpyError {
       public:
         explicit DtypePromotionError(const std::string& msg,
@@ -89,9 +82,7 @@ namespace np::exceptions {
             : NumpyError(msg, loc) {}
     };
 
-    /**
-     * @brief Emitted when an API enters a deprecated code path.
-     */
+    // Emitted when an API enters a deprecated code path.
     class VisibleDeprecation : public NumpyError {
       public:
         explicit VisibleDeprecation(const std::string& msg,
@@ -100,9 +91,7 @@ namespace np::exceptions {
             : NumpyError(msg, loc) {}
     };
 
-    /**
-     * @brief Emitted when a complex value is implicitly cast to real.
-     */
+    // Emitted when a complex value is implicitly cast to real.
     class ComplexWarning : public NumpyError {
       public:
         explicit ComplexWarning(const std::string& msg,
@@ -111,15 +100,27 @@ namespace np::exceptions {
             : NumpyError(msg, loc) {}
     };
 
+    // Raised by np::linalg when a decomposition fails to converge or
+    // encounters a mathematically singular problem.
+    // Reference: numpy-reference/reference/generated/numpy.linalg.LinAlgError.html
+    class LinAlgError : public NumpyError {
+      public:
+        explicit LinAlgError(const std::string& msg,
+                             const std::source_location& loc =
+                                 std::source_location::current())
+            : NumpyError(msg, loc) {}
+    };
+
 } // namespace np::exceptions
 
 namespace np {
-    using AxisError         = exceptions::AxisError;
-    using RankWarning       = exceptions::RankWarning;
-    using MatrixDimError    = exceptions::MatrixDimError;
+    using AxisError           = exceptions::AxisError;
+    using RankWarning         = exceptions::RankWarning;
+    using MatrixDimError      = exceptions::MatrixDimError;
     using DtypePromotionError = exceptions::DtypePromotionError;
-    using VisibleDeprecation = exceptions::VisibleDeprecation;
-    using ComplexWarning    = exceptions::ComplexWarning;
+    using VisibleDeprecation  = exceptions::VisibleDeprecation;
+    using ComplexWarning      = exceptions::ComplexWarning;
+    using LinAlgError         = exceptions::LinAlgError;
 } // namespace np
 
 #endif // NP_EXCEPTIONS_HPP

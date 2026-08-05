@@ -6,7 +6,10 @@ set(NP_TESTS
     test_linalg
     test_matrix
     test_fft
-    test_fixed)
+    test_fixed
+    test_math
+    test_logic
+    test_concatenate)
 
 if(NP_COMPILED_UNITS)
     list(APPEND NP_TESTS test_constexpr test_compile_time)

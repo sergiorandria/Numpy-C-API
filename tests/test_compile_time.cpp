@@ -121,6 +121,147 @@ static_assert(!dottable<ndarray<int, 3, 2>, ndarray<int, 3>>);
 static_assert(!matmulable<ndarray<int, 2, 3>, ndarray<int, 2, 4>>);
 static_assert(!matmulable<ndarray<int, 2, 2>, ndarray<int, 3, 2>>);
 
+// --- decompositions reject complex element types at compile time ------------
+using CplxArr = np::Ndarray<std::complex<double>>;
+using RealArr = np::Ndarray<double>;
+
+template <typename A>
+concept svdable = requires(const A& a) { np::linalg::svd(a); };
+
+template <typename A>
+concept qrable = requires(const A& a) { np::linalg::qr(a); };
+
+template <typename A>
+concept eigable = requires(const A& a) { np::linalg::eig(a); };
+
+template <typename A>
+concept detable = requires(const A& a) { np::linalg::det(a); };
+
+template <typename A>
+concept inversible = requires(const A& a) { np::linalg::inv(a); };
+
+template <typename A>
+concept solvable = requires(const A& a, const A& b) {
+    np::linalg::solve(a, b);
+};
+
+template <typename A>
+concept powerable = requires(const A& a) { np::linalg::matrix_power(a, 2); };
+
+template <typename A>
+concept choleskyable = requires(const A& a) { np::linalg::cholesky(a); };
+
+template <typename A>
+concept normable = requires(const A& a) { np::linalg::norm(a); };
+
+template <typename A>
+concept rankable = requires(const A& a) { np::linalg::matrix_rank(a); };
+
+template <typename A>
+concept pinvable = requires(const A& a) { np::linalg::pinv(a); };
+
+template <typename A>
+concept condable = requires(const A& a) { np::linalg::cond(a); };
+
+template <typename A>
+concept eighable = requires(const A& a) { np::linalg::eigh(a); };
+
+template <typename A>
+concept lstsqable = requires(const A& a, const A& b) {
+    np::linalg::lstsq(a, b);
+};
+
+template <typename A>
+concept tensordotable = requires(const A& a, const A& b) {
+    np::linalg::tensordot(a, b);
+};
+
+template <typename A>
+concept crossable = requires(const A& a, const A& b) {
+    np::linalg::cross(a, b);
+};
+
+template <typename A>
+concept diagonable = requires(const A& a) { np::linalg::diagonal(a); };
+
+template <typename A>
+concept transposeable = requires(const A& a) {
+    np::linalg::matrix_transpose(a);
+};
+
+template <typename A>
+concept matrix_normable = requires(const A& a) {
+    np::linalg::matrix_norm(a);
+};
+
+template <typename A>
+concept tensorinvable = requires(const A& a) { np::linalg::tensorinv(a); };
+
+template <typename A>
+concept tensorsolvable = requires(const A& a, const A& b) {
+    np::linalg::tensorsolve(a, b);
+};
+
+template <typename A>
+concept vecdotable = requires(const A& a, const A& b) {
+    np::linalg::vecdot(a, b);
+};
+
+template <typename A>
+concept vector_normable = requires(const A& a) {
+    np::linalg::vector_norm(a);
+};
+
+static_assert(svdable<RealArr>);
+static_assert(qrable<RealArr>);
+static_assert(eigable<RealArr>);
+static_assert(!svdable<CplxArr>);
+static_assert(!qrable<CplxArr>);
+static_assert(!eigable<CplxArr>);
+
+static_assert(detable<RealArr>);
+static_assert(inversible<RealArr>);
+static_assert(solvable<RealArr>);
+static_assert(powerable<RealArr>);
+static_assert(choleskyable<RealArr>);
+static_assert(normable<RealArr>);
+static_assert(rankable<RealArr>);
+static_assert(pinvable<RealArr>);
+static_assert(condable<RealArr>);
+static_assert(eighable<RealArr>);
+static_assert(!detable<CplxArr>);
+static_assert(!inversible<CplxArr>);
+static_assert(!solvable<CplxArr>);
+static_assert(!powerable<CplxArr>);
+static_assert(!choleskyable<CplxArr>);
+static_assert(!normable<CplxArr>);
+static_assert(!rankable<CplxArr>);
+static_assert(!pinvable<CplxArr>);
+static_assert(!condable<CplxArr>);
+static_assert(!eighable<CplxArr>);
+
+static_assert(lstsqable<RealArr>);
+static_assert(tensordotable<RealArr>);
+static_assert(crossable<RealArr>);
+static_assert(!lstsqable<CplxArr>);
+static_assert(!tensordotable<CplxArr>);
+static_assert(!crossable<CplxArr>);
+
+static_assert(diagonable<RealArr>);
+static_assert(transposeable<RealArr>);
+static_assert(matrix_normable<RealArr>);
+static_assert(tensorinvable<RealArr>);
+static_assert(tensorsolvable<RealArr>);
+static_assert(vecdotable<RealArr>);
+static_assert(vector_normable<RealArr>);
+static_assert(diagonable<CplxArr>);
+static_assert(transposeable<CplxArr>);
+static_assert(!matrix_normable<CplxArr>);
+static_assert(!tensorinvable<CplxArr>);
+static_assert(!tensorsolvable<CplxArr>);
+static_assert(!vecdotable<CplxArr>);
+static_assert(!vector_normable<CplxArr>);
+
 } // namespace
 
 int main() { return 0; }

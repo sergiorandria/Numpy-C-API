@@ -20,5 +20,9 @@
 #include "ndarray_fixed.hpp"
 #include "creation_fixed.hpp"
 #include "linalg_fixed.hpp"
+#include "math.hpp"
+#include "logic.hpp"
+// Note: concatenate.hpp is not included by default to avoid
+// template conflicts with ndarray_fixed.hpp. Include it explicitly if needed.
 
 #endif // NP_NP_HPP

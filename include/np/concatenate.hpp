@@ -75,51 +75,31 @@ namespace np {
         Ndarray<T> result(out_shape, first.type);
         
         // Copy data
-        std::vector<std::size_t> idx(ndim, 0);
         std::size_t offset = 0;
-        
         for (const auto& arr : arrays) {
             const std::size_t axis_size = static_cast<std::size_t>(arr.shape[axis]);
             
-            // Iterate over all positions
-            std::fill(idx.begin(), idx.end(), 0);
-            bool done = false;
+            // Copy all elements from this array
+            std::vector<std::size_t> src_idx(ndim, 0);
             
-            while (!done) {
-                // Copy element from source to dest
-                auto dest_idx = idx;
-                dest_idx[axis] += offset;
-                result.set(dest_idx, arr.get(idx));
+            do {
+                auto dst_idx = src_idx;
+                dst_idx[axis] += offset;
+                result.set(dst_idx, arr.get(src_idx));
                 
-                // Increment index
-                for (int d = ndim - 1; d >= 0; --d) {
-                    if (d == axis) continue;
-                    if (++idx[d] < static_cast<std::size_t>(arr.shape[d])) {
-                        break;
-                    }
-                    idx[d] = 0;
-                    if (d == 0 || (d == 1 && axis == 0)) {
-                        done = true;
+                // Increment src_idx
+                bool carry = true;
+                for (int d = ndim - 1; d >= 0 && carry; --d) {
+                    ++src_idx[d];
+                    if (src_idx[d] < static_cast<std::size_t>(arr.shape[d])) {
+                        carry = false;
+                    } else {
+                        src_idx[d] = 0;
                     }
                 }
                 
-                // Handle axis dimension
-                if (!done && axis < ndim) {
-                    bool carry = true;
-                    for (int d = ndim - 1; d >= 0 && carry; --d) {
-                        if (d == axis) {
-                            if (++idx[d] < axis_size) {
-                                carry = false;
-                            } else {
-                                idx[d] = 0;
-                            }
-                        }
-                    }
-                    if (carry && idx[axis] == 0) {
-                        done = true;
-                    }
-                }
-            }
+                if (carry) break;  // All elements processed
+            } while (true);
             
             offset += axis_size;
         }
