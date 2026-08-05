@@ -86,11 +86,24 @@ namespace np::detail::math {
         if (x == 0.0) {
             return 0.0;
         }
-        double guess = x;
-        for (std::size_t i = 0; i < 12; ++i) {
-            guess = 0.5 * (guess + x / guess);
+        // Scale x into [0.25, 1) so that the initial guess (x itself) is
+        // within a factor of two of sqrt(x); Newton's method then converges
+        // in a few iterations regardless of the magnitude of x.
+        double v = x;
+        double scale = 1.0;
+        while (v >= 1.0) {
+            v *= 0.25;
+            scale *= 2.0;
         }
-        return guess;
+        while (v < 0.25) {
+            v *= 4.0;
+            scale *= 0.5;
+        }
+        double guess = v;
+        for (std::size_t i = 0; i < 12; ++i) {
+            guess = 0.5 * (guess + v / guess);
+        }
+        return guess * scale;
     }
 
     /**

@@ -90,6 +90,79 @@ static_assert(np::linalg::dot(V, N)[0] == 49 && np::linalg::dot(V, N)[1] == 64);
 static_assert(np::linalg::dot(M, N)(1, 1) == 64);
 static_assert(np::linalg::matmul(M, N)(1, 0) == 49);
 
+// Fixed-shape linalg folds at compile time. Values that go through the
+// constexpr math kernels (exp/log/sqrt have a ~1e-10 error budget) are
+// compared with a tolerance; the rest are exact.
+constexpr bool close(double a, double b) {
+    return a - b < 1e-9 && b - a < 1e-9;
+}
+
+constexpr np::ndarray<int, 2, 2> SQ{{2, 0}, {0, 4}};
+constexpr np::ndarray<int, 2, 2> G{{1, 2}, {3, 4}};
+static_assert(np::linalg::trace(SQ) == 6.0);
+static_assert(close(np::linalg::det(SQ), 8.0));
+static_assert(close(np::linalg::det(G), -2.0));
+static_assert(np::linalg::slogdet(SQ).sign == 1.0 &&
+              close(np::linalg::slogdet(SQ).logabsdet, 2.0794415416798357));
+static_assert(np::linalg::solve(SQ, np::ndarray<int, 2>{2, 4})[0] == 1.0 &&
+              np::linalg::solve(SQ, np::ndarray<int, 2>{2, 4})[1] == 1.0);
+static_assert(np::linalg::inv(SQ)(0, 0) == 0.5 &&
+              np::linalg::inv(SQ)(1, 1) == 0.25);
+static_assert(np::linalg::cholesky(SQ)(1, 1) == 2.0);
+static_assert(np::linalg::cholesky(SQ, true)(1, 1) == 2.0);
+static_assert(np::linalg::matrix_power(G, 2)(0, 1) == 10.0);
+static_assert(np::linalg::matrix_power(G, 0)(0, 0) == 1.0);
+static_assert(close(np::linalg::matrix_power(G, -1)(1, 1), -0.5));
+
+static_assert(np::linalg::norm(np::ndarray<double, 2>{3, 4}) == 5.0);
+static_assert(np::linalg::norm(np::ndarray<double, 4>{1, 2, 3, 4},
+                               np::linalg::NormOrd::One) == 10.0);
+static_assert(np::linalg::norm(np::ndarray<double, 4>{1, 2, 3, 4},
+                               np::linalg::NormOrd::Inf) == 4.0);
+static_assert(close(np::linalg::norm(np::ndarray<double, 4>{1, 2, 3, 4},
+                                     np::linalg::NormOrd::NegOne),
+                    0.48));
+static_assert(close(np::linalg::norm(np::ndarray<double, 2, 2>{{1, 0}, {0, 2}}),
+                    std::sqrt(5.0)));
+static_assert(np::linalg::norm(np::ndarray<double, 2, 2>{{1, 0}, {0, 2}},
+                               np::linalg::NormOrd::Nuc) == 3.0);
+
+constexpr np::ndarray<double, 3, 2> R1{{1, 2}, {0, 0}, {0, 0}};
+static_assert(np::linalg::matrix_rank(R1) == 1);
+static_assert(np::linalg::matrix_rank(np::ndarray<double, 3>{0, 0, 0}) == 0);
+static_assert(np::linalg::matrix_rank(
+                  np::ndarray<double, 2, 2>{{1, 2}, {3, 4}}) == 2);
+static_assert(close(np::linalg::pinv(R1)(0, 0), 0.2));
+static_assert(np::linalg::cond(np::identity<2>()) == 1.0);
+static_assert(close(np::linalg::svdvals(G)[0], 5.464985704219043));
+static_assert(close(np::linalg::svdvals(G)[1], 0.3659661906262574));
+
+constexpr np::ndarray<double, 2, 3> WIDE{{1, 0, 0}, {0, 2, 0}};
+static_assert(np::linalg::svdvals(WIDE).rank == 1 &&
+              np::linalg::svdvals(WIDE)[0] == 2.0);
+constexpr auto QRW = np::linalg::qr(WIDE);
+static_assert(QRW.r(0, 0) * QRW.r(0, 0) + QRW.r(1, 0) * QRW.r(1, 0) == 1.0);
+constexpr auto SVDW = np::linalg::svd<false>(WIDE);
+static_assert(SVDW.vh.static_shape[0] == 2 && SVDW.vh.static_shape[1] == 3);
+static_assert(SVDW.s[0] == 2.0 && SVDW.s[1] == 1.0);
+
+constexpr auto EH = np::linalg::eigh(np::ndarray<double, 3, 3>{
+    {2, 0, 0}, {0, 3, 0}, {0, 0, 5}});
+static_assert(EH.w[0] == 2.0 && EH.w[1] == 3.0 && EH.w[2] == 5.0);
+static_assert(np::linalg::eigvalsh(
+                  np::ndarray<double, 2, 2>{{1, 3}, {3, 4}})[1] > 5.0);
+
+static_assert(np::linalg::cross(np::ndarray<double, 3>{1, 0, 0},
+                                np::ndarray<double, 3>{0, 1, 0})[2] == 1.0);
+static_assert(np::linalg::outer(np::ndarray<double, 2>{1, 2},
+                                np::ndarray<double, 3>{3, 4, 5})(1, 2) == 10.0);
+static_assert(np::linalg::inner(np::ndarray<double, 3>{1, 2, 3},
+                                np::ndarray<double, 3>{4, 5, 6}) == 32.0);
+constexpr auto LS = np::linalg::lstsq(
+    np::ndarray<double, 3, 2>{{1, 0}, {0, 1}, {0, 0}},
+    np::ndarray<double, 3>{1, 2, 0});
+static_assert(LS.x[0] == 1.0 && LS.x[1] == 2.0 && LS.rank == 2);
+
 // constexpr math kernels (std::sqrt etc. are not constexpr until C++26)
 static_assert(mce::abs(-3) == 3);
 static_assert(mce::floor(2.7) == 2.0 && mce::ceil(2.1) == 3.0);

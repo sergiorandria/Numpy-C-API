@@ -247,6 +247,63 @@ static_assert(!lstsqable<CplxArr>);
 static_assert(!tensordotable<CplxArr>);
 static_assert(!crossable<CplxArr>);
 
+// --- fixed path: shapes are part of the type and complex is rejected --------
+using FRealArr = np::ndarray<double, 2, 2>;
+using FRealVec2 = np::ndarray<double, 2>;
+using FVec3 = np::ndarray<double, 3>;
+using FVec4 = np::ndarray<double, 4>;
+using FNonSquare = np::ndarray<double, 2, 3>;
+using FCplxArr = np::ndarray<std::complex<double>, 2, 2>;
+
+template <typename A, typename B>
+concept fixed_solvable = requires(const A& a, const B& b) {
+    np::linalg::solve(a, b);
+};
+
+template <typename A, typename B>
+concept fixed_lstsqable = requires(const A& a, const B& b) {
+    np::linalg::lstsq(a, b);
+};
+
+static_assert(svdable<FRealArr>);
+static_assert(svdable<FNonSquare>);
+static_assert(qrable<FRealArr>);
+static_assert(qrable<FNonSquare>);
+static_assert(detable<FRealArr>);
+static_assert(inversible<FRealArr>);
+static_assert(powerable<FRealArr>);
+static_assert(choleskyable<FRealArr>);
+static_assert(normable<FRealArr>);
+static_assert(rankable<FRealArr>);
+static_assert(pinvable<FRealArr>);
+static_assert(condable<FRealArr>);
+static_assert(eighable<FRealArr>);
+static_assert(fixed_solvable<FRealArr, FRealVec2>);
+static_assert(crossable<FVec3>);
+static_assert(!svdable<FCplxArr>);
+static_assert(!qrable<FCplxArr>);
+static_assert(!detable<FCplxArr>);
+static_assert(!inversible<FCplxArr>);
+static_assert(!powerable<FCplxArr>);
+static_assert(!choleskyable<FCplxArr>);
+static_assert(!normable<FCplxArr>);
+static_assert(!rankable<FCplxArr>);
+static_assert(!pinvable<FCplxArr>);
+static_assert(!condable<FCplxArr>);
+static_assert(!eighable<FCplxArr>);
+static_assert(!detable<FNonSquare>);
+static_assert(!inversible<FNonSquare>);
+static_assert(!choleskyable<FNonSquare>);
+static_assert(!eighable<FNonSquare>);
+static_assert(!condable<FNonSquare>);
+static_assert(!fixed_solvable<FRealArr, FVec3>);
+static_assert(!fixed_solvable<FNonSquare, FRealVec2>);
+static_assert(!fixed_lstsqable<FRealArr, FVec3>);
+static_assert(!fixed_lstsqable<FNonSquare, FVec3>);
+static_assert(!fixed_lstsqable<FRealArr, FNonSquare>);
+static_assert(!crossable<FVec4>);
+static_assert(!crossable<FRealArr>);
+
 static_assert(diagonable<RealArr>);
 static_assert(transposeable<RealArr>);
 static_assert(matrix_normable<RealArr>);
