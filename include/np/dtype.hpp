@@ -2,7 +2,7 @@
  * @file dtype.hpp
  * @brief NumPy-compatible data type system.
  *
- * Defines the `np::dtype` enumeration and the compile-time bridges between
+ * Defines the `np::dtype` enumeration and compile-time bridges between
  * `np::dtype` values and native C++ types.
  *
  * @author Sergio Randriamihoatra (sergiorandriamihoatra@gmail.com)
@@ -19,6 +19,11 @@ namespace np {
 
     /**
      * @brief Enumeration of NumPy-compatible data types.
+     *
+     * The values mirror numpy.dtype names. `string_` and `unicode_`
+     * are present for API parity but have no C++ storage representation
+     * (size() returns 0). `datetime64` and `timedelta64` store as
+     * int64_t units with a separate `np::datetime64` unit code.
      */
     enum class dtype {
         // Integer types
@@ -72,6 +77,8 @@ namespace np {
 
         /**
          * @brief Maps a np::dtype value to its native C++ type.
+         *
+         * @tparam D  A np::dtype enumeration value.
          */
         template <dtype D>
         struct np_type_to_cxx;
@@ -98,6 +105,8 @@ namespace np {
          *
          * Uses a type-keyed constant expression so that aliased types
          * (e.g. std::int32_t == int on many ABIs) cannot collide.
+         *
+         * @tparam T  A native C++ type.
          */
         template <typename T>
         struct cxx_to_np_type_impl {
@@ -133,6 +142,8 @@ namespace np {
 
         /**
          * @brief True when T is a std::complex instantiation.
+         *
+         * @tparam T  A type to inspect.
          */
         template <typename T> struct is_complex : std::false_type {};
         template <typename T> struct is_complex<std::complex<T>> : std::true_type {};
@@ -142,12 +153,16 @@ namespace np {
 
     /**
      * @brief Native C++ type corresponding to a np::dtype value.
+     *
+     * @tparam D  A np::dtype enumeration value.
      */
     template <dtype D>
     using dtype_t = typename detail::np_type_to_cxx<D>::type;
 
     /**
      * @brief np::dtype value corresponding to a native C++ type.
+     *
+     * @tparam T  A native C++ type.
      */
     template <typename T>
     inline constexpr dtype dtype_of = detail::cxx_to_np_type<std::remove_cv_t<T>>::value;
@@ -160,7 +175,12 @@ namespace np {
     // Runtime helpers
     // ---------------------------------------------------------------------
 
-    /** @brief Human-readable name of a dtype. */
+    /**
+     * @brief Human-readable name of a dtype.
+     *
+     * @param t  The dtype value.
+     * @return   A string_view naming the dtype (e.g. "int8", "float64").
+     */
     [[nodiscard]] constexpr std::string_view dtype_name(dtype t) {
         switch (t) {
             case dtype::int8:        return "int8";
@@ -189,7 +209,16 @@ namespace np {
         return "unknown";
     }
 
-    /** @brief Size in bytes of a dtype (0 for the special/variable ones). */
+    /**
+     * @brief Size in bytes of a dtype.
+     *
+     * Returns 0 for the special/variable dtypes (string_, unicode_,
+     * void_, object_) and for longdouble/clongdouble (which are
+     * platform-dependent).
+     *
+     * @param t  The dtype value.
+     * @return   Number of bytes, or 0 for variable-length types.
+     */
     [[nodiscard]] constexpr std::size_t dtype_size(dtype t) {
         switch (t) {
             case dtype::int8:  case dtype::uint8:  case dtype::bool_: return 1;
@@ -206,34 +235,64 @@ namespace np {
         return 0;
     }
 
-    /** @brief True for the complex dtypes. */
+    /**
+     * @brief True for the complex dtypes.
+     *
+     * @param t  The dtype value.
+     * @return   True if t is complex64, complex128, or clongdouble.
+     */
     [[nodiscard]] constexpr bool dtype_is_complex(dtype t) {
         return t == dtype::complex64 || t == dtype::complex128 ||
                t == dtype::clongdouble;
     }
 
-    /** @brief True for floating-point (non-complex) dtypes. */
+    /**
+     * @brief True for floating-point (non-complex) dtypes.
+     *
+     * @param t  The dtype value.
+     * @return   True if t is float16, float32, float64, or longdouble.
+     */
     [[nodiscard]] constexpr bool dtype_is_floating(dtype t) {
         return t == dtype::float16 || t == dtype::float32 ||
                t == dtype::float64 || t == dtype::longdouble;
     }
 
-    /** @brief True for the integer dtypes (signed or unsigned). */
+    /**
+     * @brief True for the integer dtypes (signed or unsigned).
+     *
+     * @param t  The dtype value.
+     * @return   True if t is int8 through uint64.
+     */
     [[nodiscard]] constexpr bool dtype_is_integer(dtype t) {
         return t >= dtype::int8 && t <= dtype::uint64;
     }
 
-    /** @brief True for signed integer dtypes. */
+    /**
+     * @brief True for signed integer dtypes.
+     *
+     * @param t  The dtype value.
+     * @return   True if t is int8 through int64.
+     */
     [[nodiscard]] constexpr bool dtype_is_signed(dtype t) {
         return t >= dtype::int8 && t <= dtype::int64;
     }
 
-    /** @brief True for unsigned integer dtypes. */
+    /**
+     * @brief True for unsigned integer dtypes.
+     *
+     * @param t  The dtype value.
+     * @return   True if t is uint8 through uint64.
+     */
     [[nodiscard]] constexpr bool dtype_is_unsigned(dtype t) {
         return t >= dtype::uint8 && t <= dtype::uint64;
     }
 
-    /** @brief True for boolean dtype. */
+    /**
+     * @brief True for boolean dtype.
+     *
+     * @param t  The dtype value.
+     * @return   True if t is bool_.
+     */
     [[nodiscard]] constexpr bool dtype_is_bool(dtype t) {
         return t == dtype::bool_;
     }

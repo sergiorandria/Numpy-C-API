@@ -22,7 +22,7 @@
 #include "linalg_fixed.hpp"
 #include "math.hpp"
 #include "logic.hpp"
-// Note: concatenate.hpp is not included by default to avoid
-// template conflicts with ndarray_fixed.hpp. Include it explicitly if needed.
+// Note: random.hpp and concatenate.hpp are not included by default.
+// Include them explicitly if needed to avoid template conflicts.
 
 #endif // NP_NP_HPP

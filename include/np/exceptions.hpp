@@ -1,9 +1,9 @@
 /**
  * @file exceptions.hpp
- * @brief NumPy-compatible exception and warning types.
+ * @brief NumPy-compatible exception hierarchy.
  *
  * All exceptions carry the source location (file, line, function) of the
- * throw site, mirroring the information density of Python tracebacks.
+ * throw site, formatted like a Python traceback line.
  *
  * @author Sergio Randriamihoatra (sergiorandriamihoatra@gmail.com)
  */
@@ -18,7 +18,7 @@
 namespace np::exceptions {
 
     namespace detail {
-        // Prefix a message with its throw site, formatted like a Python traceback line.
+        // Format a message with its throw site as "file:line: function: msg".
         [[nodiscard]] inline std::string format_message(
             const std::string& msg,
             const std::source_location& loc) {
@@ -28,7 +28,14 @@ namespace np::exceptions {
         }
     } // namespace detail
 
-    // Base class for all np exceptions; what() carries "file:line: function: msg".
+    /* @brief Base class for all np exceptions.
+     *
+     * what() returns a string of the form "file:line: function: msg",
+     * mirroring the information density of a Python traceback line.
+     *
+     * @param msg  Human-readable error message.
+     * @param loc  Source location of the throw site (defaults to current).
+     */
     class NumpyError : public std::exception {
       public:
         explicit NumpyError(const std::string& msg,
@@ -44,8 +51,13 @@ namespace np::exceptions {
         std::string what_msg_;
     };
 
-    // Raised when an axis parameter is out of bounds for the array.
-    // Reference: numpy-reference/reference/generated/numpy.exceptions.AxisError.html
+    /* @brief Raised when an axis parameter is out of bounds for the array.
+     *
+     * Reference: numpy-reference/reference/generated/numpy.exceptions.AxisError.html
+     *
+     * @param msg  Description of the axis error.
+     * @param loc  Source location of the throw site.
+     */
     class AxisError : public NumpyError {
       public:
         explicit AxisError(const std::string& msg,
@@ -54,8 +66,13 @@ namespace np::exceptions {
             : NumpyError(msg, loc) {}
     };
 
-    // Non-fatal warning emitted for invalid axis/rank usage.
-    // Reference: numpy-reference/reference/generated/numpy.RankWarning.html
+    /* @brief Non-fatal warning emitted for invalid axis/rank usage.
+     *
+     * Reference: numpy-reference/reference/generated/numpy.RankWarning.html
+     *
+     * @param msg  Warning message.
+     * @param loc  Source location of the throw site.
+     */
     class RankWarning : public NumpyError {
       public:
         explicit RankWarning(const std::string& msg,
@@ -64,7 +81,11 @@ namespace np::exceptions {
             : NumpyError(msg, loc) {}
     };
 
-    // Raised when matrix dimensions are incompatible.
+    /* @brief Raised when matrix dimensions are incompatible for an operation.
+     *
+     * @param msg  Description of the dimension mismatch.
+     * @param loc  Source location of the throw site.
+     */
     class MatrixDimError : public NumpyError {
       public:
         explicit MatrixDimError(const std::string& msg,
@@ -73,7 +94,11 @@ namespace np::exceptions {
             : NumpyError(msg, loc) {}
     };
 
-    // Raised when two dtypes cannot be promoted.
+    /* @brief Raised when two dtypes cannot be promoted to a common type.
+     *
+     * @param msg  Description of the promotion failure.
+     * @param loc  Source location of the throw site.
+     */
     class DtypePromotionError : public NumpyError {
       public:
         explicit DtypePromotionError(const std::string& msg,
@@ -82,7 +107,11 @@ namespace np::exceptions {
             : NumpyError(msg, loc) {}
     };
 
-    // Emitted when an API enters a deprecated code path.
+    /* @brief Emitted when an API enters a deprecated code path.
+     *
+     * @param msg  Deprecation notice.
+     * @param loc  Source location of the throw site.
+     */
     class VisibleDeprecation : public NumpyError {
       public:
         explicit VisibleDeprecation(const std::string& msg,
@@ -91,7 +120,11 @@ namespace np::exceptions {
             : NumpyError(msg, loc) {}
     };
 
-    // Emitted when a complex value is implicitly cast to real.
+    /* @brief Emitted when a complex value is implicitly cast to a real type.
+     *
+     * @param msg  Warning message describing the cast.
+     * @param loc  Source location of the throw site.
+     */
     class ComplexWarning : public NumpyError {
       public:
         explicit ComplexWarning(const std::string& msg,
@@ -100,9 +133,14 @@ namespace np::exceptions {
             : NumpyError(msg, loc) {}
     };
 
-    // Raised by np::linalg when a decomposition fails to converge or
-    // encounters a mathematically singular problem.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.LinAlgError.html
+    /* @brief Raised by np::linalg when a decomposition fails to converge
+     *        or encounters a mathematically singular problem.
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.LinAlgError.html
+     *
+     * @param msg  Description of the linear algebra failure.
+     * @param loc  Source location of the throw site.
+     */
     class LinAlgError : public NumpyError {
       public:
         explicit LinAlgError(const std::string& msg,

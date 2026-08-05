@@ -5,6 +5,9 @@
  * Provides NumPy-compatible joining operations:
  *   concatenate, stack, vstack, hstack, dstack, column_stack, row_stack
  *
+ * All functions return C-contiguous arrays with row-major strides.
+ * Shape mismatches throw std::invalid_argument at runtime.
+ *
  * Reference: numpy-reference/reference/routines.array-manipulation.html
  *
  * @author Sergio Randriamihoatra (sergiorandriamihoatra@gmail.com)
@@ -25,14 +28,25 @@ namespace np {
     // Reference: numpy-reference/reference/generated/numpy.concatenate.html
     // =================================================================
 
-    /**
-     * @brief Join a sequence of arrays along an existing axis.
+    /* @brief Join a sequence of arrays along an existing axis.
      *
-     * All arrays must have the same shape except in the concatenation axis.
+     * All arrays must have the same shape except in the
+     * concatenation axis. The output shape matches the input
+     * shape with the concatenation axis size being the sum of
+     * all input sizes along that axis.
      *
+     * Time complexity: O(N) where N is the total number of
+     * elements across all arrays. Space complexity: O(N) for
+     * the output array.
+     *
+     * @tparam T  Element type.
      * @param arrays Sequence of arrays to concatenate.
-     * @param axis Axis along which to concatenate (default: 0).
-     * @throws std::invalid_argument if shapes are incompatible.
+     * @param axis   Axis along which to concatenate (default: 0).
+     * @return       Ndarray<T> with concatenated data.
+     * @throws       std::invalid_argument if arrays is empty,
+     *               shapes are incompatible, or axis is out of bounds.
+     *
+     * Reference: numpy-reference/reference/generated/numpy.concatenate.html
      */
     template <typename T>
     auto concatenate(const std::vector<Ndarray<T>>& arrays, int axis = 0)
@@ -112,14 +126,23 @@ namespace np {
     // Reference: numpy-reference/reference/generated/numpy.stack.html
     // =================================================================
 
-    /**
-     * @brief Join a sequence of arrays along a new axis.
+    /* @brief Join a sequence of arrays along a new axis.
      *
-     * All arrays must have the same shape.
+     * All arrays must have the same shape. The output has one
+     * additional dimension compared to the inputs.
      *
+     * Time complexity: O(N * k) where N is the number of
+     * elements per array and k is the number of arrays.
+     * Space complexity: O(N * k) for the output array.
+     *
+     * @tparam T  Element type.
      * @param arrays Sequence of arrays to stack.
-     * @param axis Position where new axis is inserted (default: 0).
-     * @throws std::invalid_argument if shapes are incompatible.
+     * @param axis   Position where new axis is inserted (default: 0).
+     * @return       Ndarray<T> with stacked data.
+     * @throws       std::invalid_argument if arrays is empty,
+     *               shapes are incompatible, or axis is out of bounds.
+     *
+     * Reference: numpy-reference/reference/generated/numpy.stack.html
      */
     template <typename T>
     auto stack(const std::vector<Ndarray<T>>& arrays, int axis = 0)
@@ -200,11 +223,15 @@ namespace np {
     // Reference: numpy-reference/reference/generated/numpy.vstack.html (etc.)
     // =================================================================
 
-    /**
-     * @brief Stack arrays vertically (row-wise).
+    /* @brief Stack arrays vertically (row-wise).
      *
      * Equivalent to concatenate(arrays, axis=0) for 2D+ arrays.
      * For 1D arrays, stacks them as rows into a 2D array.
+     *
+     * @tparam T  Element type.
+     * @param arrays Sequence of arrays to stack.
+     * @return       Ndarray<T> with stacked data.
+     * @throws       std::invalid_argument if arrays is empty.
      */
     template <typename T>
     auto vstack(const std::vector<Ndarray<T>>& arrays) -> Ndarray<T> {
@@ -227,11 +254,15 @@ namespace np {
         return concatenate(reshaped, 0);
     }
 
-    /**
-     * @brief Stack arrays horizontally (column-wise).
+    /* @brief Stack arrays horizontally (column-wise).
      *
      * Equivalent to concatenate(arrays, axis=1) for 2D+ arrays.
      * For 1D arrays, concatenates them into a single 1D array.
+     *
+     * @tparam T  Element type.
+     * @param arrays Sequence of arrays to stack.
+     * @return       Ndarray<T> with stacked data.
+     * @throws       std::invalid_argument if arrays is empty.
      */
     template <typename T>
     auto hstack(const std::vector<Ndarray<T>>& arrays) -> Ndarray<T> {
@@ -246,11 +277,17 @@ namespace np {
         return concatenate(arrays, 1);
     }
 
-    /**
-     * @brief Stack arrays depth-wise (along third axis).
+    /* @brief Stack arrays depth-wise (along third axis).
      *
-     * Takes a sequence of arrays and stacks them along the third axis.
-     * 1D or 2D arrays are first reshaped to (M, N, 1).
+     * Takes a sequence of arrays and stacks them along the
+     * third axis. 1D or 2D arrays are first reshaped to
+     * (M, N, 1).
+     *
+     * @tparam T  Element type.
+     * @param arrays Sequence of arrays to stack.
+     * @return       Ndarray<T> with stacked data.
+     * @throws       std::invalid_argument if arrays is empty
+     *               or contains arrays with ndim > 2.
      */
     template <typename T>
     auto dstack(const std::vector<Ndarray<T>>& arrays) -> Ndarray<T> {
@@ -274,8 +311,18 @@ namespace np {
         return concatenate(reshaped, 2);
     }
 
-    /**
-     * @brief Stack 1D arrays as columns into a 2D array.
+    /* @brief Stack 1D arrays as columns into a 2D array.
+     *
+     * Each 1D array becomes a column of the output 2D array.
+     * 2D arrays are used as-is.
+     *
+     * @tparam T  Element type.
+     * @param arrays Sequence of 1D or 2D arrays.
+     * @return       Ndarray<T> with shape (N, K) where K is
+     *               the number of arrays and N is the length
+     *               of each 1D array (or the row count of 2D arrays).
+     * @throws       std::invalid_argument if arrays is empty
+     *               or contains arrays with ndim > 2.
      */
     template <typename T>
     auto column_stack(const std::vector<Ndarray<T>>& arrays) -> Ndarray<T> {
@@ -301,10 +348,15 @@ namespace np {
         return concatenate(reshaped, 1);
     }
 
-    /**
-     * @brief Stack 1D arrays as rows into a 2D array.
+    /* @brief Stack 1D arrays as rows into a 2D array.
      *
      * Equivalent to vstack for 1D arrays.
+     *
+     * @tparam T  Element type.
+     * @param arrays Sequence of 1D arrays.
+     * @return       Ndarray<T> with shape (K, N) where K is
+     *               the number of arrays and N is the length
+     *               of each array.
      */
     template <typename T>
     auto row_stack(const std::vector<Ndarray<T>>& arrays) -> Ndarray<T> {

@@ -10,6 +10,8 @@ set(NP_TESTS
     test_math
     test_logic
     test_concatenate
+    test_random
+    test_simd
     test_unimplemented)
 
 if(NP_COMPILED_UNITS)

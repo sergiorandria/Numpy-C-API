@@ -3,3 +3,10 @@ build_*/
 *.exe
 .vs/
 numpy-reference/
+
+# Report and documentation files (generated)
+*_SUMMARY.md
+*_UNIMPLEMENTED.md
+IMPLEMENTATION_SUMMARY.md
+REFERENCE_UNIMPLEMENTED.md
+RANDOM_MODULE_SUMMARY.md

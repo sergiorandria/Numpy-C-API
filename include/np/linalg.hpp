@@ -879,14 +879,27 @@ namespace np::linalg {
         Ndarray<R> s;          // (min(M, N),) singular values, descending
     };
 
-    // Singular value decomposition.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.svd.html
-    // The numpy 'hermitian' keyword is not supported; Hermitian input takes
-    // the general path. Raises std::invalid_argument unless a.ndim() == 2,
-    // np::exceptions::LinAlgError when the Jacobi sweeps do not converge.
-    // Input containing NaN/Inf is not validated and yields unspecified
-    // results (likely LinAlgError). M < N matrices are decomposed through
-    // A' and the roles of u and vh are swapped.
+    /**
+     * @brief Singular value decomposition.
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.svd.html
+     * The numpy 'hermitian' keyword is not supported; Hermitian input takes
+     * the general path. Raises std::invalid_argument unless a.ndim() == 2,
+     * np::exceptions::LinAlgError when the Jacobi sweeps do not converge.
+     * Input containing NaN/Inf is not validated and yields unspecified
+     * results (likely LinAlgError). M < N matrices are decomposed through
+     * A' and the roles of u and vh are swapped.
+     * @tparam T Element type (must be real).
+     * @param a Input array (2-D).
+     * @param full_matrices If true (default), compute full U (M x M) and
+     *        Vh (N x N); otherwise reduced forms.
+     * @param compute_uv If true (default), compute U and Vh; otherwise
+     *        only singular values are returned.
+     * @return SVD result with U, singular values, and Vh.
+     * @throws std::invalid_argument if a.ndim() != 2.
+     * @throws np::exceptions::LinAlgError if the Jacobi sweeps do not converge.
+     * @complexity O(M * N * min(M, N) * sweeps).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto svd(const Ndarray<T>& a, bool full_matrices = true,
@@ -932,16 +945,36 @@ namespace np::linalg {
         return out;
     }
 
-    // Singular values only.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.svdvals.html
+    /**
+     * @brief Singular values only (numpy.linalg.svdvals).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.svdvals.html
+     * @tparam T Element type (must be real).
+     * @param a Input array (2-D).
+     * @return Singular values in descending order.
+     * @throws std::invalid_argument if a.ndim() != 2.
+     * @complexity O(M * N * min(M, N) * sweeps).
+     */
     template <typename T>
     auto svdvals(const Ndarray<T>& a) -> Ndarray<real_t<T>> {
         return svd(a, false, false).s;
     }
 
-    // QR decomposition.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.qr.html
-    // Raises std::invalid_argument unless a.ndim() == 2.
+    /**
+     * @brief QR decomposition (numpy.linalg.qr).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.qr.html
+     * Reduced = true (default) returns Q (M, K) and R (K, N),
+     * K = min(M, N); Reduced = false returns the complete Q
+     * (M, M) and R (M, N) with zeros below the diagonal.
+     * Raises std::invalid_argument unless a.ndim() == 2.
+     * @tparam T Element type (must be real).
+     * @param a Input array (2-D).
+     * @param mode QR mode (default: Reduced).
+     * @return QR result with Q and R factors.
+     * @throws std::invalid_argument if a.ndim() != 2.
+     * @complexity O(M * N * K).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto qr(const Ndarray<T>& a, QrMode mode = QrMode::Reduced)
@@ -993,13 +1026,23 @@ namespace np::linalg {
         return out;
     }
 
-    // Eigenvalues and right eigenvectors of a square real matrix.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.eig.html
-    // Raises std::invalid_argument unless a is square 2-D, and
-    // np::exceptions::LinAlgError when the Francis iteration does not
-    // converge. Elements are returned as std::complex; real eigenvalues have
-    // a zero imaginary part. Eigenvector columns are normalized to unit
-    // length. A v ~= w v is satisfied within solver tolerance.
+    /**
+     * @brief Eigenvalues and right eigenvectors of a square real matrix
+     *        (numpy.linalg.eig).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.eig.html
+     * Raises std::invalid_argument unless a is square 2-D, and
+     * np::exceptions::LinAlgError when the Francis iteration does not
+     * converge. Elements are returned as std::complex; real eigenvalues have
+     * a zero imaginary part. Eigenvector columns are normalized to unit
+     * length. A v ~= w v is satisfied within solver tolerance.
+     * @tparam T Element type (must be real).
+     * @param a Square matrix (N x N).
+     * @return EigenResult with eigenvalues (complex) and eigenvectors.
+     * @throws std::invalid_argument if a.ndim() != 2 or a is not square.
+     * @throws np::exceptions::LinAlgError if the Francis iteration does not converge.
+     * @complexity O(N^3) (Francis QR iteration).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto eig(const Ndarray<T>& a) -> EigenResult<real_t<T>> {
@@ -1046,20 +1089,38 @@ namespace np::linalg {
         return out;
     }
 
-    // Eigenvalues only.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.eigvals.html
+    /**
+     * @brief Eigenvalues only (numpy.linalg.eigvals).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.eigvals.html
+     * @tparam T Element type (must be real).
+     * @param a Square matrix (N x N).
+     * @return Array of eigenvalues (complex).
+     * @throws std::invalid_argument if a.ndim() != 2 or a is not square.
+     * @throws np::exceptions::LinAlgError if the Francis iteration does not converge.
+     * @complexity O(N^3).
+     */
     template <typename T>
     auto eigvals(const Ndarray<T>& a) -> Ndarray<std::complex<real_t<T>>> {
         return eig(a).w;
     }
 
-    // Determinant of a square 2-D array, computed from an LU factorization
-    // with partial pivoting. The magnitude is accumulated in log space to
-    // avoid overflow/underflow, as numpy does.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.det.html
-    // Raises std::invalid_argument unless a.ndim() == 2 and
-    // np::exceptions::LinAlgError unless a is square. The 0x0 matrix has
-    // determinant 1.0 (empty product).
+    /**
+     * @brief Determinant of a square matrix (numpy.linalg.det).
+     *
+     * Computed from an LU factorization with partial pivoting.
+     * The magnitude is accumulated in log space to avoid overflow/underflow.
+     * Reference: numpy-reference/reference/generated/numpy.linalg.det.html
+     * Raises std::invalid_argument unless a.ndim() == 2 and
+     * np::exceptions::LinAlgError unless a is square. The 0x0 matrix has
+     * determinant 1.0 (empty product).
+     * @tparam T Element type (must be real).
+     * @param a Square matrix (N x N).
+     * @return Determinant value.
+     * @throws std::invalid_argument if a.ndim() != 2.
+     * @throws np::exceptions::LinAlgError if a is not square.
+     * @complexity O(N^3) (LU factorization).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto det(const Ndarray<T>& a) -> real_t<T> {
@@ -1089,10 +1150,18 @@ namespace np::linalg {
         return sign * std::exp(logabs);
     }
 
-    // Sign and natural-log-of-absolute-value of the determinant; robust
-    // against overflow and underflow where det returns 0 or inf.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.slogdet.html
-    // A singular matrix yields sign == 0 and logabsdet == -inf.
+    /**
+     * @brief Sign and log-absolute-determinant (numpy.linalg.slogdet).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.slogdet.html
+     * A singular matrix yields sign == 0 and logabsdet == -inf.
+     * @tparam T Element type (must be real).
+     * @param a Square matrix (N x N).
+     * @return Pair of (sign, logabsdet).
+     * @throws std::invalid_argument if a.ndim() != 2.
+     * @throws np::exceptions::LinAlgError if a is not square.
+     * @complexity O(N^3) (LU factorization).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto slogdet(const Ndarray<T>& a) -> SlogdetResult<real_t<T>> {
@@ -1123,13 +1192,23 @@ namespace np::linalg {
         return SlogdetResult<R>{sign, logabs};
     }
 
-    // Multiplicative inverse of a square 2-D array: solves A X = I with the
-    // LU factorization of A. The 0x0 matrix inverts to itself.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.inv.html
-    // Raises std::invalid_argument unless a.ndim() == 2 and
-    // np::exceptions::LinAlgError when a is not square or is exactly
-    // singular. Ill-conditioned input may invert with large errors, as
-    // numpy does; use cond() to detect that case.
+    /**
+     * @brief Multiplicative inverse of a square matrix (numpy.linalg.inv).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.inv.html
+     * Solves A X = I with the LU factorization of A.
+     * The 0x0 matrix inverts to itself.
+     * Raises std::invalid_argument unless a.ndim() == 2 and
+     * np::exceptions::LinAlgError when a is not square or is exactly
+     * singular. Ill-conditioned input may invert with large errors, as
+     * numpy does; use cond() to detect that case.
+     * @tparam T Element type (must be real).
+     * @param a Square matrix (N x N).
+     * @return Inverse matrix (N x N).
+     * @throws std::invalid_argument if a.ndim() != 2.
+     * @throws np::exceptions::LinAlgError if a is not square or is singular.
+     * @complexity O(N^3).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto inv(const Ndarray<T>& a) -> Ndarray<real_t<T>> {
@@ -1150,13 +1229,25 @@ namespace np::linalg {
         return detail::mk2d(n, n, detail::lu_invert(lu, n, piv));
     }
 
-    // Solve the well-determined linear system a x = b. b is treated as a
-    // single right-hand side only when it is exactly 1-D (the numpy 2.0
-    // rule); a 2-D b is a stack of right-hand sides along its columns.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.solve.html
-    // Raises std::invalid_argument for a.ndim() != 2 or b.ndim() > 2, and
-    // np::exceptions::LinAlgError when a is not square, b's leading
-    // dimension does not match a, or a is singular.
+    /**
+     * @brief Solve a linear system a x = b (numpy.linalg.solve).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.solve.html
+     * b is treated as a single right-hand side only when it is exactly
+     * 1-D (the numpy 2.0 rule); a 2-D b is a stack of right-hand sides
+     * along its columns.
+     * Raises std::invalid_argument for a.ndim() != 2 or b.ndim() > 2, and
+     * np::exceptions::LinAlgError when a is not square, b's leading
+     * dimension does not match a, or a is singular.
+     * @tparam T Element type of the coefficient matrix (must be real).
+     * @tparam U Element type of the right-hand side (must be real).
+     * @param a Coefficient matrix (M x M).
+     * @param b Right-hand side vector (M,) or matrix (M, K).
+     * @return Solution x of shape (M,) or (M, K).
+     * @throws std::invalid_argument if a.ndim() != 2 or b.ndim() > 2.
+     * @throws np::exceptions::LinAlgError if a is not square, dimensions mismatch, or a is singular.
+     * @complexity O(M^3) (LU factorization).
+     */
     template <typename T, typename U>
         requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
     auto solve(const Ndarray<T>& a, const Ndarray<U>& b)
@@ -1204,15 +1295,26 @@ namespace np::linalg {
                    : detail::mk2d(m, nrhs, std::move(out));
     }
 
-    // Cholesky factorization of a positive-definite square 2-D array: the
-    // lower-triangular L with L L' = a (upper = false, the default) or the
-    // upper-triangular U with U' U = a (upper = true). Only the requested
-    // triangle of a is read and no Hermitianity check is performed, as in
-    // numpy; non-symmetric input gives the factor of its symmetrized
-    // triangle.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.cholesky.html
-    // Raises std::invalid_argument unless a.ndim() == 2 and
-    // np::exceptions::LinAlgError when a is not positive-definite.
+    /**
+     * @brief Cholesky factorization of a positive-definite matrix
+     *        (numpy.linalg.cholesky).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.cholesky.html
+     * Computes the lower-triangular L with L L' = a (upper = false,
+     * the default) or the upper-triangular U with U' U = a (upper = true).
+     * Only the requested triangle of a is read and no Hermitianity check
+     * is performed, as in numpy; non-symmetric input gives the factor of
+     * its symmetrized triangle.
+     * Raises std::invalid_argument unless a.ndim() == 2 and
+     * np::exceptions::LinAlgError when a is not positive-definite.
+     * @tparam T Element type (must be real).
+     * @param a Square matrix (N x N).
+     * @param upper If true, compute upper-triangular U; otherwise lower-triangular L.
+     * @return Cholesky factor (N x N).
+     * @throws std::invalid_argument if a.ndim() != 2.
+     * @throws np::exceptions::LinAlgError if a is not positive-definite.
+     * @complexity O(N^3).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto cholesky(const Ndarray<T>& a, bool upper = false)
@@ -1262,22 +1364,29 @@ namespace np::linalg {
         return detail::mk2d(n, n, std::move(l));
     }
 
-    // Orders understood by np::linalg::norm, matrix_norm and cond: the
-    // numeric orders 1, 2, -1, -2, inf, -inf, the Frobenius norm 'fro' and
-    // the nuclear norm 'nuc' (sum of the singular values, matrices only).
-    enum class NormOrd { None, Fro, Nuc, One, NegOne, Two, NegTwo, Inf, NegInf };
-
-    // Vector and matrix norms. ord = None (the default) is the 2-norm for
-    // 1-D input and the Frobenius norm for 2-D input. Matrix orders: One and
-    // NegOne are the max/min column-abs-sums, Inf and NegInf the max/min
-    // row-abs-sums, Two and NegTwo the largest/smallest singular values,
-    // Fro the root-sum-of-squares. Vector orders: One/Two/Inf are the
-    // sum/2-norm/max of the absolute values, NegOne and NegTwo the inverse
-    // p-means, NegInf the minimum absolute value.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.norm.html
-    // The axis and keepdims parameters are not supported. Raises
-    // std::invalid_argument for 0-d or > 2-d input and for 'fro' on 1-D
-    // input (as numpy's "Improper number of dimensions to norm").
+    /**
+     * @brief Vector and matrix norm (numpy.linalg.norm).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.norm.html
+     * ord = None (the default) is the 2-norm for 1-D input and the
+     * Frobenius norm for 2-D input. Matrix orders: One and NegOne
+     * are the max/min column-abs-sums, Inf and NegInf the max/min
+     * row-abs-sums, Two and NegTwo the largest/smallest singular values,
+     * Fro the root-sum-of-squares. Vector orders: One/Two/Inf are the
+     * sum/2-norm/max of the absolute values, NegOne and NegTwo the inverse
+     * p-means, NegInf the minimum absolute value.
+     * The axis and keepdims parameters are not supported. Raises
+     * std::invalid_argument for 0-d or > 2-d input and for 'fro' on 1-D
+     * input (as numpy's "Improper number of dimensions to norm").
+     * @tparam T Element type (must be real).
+     * @param x Input array (1-D or 2-D).
+     * @param ord Norm order (default: None = 2-norm for vectors,
+     *        Frobenius for matrices).
+     * @return Norm value.
+     * @throws std::invalid_argument for 0-d or > 2-d input, or 'fro'/'nuc' on 1-D input.
+     * @complexity O(N) for 1-D; O(M*N) for 2-D (most norms);
+     *         O(M*N*min(M,N)) for Two/NegTwo (via SVD).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto norm(const Ndarray<T>& x, NormOrd ord = NormOrd::None)
@@ -1412,11 +1521,20 @@ namespace np::linalg {
         return R{0};  // unreachable: every NormOrd is handled above
     }
 
-    // Norm of a matrix in the linalg.norm sense, with 'fro' as the default
-    // order. Unlike norm, 'nuc' is valid here (sum of the singular values);
-    // all other orders delegate to norm. Stacks are not supported.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.matrix_norm.html
-    // Raises std::invalid_argument unless x is a 2D array.
+    /**
+     * @brief Matrix norm (numpy.linalg.matrix_norm).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.matrix_norm.html
+     * 'fro' is the default order. Unlike norm, 'nuc' is valid here
+     * (sum of the singular values); all other orders delegate to norm.
+     * Stacks are not supported. Raises std::invalid_argument unless x is a 2D array.
+     * @tparam T Element type (must be real).
+     * @param x Input matrix (M x N).
+     * @param ord Norm order (default: Fro).
+     * @return Norm value.
+     * @throws std::invalid_argument if x.ndim() != 2.
+     * @complexity O(M * N * min(M, N)) for Two/NegTwo (via SVD).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto matrix_norm(const Ndarray<T>& x, NormOrd ord = NormOrd::Fro)
@@ -1551,12 +1669,23 @@ namespace np::linalg {
         return out;
     }
 
-    // Rank of a 1-D or 2-D array: the number of singular values above the
-    // tolerance. With the default tol = S.max() * max(M, N) * eps (the
-    // Numerical-Recipes / MATLAB threshold), matching numpy.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.matrix_rank.html
-    // A 1-D input has rank 1 unless it is all zero. The hermitian keyword
-    // is not supported. Raises std::invalid_argument unless a.ndim() <= 2.
+    /**
+     * @brief Rank of a 1-D or 2-D array (numpy.linalg.matrix_rank).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.matrix_rank.html
+     * The number of singular values above the tolerance.
+     * With the default tol = S.max() * max(M, N) * eps (the
+     * Numerical-Recipes / MATLAB threshold), matching numpy.
+     * A 1-D input has rank 1 unless it is all zero. The hermitian keyword
+     * is not supported. Raises std::invalid_argument unless a.ndim() <= 2.
+     * @tparam T Element type (must be real).
+     * @param a Input array (1-D or 2-D).
+     * @param tol Tolerance; negative values use the default
+     *        (S.max() * max(M, N) * eps).
+     * @return Numerical rank.
+     * @throws std::invalid_argument if a.ndim() > 2.
+     * @complexity O(M * N * min(M, N) * sweeps) for 2-D (dominated by SVD).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto matrix_rank(const Ndarray<T>& a) -> int {
@@ -1620,12 +1749,21 @@ namespace np::linalg {
         return rank;
     }
 
-    // Moore-Penrose pseudo-inverse of a (possibly rectangular or rank
-    // deficient) 2-D array through the SVD: singular values at or below
-    // rcond * s_max are treated as zero, so B = V S+ U' is (N, M).
-    // Reference: numpy-reference/reference/generated/numpy.linalg.pinv.html
-    // Raises std::invalid_argument unless a.ndim() == 2 and
-    // np::exceptions::LinAlgError when the Jacobi sweeps do not converge.
+    /**
+     * @brief Moore-Penrose pseudo-inverse (numpy.linalg.pinv).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.pinv.html
+     * Computed via the SVD: singular values at or below rcond * s_max
+     * are treated as zero. Raises std::invalid_argument unless a.ndim() == 2
+     * and np::exceptions::LinAlgError when the Jacobi sweeps do not converge.
+     * @tparam T Element type (must be real).
+     * @param a Input matrix (M x N).
+     * @param rcond Cutoff for small singular values (default: 1e-15).
+     * @return Pseudo-inverse (N x M).
+     * @throws std::invalid_argument if a.ndim() != 2.
+     * @throws np::exceptions::LinAlgError if the SVD does not converge.
+     * @complexity O(M * N * min(M, N) * sweeps).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto pinv(const Ndarray<T>& a, double rcond = 1e-15)
@@ -1654,13 +1792,22 @@ namespace np::linalg {
         return detail::mk2d(n, m, std::move(out));
     }
 
-    // Condition number (2-norm, largest over smallest singular value) of a
-    // 2-D array; infinite for singular input, as numpy.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.cond.html
-    // Raises std::invalid_argument unless x.ndim() == 2.
+    /**
+     * @brief Condition number (numpy.linalg.cond).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.cond.html
+     * 2-norm condition number: largest over smallest singular value.
+     * Infinite for singular input, as numpy.
+     * Raises std::invalid_argument unless x.ndim() == 2.
+     * @tparam T Element type (must be real).
+     * @param x Input matrix (M x N).
+     * @return Condition number in the 2-norm.
+     * @throws std::invalid_argument if x.ndim() != 2.
+     * @complexity O(M * N * min(M, N) * sweeps) (dominated by SVD).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
-    auto cond(const Ndarray<T>& x) -> real_t<T> {        using R = real_t<T>;
+    auto cond(const Ndarray<T>& x) -> real_t<T> {
         if (x.ndim() != 2) {
             throw std::invalid_argument("cond requires a 2D array");
         }
@@ -1672,12 +1819,23 @@ namespace np::linalg {
         return s(0) / s(k - 1);
     }
 
-    // Condition number in a specific order. p = Two (-Two) gives the
-    // largest/smallest singular value ratio, computed directly from the SVD
-    // (so singular input gives inf, as with p = None); the remaining orders
-    // use norm(x, p) * norm(inv(x), p) and raise
-    // np::exceptions::LinAlgError for singular input, as numpy does.
-    // Reference: numpy-reference/reference/generated/numpy.linalg.cond.html
+    /**
+     * @brief Condition number with explicit order (numpy.linalg.cond).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.linalg.cond.html
+     * p = Two (-Two) gives the largest/smallest singular value ratio,
+     * computed directly from the SVD (so singular input gives inf,
+     * as with p = None); the remaining orders use norm(x, p) * norm(inv(x), p)
+     * and raise np::exceptions::LinAlgError for singular input, as numpy does.
+     * @tparam T Element type (must be real).
+     * @param x Input matrix (M x N).
+     * @param p Norm order.
+     * @return Condition number in the specified norm.
+     * @throws std::invalid_argument if x.ndim() != 2.
+     * @throws np::exceptions::LinAlgError if x is singular (for non-SVD orders).
+     * @complexity O(M * N * min(M, N) * sweeps) for Two/NegTwo;
+     *         O(M * N * min(M, N)) for other orders (involves inv).
+     */
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto cond(const Ndarray<T>& x, NormOrd p) -> real_t<T> {
