@@ -63,6 +63,82 @@ namespace np {
         template <typename V>
         struct is_init_list<std::initializer_list<V>> : std::true_type {};
 
+        /**
+         * @brief The real element type of a (possibly complex) scalar type.
+         *        For std::complex<T> this is T, for everything else the type
+         *        itself (used by real()/imag()).
+         */
+        template <typename T> struct real_of { using type = T; };
+        template <typename T> struct real_of<std::complex<T>> { using type = T; };
+
+        /**
+         * @brief NumPy `%` (mod): remainder with the sign of the divisor
+         *        (complementary to floor division). C's `%` truncates toward
+         *        zero, so this adjusts when the signs differ.
+         */
+        template <typename A, typename B>
+        inline auto floored_mod(A a, B b) -> std::common_type_t<A, B> {
+            using R = std::common_type_t<A, B>;
+            const R x = static_cast<R>(a);
+            const R y = static_cast<R>(b);
+            R m;
+            if constexpr (std::is_floating_point_v<R>) {
+                m = std::fmod(x, y);
+            } else {
+                m = x % y;
+            }
+            if (m != R{0} && ((m < R{0}) != (y < R{0}))) {
+                m += y;
+            }
+            return m;
+        }
+
+        /**
+         * @brief NumPy `//` (floor_divide): largest integer <= x / y, and the
+         *        floor for floating point (y = floor(x1 / x2)).
+         */
+        template <typename A, typename B>
+        inline auto floored_div(A a, B b) -> std::common_type_t<A, B> {
+            using R = std::common_type_t<A, B>;
+            const R x = static_cast<R>(a);
+            const R y = static_cast<R>(b);
+            if constexpr (std::is_floating_point_v<R>) {
+                return std::floor(x / y);
+            } else {
+                R q = x / y;
+                if ((x % y) != R{0} && ((x < R{0}) != (y < R{0}))) {
+                    q -= R{1};
+                }
+                return q;
+            }
+        }
+
+        /**
+         * @brief NumPy `**` (power): integer exponentiation when both
+         *        operands are integral and the exponent is non-negative,
+         *        otherwise a floating-point std::pow promoted back.
+         */
+        template <typename A, typename B>
+        inline auto power_elem(A a, B b) -> std::common_type_t<A, B> {
+            using R = std::common_type_t<A, B>;
+            if constexpr (std::is_integral_v<R> && std::is_integral_v<B>) {
+                if (b < 0) {
+                    return static_cast<R>(
+                        std::pow(static_cast<double>(a), static_cast<double>(b)));
+                }
+                R result = R{1};
+                B e = b;
+                while (e > 0) {
+                    result *= static_cast<R>(a);
+                    --e;
+                }
+                return result;
+            } else {
+                return static_cast<R>(std::pow(static_cast<double>(a),
+                                               static_cast<double>(b)));
+            }
+        }
+
     } // namespace detail
 
     /**
@@ -264,6 +340,10 @@ namespace np {
         /** @brief True when the logical elements are laid out contiguously. */
         [[nodiscard]] bool is_contiguous() const noexcept;
 
+        /** @brief True when the logical elements are laid out
+         *         column-major (Fortran) contiguously. */
+        [[nodiscard]] bool is_f_contiguous() const noexcept;
+
         /** @brief Writable access to the underlying storage buffer. */
         std::vector<T>& data();
 
@@ -345,6 +425,15 @@ namespace np {
 
         /** @brief Returns the single element of a 0-d/1-element array. */
         T item() const;
+
+        /** @brief Scalar conversion for single-element arrays (numpy `bool()`). */
+        explicit operator bool() const;
+        /** @brief Scalar conversion for single-element arrays (numpy `int()`). */
+        explicit operator long long() const;
+        /** @brief Scalar conversion for single-element arrays (numpy `float()`). */
+        explicit operator double() const;
+        /** @brief Scalar conversion for single-element arrays (numpy `complex()`). */
+        explicit operator std::complex<double>() const;
 
         // =================================================================
         // Reductions
@@ -534,6 +623,106 @@ namespace np {
         void byteswap();
 
         // =================================================================
+        // Selection / manipulation (numpy.ndarray.choose / compress / ...)
+        // =================================================================
+
+        /** @brief Element-wise absolute value. */
+        auto abs() const -> Ndarray;
+
+        /** @brief Alias of conj() (numpy.ndarray.conjugate). */
+        auto conjugate() const -> Ndarray;
+
+        /** @brief Build an array from an index array and a list of choices.
+         *  @param choices choice arrays; the i-th output element is
+         *         `choices[a[i]][i]` with broadcast indexing.
+         *  @param mode 'r' raise (default), 'w' wrap, 'c' clip. */
+        template <typename U>
+        auto choose(const std::vector<Ndarray<U>>& choices, char mode = 'r') const
+            -> Ndarray<U>;
+
+        /** @brief Return selected slices along an axis.
+         *  @param condition 1-D bool array; when its length matches the axis
+         *         length the matching slices are kept. A nullopt axis works
+         *         on the flattened array (numpy default). */
+        auto compress(const Ndarray<bool>& condition,
+                      std::optional<int> axis = std::nullopt) const -> Ndarray;
+
+        /** @brief Matrix product (delegates to np::dot). */
+        template <typename U>
+        auto dot(const Ndarray<U>& b) const -> Ndarray<std::common_type_t<T, U>>;
+
+        /** @brief Matrix multiply (numpy `@`, delegates to np::matmul). */
+        template <typename U>
+        auto matmul(const Ndarray<U>& b) const
+            -> Ndarray<std::common_type_t<T, U>>;
+
+        /** @brief In-place partial sort so that a[kth] is in its sorted
+         *  position along an axis (default: last axis). */
+        void partition(std::size_t kth, int axis = -1);
+
+        /** @brief Real part: for complex element types the extracted real
+         *  components; for real types a view of the array itself. */
+        auto real() const -> Ndarray<typename detail::real_of<T>::type>;
+
+        /** @brief Imaginary part: for complex element types the extracted
+         *  imaginary components; for real types an all-zero array. */
+        auto imag() const -> Ndarray<typename detail::real_of<T>::type>;
+
+        /** @brief View transposing the last two dimensions (ndim >= 2). */
+        auto mT() const -> Ndarray;
+
+        /** @brief Set the WRITEABLE flag (numpy.ndarray.setflags). */
+        void setflags(bool writeable);
+
+        /** @brief Current WRITEABLE flag. */
+        [[nodiscard]] bool writeable() const noexcept;
+
+        /** @brief Base storage pointer when the array borrows memory from a
+         *  parent view, nullptr when it owns its data (numpy.ndarray.base). */
+        [[nodiscard]] const void* base() const noexcept;
+
+        /** @brief True when the array owns its own data buffer. */
+        [[nodiscard]] bool owns_data() const noexcept;
+
+        /** @brief True when the array shares storage with a parent view. */
+        [[nodiscard]] bool is_view() const noexcept;
+
+        /** @brief 1-D view of the logical elements (numpy.ndarray.flat). */
+        auto flat() const -> Ndarray;
+
+        /** @brief Size of the first axis (numpy `__len__`). */
+        [[nodiscard]] std::size_t len() const;
+
+        /** @brief True when any element equals `value` (numpy `in`). */
+        [[nodiscard]] bool contains(const T& value) const;
+
+        /** @brief Element-wise floor division (numpy `//`). */
+        template <typename U>
+        auto floordiv(const Ndarray<U>& rhs) const
+            -> Ndarray<std::common_type_t<T, U>>;
+        template <typename U>
+        auto floordiv(const U& scalar) const
+            -> Ndarray<std::common_type_t<T, U>>;
+
+        /** @brief (floor_divide, remainder) pair (numpy `divmod`). */
+        template <typename U>
+        auto divmod(const Ndarray<U>& rhs) const
+            -> std::pair<Ndarray<std::common_type_t<T, U>>,
+                         Ndarray<std::common_type_t<T, U>>>;
+        template <typename U>
+        auto divmod(const U& scalar) const
+            -> std::pair<Ndarray<std::common_type_t<T, U>>,
+                         Ndarray<std::common_type_t<T, U>>>;
+
+        /** @brief Element-wise power (numpy `**`). */
+        template <typename U>
+        auto pow(const Ndarray<U>& rhs) const
+            -> Ndarray<std::common_type_t<T, U>>;
+        template <typename U>
+        auto pow(const U& scalar) const
+            -> Ndarray<std::common_type_t<T, U>>;
+
+        // =================================================================
         // Conversions / IO
         // =================================================================
 
@@ -585,6 +774,54 @@ namespace np {
         /** @brief Unary negation (element-wise). */
         auto operator-() const -> Ndarray;
 
+        /** @brief Unary plus (numpy `+a`): identity copy. */
+        auto operator+() const -> Ndarray;
+
+        // Element-wise floored remainder (numpy `%`)
+        template <typename U>
+        auto operator%(const Ndarray<U>& rhs) const
+            -> Ndarray<std::common_type_t<T, U>>;
+        template <typename U>
+        auto operator%(const U& scalar) const
+            -> Ndarray<std::common_type_t<T, U>>;
+
+        // Bitwise ops (integral/bool element types only, numpy semantics)
+        template <typename U>
+        auto operator&(const Ndarray<U>& rhs) const
+            -> Ndarray<std::common_type_t<T, U>>;
+        template <typename U>
+        auto operator&(const U& scalar) const
+            -> Ndarray<std::common_type_t<T, U>>;
+        template <typename U>
+        auto operator|(const Ndarray<U>& rhs) const
+            -> Ndarray<std::common_type_t<T, U>>;
+        template <typename U>
+        auto operator|(const U& scalar) const
+            -> Ndarray<std::common_type_t<T, U>>;
+        template <typename U>
+        auto operator^(const Ndarray<U>& rhs) const
+            -> Ndarray<std::common_type_t<T, U>>;
+        template <typename U>
+        auto operator^(const U& scalar) const
+            -> Ndarray<std::common_type_t<T, U>>;
+
+        /** @brief Element-wise bitwise NOT (numpy `~`). */
+        auto operator~() const -> Ndarray;
+
+        // Element-wise shifts (integral element types only)
+        template <typename U>
+        auto operator<<(const Ndarray<U>& rhs) const
+            -> Ndarray<std::common_type_t<T, U>>;
+        template <typename U>
+        auto operator<<(const U& scalar) const
+            -> Ndarray<std::common_type_t<T, U>>;
+        template <typename U>
+        auto operator>>(const Ndarray<U>& rhs) const
+            -> Ndarray<std::common_type_t<T, U>>;
+        template <typename U>
+        auto operator>>(const U& scalar) const
+            -> Ndarray<std::common_type_t<T, U>>;
+
         // Comparisons (element-wise, NumPy semantics)
         template <typename U>
         auto operator==(const Ndarray<U>& rhs) const -> Ndarray<bool>;
@@ -628,6 +865,26 @@ namespace np {
         Ndarray& operator*=(const T& scalar);
         Ndarray& operator/=(const T& scalar);
 
+        // In-place floored remainder / bitwise / shifts
+        Ndarray& operator%=(const Ndarray& rhs);
+        Ndarray& operator%=(const T& scalar);
+        Ndarray& operator&=(const Ndarray& rhs);
+        Ndarray& operator&=(const T& scalar);
+        Ndarray& operator|=(const Ndarray& rhs);
+        Ndarray& operator|=(const T& scalar);
+        Ndarray& operator^=(const Ndarray& rhs);
+        Ndarray& operator^=(const T& scalar);
+        Ndarray& operator<<=(const Ndarray& rhs);
+        Ndarray& operator<<=(const T& scalar);
+        Ndarray& operator>>=(const Ndarray& rhs);
+        Ndarray& operator>>=(const T& scalar);
+
+        // In-place floor division / power (no C++ operator spelling)
+        Ndarray& floordiv_eq(const Ndarray& rhs);
+        Ndarray& floordiv_eq(const T& scalar);
+        Ndarray& pow_eq(const Ndarray& rhs);
+        Ndarray& pow_eq(const T& scalar);
+
         // Scalar-on-the-left friends
         template <typename U>
         friend auto operator+(const U& scalar, const Ndarray& arr)
@@ -652,6 +909,43 @@ namespace np {
             return arr._scalar_left_op(scalar,
                                        [](const U& a, const T& b) { return a / b; });
         }
+        template <typename U>
+        friend auto operator%(const U& scalar, const Ndarray& arr)
+            -> Ndarray<std::common_type_t<U, T>> {
+            return arr._scalar_left_op(scalar, [](const U& a, const T& b) {
+                return detail::floored_mod(a, b);
+            });
+        }
+        template <typename U>
+        friend auto operator&(const U& scalar, const Ndarray& arr)
+            -> Ndarray<std::common_type_t<U, T>> {
+            return arr._scalar_left_op(scalar,
+                                       [](const U& a, const T& b) { return a & b; });
+        }
+        template <typename U>
+        friend auto operator|(const U& scalar, const Ndarray& arr)
+            -> Ndarray<std::common_type_t<U, T>> {
+            return arr._scalar_left_op(scalar,
+                                       [](const U& a, const T& b) { return a | b; });
+        }
+        template <typename U>
+        friend auto operator^(const U& scalar, const Ndarray& arr)
+            -> Ndarray<std::common_type_t<U, T>> {
+            return arr._scalar_left_op(scalar,
+                                       [](const U& a, const T& b) { return a ^ b; });
+        }
+        template <typename U>
+        friend auto operator<<(const U& scalar, const Ndarray& arr)
+            -> Ndarray<std::common_type_t<U, T>> {
+            return arr._scalar_left_op(scalar,
+                                       [](const U& a, const T& b) { return a << b; });
+        }
+        template <typename U>
+        friend auto operator>>(const U& scalar, const Ndarray& arr)
+            -> Ndarray<std::common_type_t<U, T>> {
+            return arr._scalar_left_op(scalar,
+                                       [](const U& a, const T& b) { return a >> b; });
+        }
 
         /** @brief Stream output in NumPy repr style. */
         friend auto operator<<(std::ostream& os, const Ndarray& arr)
@@ -669,6 +963,12 @@ namespace np {
         friend class Ndarray;
 
         std::shared_ptr<std::vector<T>> data_;  ///< Shared storage (enables views)
+
+        /** @brief WRITEABLE flag (numpy.ndarray.setflags). */
+        bool writeable_ = true;
+
+        /** @brief True when this array shares storage with a parent view. */
+        bool is_view_ = false;
 
         /** @brief View constructor (shares storage). */
         Ndarray(std::shared_ptr<std::vector<T>> data, std::vector<int> shape,
@@ -744,6 +1044,17 @@ namespace np {
             std::is_arithmetic_v<U> || detail::is_complex_v<U>;
     };
 
+    // Forward declarations so Ndarray<T>::dot/matmul can delegate to the
+    // free functions defined in linalg.hpp (which includes this header).
+    namespace linalg {
+        template <typename T, typename U>
+        auto dot(const Ndarray<T>& a, const Ndarray<U>& b)
+            -> Ndarray<std::common_type_t<T, U>>;
+        template <typename T, typename U>
+        auto matmul(const Ndarray<T>& a, const Ndarray<U>& b)
+            -> Ndarray<std::common_type_t<T, U>>;
+    } // namespace linalg
+
     // =====================================================================
     // Broadcasting helpers
     // =====================================================================
@@ -816,6 +1127,29 @@ namespace np {
             return out;
         }
 
+        /**
+         * @brief Flat offset of array element at a broadcast position.
+         * @param a source array
+         * @param out_shape broadcast shape (rank >= a's rank)
+         * @param idx multi-index into the broadcast shape
+         */
+        template <typename R>
+        [[nodiscard]] inline std::size_t
+        broadcast_offset(const Ndarray<R>& a, const std::vector<int>& out_shape,
+                         const std::vector<std::size_t>& idx) {
+            const int nr = static_cast<int>(out_shape.size());
+            const int shift = nr - static_cast<int>(a.shape.size());
+            std::size_t f = a.offset;
+            for (int d = 0; d < nr; ++d) {
+                const int ka = d - shift;
+                if (ka < 0 || a.shape[ka] == 1) {
+                    continue;
+                }
+                f += idx[d] * a.strides[ka];
+            }
+            return f;
+        }
+
     } // namespace detail
 
     // =====================================================================
@@ -875,7 +1209,8 @@ namespace np {
     template <typename T>
     Ndarray<T>::Ndarray(const Ndarray& other)
         : shape(other.shape), strides(other.strides), type(other.type),
-          order(other.order), offset(other.offset) {
+          order(other.order), offset(other.offset), writeable_(other.writeable_),
+          is_view_(false) {
         if (other.data_) {
             data_ = std::make_shared<std::vector<T>>(*other.data_);
         }
@@ -889,6 +1224,8 @@ namespace np {
             type = other.type;
             order = other.order;
             offset = other.offset;
+            writeable_ = other.writeable_;
+            is_view_ = false;
             data_ = other.data_
                         ? std::make_shared<std::vector<T>>(*other.data_)
                         : nullptr;
@@ -901,7 +1238,7 @@ namespace np {
                         std::vector<int> shape, std::vector<std::size_t> strides,
                         np::dtype type, matrix::Order order, std::size_t offset)
         : shape(std::move(shape)), strides(std::move(strides)), type(type),
-          order(order), offset(offset), data_(std::move(data)) {}
+          order(order), offset(offset), data_(std::move(data)), is_view_(true) {}
 
     // ---------------------------------------------------------------------
     // Attributes
@@ -938,6 +1275,18 @@ namespace np {
             return false;
         }
         return !data_ || data_->size() >= _numel();
+    }
+
+    template <typename T>
+    bool Ndarray<T>::is_f_contiguous() const noexcept {
+        std::size_t stride = 1;
+        for (std::size_t d = 0; d < shape.size(); ++d) {
+            if (strides[d] != stride) {
+                return false;
+            }
+            stride *= static_cast<std::size_t>(shape[d]);
+        }
+        return offset == 0 && (!data_ || data_->size() >= _numel());
     }
 
     template <typename T>
@@ -2332,6 +2681,583 @@ namespace np {
             char* p = reinterpret_cast<char*>(&v);
             std::reverse(p, p + sizeof(T));
         });
+    }
+
+    // ---------------------------------------------------------------------
+    // Selection / manipulation
+    // ---------------------------------------------------------------------
+
+    template <typename T>
+    auto Ndarray<T>::abs() const -> Ndarray {
+        Ndarray out(shape, type);
+        std::size_t i = 0;
+        _for_each_logical([&](const T& v) { out.data()[i++] = std::abs(v); });
+        return out;
+    }
+
+    template <typename T>
+    auto Ndarray<T>::conjugate() const -> Ndarray {
+        return conj();
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::choose(const std::vector<Ndarray<U>>& choices,
+                            char mode) const -> Ndarray<U> {
+        if (choices.empty()) {
+            throw std::invalid_argument("choose requires at least one choice");
+        }
+        std::vector<int> bshape = shape;
+        for (const auto& c : choices) {
+            bshape = detail::broadcast_shapes(bshape, c.shape);
+        }
+        const std::size_t n = choices.size();
+        Ndarray<U> out(bshape);
+        detail::Odometer od(bshape);
+        while (!od.done()) {
+            const auto& idx = od.idx();
+            const T a_v = (*data_)[detail::broadcast_offset(*this, bshape, idx)];
+            long long k = static_cast<long long>(a_v);
+            if (mode == 'w') {
+                k = ((k % static_cast<long long>(n)) + static_cast<long long>(n)) %
+                    static_cast<long long>(n);
+            } else if (mode == 'c') {
+                k = std::clamp(k, 0LL, static_cast<long long>(n) - 1);
+            } else if (k < 0 || k >= static_cast<long long>(n)) {
+                throw std::out_of_range("choose index out of range");
+            }
+            const auto& ch = choices[static_cast<std::size_t>(k)];
+            out.data()[detail::flat_index(idx, out.strides, 0)] =
+                ch.data()[detail::broadcast_offset(ch, bshape, idx)];
+            od.advance();
+        }
+        return out;
+    }
+
+    template <typename T>
+    auto Ndarray<T>::compress(const Ndarray<bool>& condition,
+                              std::optional<int> axis) const -> Ndarray {
+        if (condition.ndim() != 1) {
+            throw std::invalid_argument("condition must be 1-D");
+        }
+        const std::size_t cond_len =
+            static_cast<std::size_t>(condition.shape[0]);
+        if (!axis.has_value()) {
+            if (cond_len != _numel()) {
+                throw std::invalid_argument(
+                    "condition length must match the array size");
+            }
+            const auto flat = ravel();
+            std::vector<T> picked;
+            picked.reserve(cond_len);
+            for (std::size_t i = 0; i < cond_len; ++i) {
+                if (condition.data()[condition._flat_logical(i)]) {
+                    picked.push_back(flat.data()[flat._flat_logical(i)]);
+                }
+            }
+            const std::vector<int> out_shp{static_cast<int>(picked.size())};
+            return Ndarray::from_data(out_shp, std::move(picked));
+        }
+        const int ax = _normalize_axis(*axis);
+        const std::size_t axis_len = static_cast<std::size_t>(shape[ax]);
+        if (cond_len != axis_len) {
+            throw std::invalid_argument(
+                "condition length must match the array's axis length");
+        }
+        std::vector<std::size_t> keep;
+        keep.reserve(cond_len);
+        for (std::size_t i = 0; i < axis_len; ++i) {
+            if (condition.data()[condition._flat_logical(i)]) {
+                keep.push_back(i);
+            }
+        }
+        std::vector<int> out_shape = shape;
+        out_shape[ax] = static_cast<int>(keep.size());
+        Ndarray out(out_shape, type);
+        std::vector<int> rest = shape;
+        rest.erase(rest.begin() + ax);
+        detail::Odometer od(rest);
+        const int nd = static_cast<int>(shape.size());
+        while (!od.done()) {
+            const auto& s = od.idx();
+            for (std::size_t k = 0; k < keep.size(); ++k) {
+                std::size_t in_f = offset, out_f = 0;
+                for (int d = 0; d < nd; ++d) {
+                    const std::size_t ic =
+                        d == ax ? keep[k] : (d < ax ? s[d] : s[d - 1]);
+                    const std::size_t oc =
+                        d == ax ? k : (d < ax ? s[d] : s[d - 1]);
+                    in_f += ic * strides[d];
+                    out_f += oc * out.strides[d];
+                }
+                out.data()[out_f] = (*data_)[in_f];
+            }
+            od.advance();
+        }
+        return out;
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::dot(const Ndarray<U>& b) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        return np::linalg::dot(*this, b);
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::matmul(const Ndarray<U>& b) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        return np::linalg::matmul(*this, b);
+    }
+
+    template <typename T>
+    void Ndarray<T>::partition(std::size_t kth, int axis) {
+        axis = _normalize_axis(axis);
+        const int nd = static_cast<int>(shape.size());
+        const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
+        if (kth >= axis_len) {
+            throw std::out_of_range("kth out of bounds");
+        }
+        std::vector<int> rest = shape;
+        rest.erase(rest.begin() + axis);
+        detail::Odometer od(rest);
+        std::vector<T> work(axis_len);
+        std::vector<std::size_t> full(nd);
+        while (!od.done()) {
+            const auto& s = od.idx();
+            for (std::size_t p = 0; p < axis_len; ++p) {
+                std::size_t f = offset;
+                for (int d = 0; d < nd; ++d) {
+                    full[d] = d == axis ? p : (d < axis ? s[d] : s[d - 1]);
+                    f += full[d] * strides[d];
+                }
+                work[p] = (*data_)[f];
+            }
+            std::nth_element(work.begin(), work.begin() + kth, work.end());
+            for (std::size_t p = 0; p < axis_len; ++p) {
+                std::size_t f = offset;
+                for (int d = 0; d < nd; ++d) {
+                    full[d] = d == axis ? p : (d < axis ? s[d] : s[d - 1]);
+                    f += full[d] * strides[d];
+                }
+                (*data_)[f] = work[p];
+            }
+            od.advance();
+        }
+    }
+
+    template <typename T>
+    auto Ndarray<T>::real() const -> Ndarray<typename detail::real_of<T>::type> {
+        using R = typename detail::real_of<T>::type;
+        if constexpr (detail::is_complex_v<T>) {
+            Ndarray<R> out(shape);
+            std::size_t i = 0;
+            _for_each_logical([&](const T& v) { out.data()[i++] = v.real(); });
+            return out;
+        } else {
+            return view();
+        }
+    }
+
+    template <typename T>
+    auto Ndarray<T>::imag() const -> Ndarray<typename detail::real_of<T>::type> {
+        using R = typename detail::real_of<T>::type;
+        if constexpr (detail::is_complex_v<T>) {
+            Ndarray<R> out(shape);
+            std::size_t i = 0;
+            _for_each_logical([&](const T& v) { out.data()[i++] = v.imag(); });
+            return out;
+        } else {
+            return Ndarray<R>(shape);
+        }
+    }
+
+    template <typename T>
+    auto Ndarray<T>::mT() const -> Ndarray {
+        if (shape.size() < 2) {
+            throw np::AxisError("mT requires an array with ndim >= 2");
+        }
+        const std::size_t nd = shape.size();
+        std::vector<int> p = shape;
+        std::vector<std::size_t> s = strides;
+        std::swap(p[nd - 1], p[nd - 2]);
+        std::swap(s[nd - 1], s[nd - 2]);
+        return Ndarray(data_, std::move(p), std::move(s), type, order, offset);
+    }
+
+    template <typename T>
+    void Ndarray<T>::setflags(bool writeable) {
+        writeable_ = writeable;
+    }
+
+    template <typename T>
+    bool Ndarray<T>::writeable() const noexcept {
+        return writeable_;
+    }
+
+    template <typename T>
+    const void* Ndarray<T>::base() const noexcept {
+        return is_view_ ? static_cast<const void*>(data_.get()) : nullptr;
+    }
+
+    template <typename T>
+    bool Ndarray<T>::owns_data() const noexcept {
+        return !is_view_;
+    }
+
+    template <typename T>
+    bool Ndarray<T>::is_view() const noexcept {
+        return is_view_;
+    }
+
+    template <typename T>
+    auto Ndarray<T>::flat() const -> Ndarray {
+        return ravel();
+    }
+
+    template <typename T>
+    std::size_t Ndarray<T>::len() const {
+        if (shape.empty()) {
+            throw std::invalid_argument("len() of a 0-d array is undefined");
+        }
+        return static_cast<std::size_t>(shape[0]);
+    }
+
+    template <typename T>
+    bool Ndarray<T>::contains(const T& value) const {
+        bool found = false;
+        _for_each_logical([&](const T& v) {
+            if (v == value) {
+                found = true;
+            }
+        });
+        return found;
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::floordiv(const Ndarray<U>& rhs) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        return detail::elementwise(*this, rhs, [](const T& a, const U& b) {
+            return detail::floored_div(a, b);
+        });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::floordiv(const U& scalar) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic");
+        return _scalar_op(scalar, [](const T& a, const U& b) {
+            return detail::floored_div(a, b);
+        });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::divmod(const Ndarray<U>& rhs) const
+        -> std::pair<Ndarray<std::common_type_t<T, U>>,
+                     Ndarray<std::common_type_t<T, U>>> {
+        return {floordiv(rhs), *this % rhs};
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::divmod(const U& scalar) const
+        -> std::pair<Ndarray<std::common_type_t<T, U>>,
+                     Ndarray<std::common_type_t<T, U>>> {
+        return {floordiv(scalar), *this % scalar};
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::pow(const Ndarray<U>& rhs) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        return detail::elementwise(*this, rhs, [](const T& a, const U& b) {
+            return detail::power_elem(a, b);
+        });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::pow(const U& scalar) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic");
+        return _scalar_op(scalar, [](const T& a, const U& b) {
+            return detail::power_elem(a, b);
+        });
+    }
+
+    // ---------------------------------------------------------------------
+    // Conversions
+    // ---------------------------------------------------------------------
+
+    template <typename T>
+    Ndarray<T>::operator bool() const {
+        if (_numel() != 1) {
+            throw std::invalid_argument(
+                "bool() of a non-single-element array");
+        }
+        return static_cast<bool>(item());
+    }
+
+    template <typename T>
+    Ndarray<T>::operator long long() const {
+        if (_numel() != 1) {
+            throw std::invalid_argument(
+                "int() of a non-single-element array");
+        }
+        return static_cast<long long>(item());
+    }
+
+    template <typename T>
+    Ndarray<T>::operator double() const {
+        if (_numel() != 1) {
+            throw std::invalid_argument(
+                "float() of a non-single-element array");
+        }
+        return static_cast<double>(item());
+    }
+
+    template <typename T>
+    Ndarray<T>::operator std::complex<double>() const {
+        if (_numel() != 1) {
+            throw std::invalid_argument(
+                "complex() of a non-single-element array");
+        }
+        return std::complex<double>(item());
+    }
+
+    // ---------------------------------------------------------------------
+    // Element-wise operators
+    // ---------------------------------------------------------------------
+
+    template <typename T>
+    auto Ndarray<T>::operator+() const -> Ndarray {
+        return *this;
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::operator%(const Ndarray<U>& rhs) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        return detail::elementwise(*this, rhs, [](const T& a, const U& b) {
+            return detail::floored_mod(a, b);
+        });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::operator%(const U& scalar) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic");
+        return _scalar_op(scalar, [](const T& a, const U& b) {
+            return detail::floored_mod(a, b);
+        });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::operator&(const Ndarray<U>& rhs) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
+                      "bitwise AND requires integral element types");
+        return detail::elementwise(*this, rhs,
+                                   [](const T& a, const U& b) { return a & b; });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::operator&(const U& scalar) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
+                      "bitwise AND requires integral element types");
+        return _scalar_op(scalar, [](const T& a, const U& b) { return a & b; });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::operator|(const Ndarray<U>& rhs) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
+                      "bitwise OR requires integral element types");
+        return detail::elementwise(*this, rhs,
+                                   [](const T& a, const U& b) { return a | b; });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::operator|(const U& scalar) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
+                      "bitwise OR requires integral element types");
+        return _scalar_op(scalar, [](const T& a, const U& b) { return a | b; });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::operator^(const Ndarray<U>& rhs) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
+                      "bitwise XOR requires integral element types");
+        return detail::elementwise(*this, rhs,
+                                   [](const T& a, const U& b) { return a ^ b; });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::operator^(const U& scalar) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
+                      "bitwise XOR requires integral element types");
+        return _scalar_op(scalar, [](const T& a, const U& b) { return a ^ b; });
+    }
+
+    template <typename T>
+    auto Ndarray<T>::operator~() const -> Ndarray {
+        static_assert(std::is_integral_v<T>,
+                      "bitwise NOT requires an integral element type");
+        Ndarray out(shape, type);
+        std::size_t i = 0;
+        _for_each_logical([&](const T& v) { out.data()[i++] = ~v; });
+        return out;
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::operator<<(const Ndarray<U>& rhs) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
+                      "left shift requires integral element types");
+        return detail::elementwise(*this, rhs,
+                                   [](const T& a, const U& b) { return a << b; });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::operator<<(const U& scalar) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
+                      "left shift requires integral element types");
+        return _scalar_op(scalar, [](const T& a, const U& b) { return a << b; });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::operator>>(const Ndarray<U>& rhs) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
+                      "right shift requires integral element types");
+        return detail::elementwise(*this, rhs,
+                                   [](const T& a, const U& b) { return a >> b; });
+    }
+
+    template <typename T>
+    template <typename U>
+    auto Ndarray<T>::operator>>(const U& scalar) const
+        -> Ndarray<std::common_type_t<T, U>> {
+        static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
+                      "right shift requires integral element types");
+        return _scalar_op(scalar, [](const T& a, const U& b) { return a >> b; });
+    }
+
+    // In-place operators (recompute from the element-wise form).
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::operator%=(const Ndarray& rhs) {
+        *this = *this % rhs;
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::operator%=(const T& scalar) {
+        *this = *this % scalar;
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::operator&=(const Ndarray& rhs) {
+        *this = *this & rhs;
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::operator&=(const T& scalar) {
+        *this = *this & scalar;
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::operator|=(const Ndarray& rhs) {
+        *this = *this | rhs;
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::operator|=(const T& scalar) {
+        *this = *this | scalar;
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::operator^=(const Ndarray& rhs) {
+        *this = *this ^ rhs;
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::operator^=(const T& scalar) {
+        *this = *this ^ scalar;
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::operator<<=(const Ndarray& rhs) {
+        *this = *this << rhs;
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::operator<<=(const T& scalar) {
+        *this = *this << scalar;
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::operator>>=(const Ndarray& rhs) {
+        *this = *this >> rhs;
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::operator>>=(const T& scalar) {
+        *this = *this >> scalar;
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::floordiv_eq(const Ndarray& rhs) {
+        *this = floordiv(rhs);
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::floordiv_eq(const T& scalar) {
+        *this = floordiv(scalar);
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::pow_eq(const Ndarray& rhs) {
+        *this = pow(rhs);
+        return *this;
+    }
+
+    template <typename T>
+    Ndarray<T>& Ndarray<T>::pow_eq(const T& scalar) {
+        *this = pow(scalar);
+        return *this;
     }
 
     // ---------------------------------------------------------------------
