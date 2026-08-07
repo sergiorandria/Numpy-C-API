@@ -19,6 +19,7 @@
 #include <vector>
 #include <stdexcept>
 
+#include "dtype.hpp"
 #include "ndarray.hpp"
 #include "creation.hpp"
 
@@ -208,7 +209,7 @@ namespace random {
         auto uniform(T low = T{0}, T high = T{1}, const std::vector<int>& size = {})
             -> Ndarray<T> {
             std::uniform_real_distribution<T> dist(low, high);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<T>(engine_, dist, size);
         }
 
         /**
@@ -218,7 +219,7 @@ namespace random {
         template <typename T = double>
         auto standard_normal(const std::vector<int>& size = {}) -> Ndarray<T> {
             std::normal_distribution<T> dist(T{0}, T{1});
-            return _fill_distribution(dist, size);
+            return _fill_distribution<T>(engine_, dist, size);
         }
 
         /**
@@ -229,7 +230,7 @@ namespace random {
         auto normal(T loc = T{0}, T scale = T{1}, const std::vector<int>& size = {})
             -> Ndarray<T> {
             std::normal_distribution<T> dist(loc, scale);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<T>(engine_, dist, size);
         }
 
         /**
@@ -240,7 +241,7 @@ namespace random {
         auto exponential(T scale = T{1}, const std::vector<int>& size = {})
             -> Ndarray<T> {
             std::exponential_distribution<T> dist(T{1} / scale);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<T>(engine_, dist, size);
         }
 
         /**
@@ -260,7 +261,7 @@ namespace random {
         auto gamma(T shape, T scale = T{1}, const std::vector<int>& size = {})
             -> Ndarray<T> {
             std::gamma_distribution<T> dist(shape, scale);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<T>(engine_, dist, size);
         }
 
         /**
@@ -305,7 +306,7 @@ namespace random {
         template <typename T = double>
         auto chisquare(T df, const std::vector<int>& size = {}) -> Ndarray<T> {
             std::chi_squared_distribution<T> dist(df);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<T>(engine_, dist, size);
         }
 
         /**
@@ -315,7 +316,7 @@ namespace random {
         template <typename T = double>
         auto f(T dfnum, T dfden, const std::vector<int>& size = {}) -> Ndarray<T> {
             std::fisher_f_distribution<T> dist(dfnum, dfden);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<T>(engine_, dist, size);
         }
 
         /**
@@ -325,7 +326,7 @@ namespace random {
         template <typename T = double>
         auto standard_t(T df, const std::vector<int>& size = {}) -> Ndarray<T> {
             std::student_t_distribution<T> dist(df);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<T>(engine_, dist, size);
         }
 
         /**
@@ -336,7 +337,7 @@ namespace random {
         auto lognormal(T mean = T{0}, T sigma = T{1}, const std::vector<int>& size = {})
             -> Ndarray<T> {
             std::lognormal_distribution<T> dist(mean, sigma);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<T>(engine_, dist, size);
         }
 
         /**
@@ -346,7 +347,7 @@ namespace random {
         template <typename T = double>
         auto standard_cauchy(const std::vector<int>& size = {}) -> Ndarray<T> {
             std::cauchy_distribution<T> dist(T{0}, T{1});
-            return _fill_distribution(dist, size);
+            return _fill_distribution<T>(engine_, dist, size);
         }
 
         /**
@@ -356,7 +357,7 @@ namespace random {
         template <typename T = double>
         auto weibull(T a, const std::vector<int>& size = {}) -> Ndarray<T> {
             std::weibull_distribution<T> dist(a, T{1});
-            return _fill_distribution(dist, size);
+            return _fill_distribution<T>(engine_, dist, size);
         }
 
         /**
@@ -367,7 +368,7 @@ namespace random {
         auto poisson(T lam = T{1}, const std::vector<int>& size = {})
             -> Ndarray<std::int64_t> {
             std::poisson_distribution<std::int64_t> dist(lam);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<_Np_dtype::_Np_int64>(engine_, dist, size);
         }
 
         /**
@@ -377,7 +378,7 @@ namespace random {
         auto binomial(std::int64_t n, double p, const std::vector<int>& size = {})
             -> Ndarray<std::int64_t> {
             std::binomial_distribution<std::int64_t> dist(n, p);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<_Np_dtype::_Np_int64>(engine_, dist, size);
         }
 
         /**
@@ -387,7 +388,7 @@ namespace random {
         auto negative_binomial(std::int64_t n, double p, const std::vector<int>& size = {})
             -> Ndarray<std::int64_t> {
             std::negative_binomial_distribution<std::int64_t> dist(n, p);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<_Np_dtype::_Np_int64>(engine_, dist, size);
         }
 
         /**
@@ -397,7 +398,7 @@ namespace random {
         auto geometric(double p, const std::vector<int>& size = {})
             -> Ndarray<std::int64_t> {
             std::geometric_distribution<std::int64_t> dist(p);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<_Np_dtype::_Np_int64>(engine_, dist, size);
         }
 
         /**
@@ -476,7 +477,7 @@ namespace random {
         auto gumbel(T loc = T{0}, T scale = T{1}, const std::vector<int>& size = {})
             -> Ndarray<T> {
             std::extreme_value_distribution<T> dist(loc, scale);
-            return _fill_distribution(dist, size);
+            return _fill_distribution<T>(engine_, dist, size);
         }
 
         /**
@@ -555,42 +556,49 @@ namespace random {
         }
 
         /**
-         * @brief Draw samples from a triangular distribution.
-         * Reference: numpy-reference/reference/random/generated/numpy.random.Generator.triangular.html
-         */
-        template <typename T = double>
-        auto triangular(T left, T mode, T right, const std::vector<int>& size = {})
-            -> Ndarray<T> {
-            // Use inverse CDF method for triangular distribution
-            std::uniform_real_distribution<T> dist(T{0}, T{1});
-            const T fc = (mode - left) / (right - left);
-            
-            if (size.empty()) {
-                T u = dist(engine_);
-                T val = (u < fc) 
-                    ? left + std::sqrt(u * (right - left) * (mode - left))
-                    : right - std::sqrt((T{1} - u) * (right - left) * (right - mode));
-                return Ndarray<T>::from_data({1}, {val});
-            }
-            
-            Ndarray<T> result(size, dtype_of<T>);
-            for (auto it = result.begin(); it != result.end(); ++it) {
-                T u = dist(engine_);
-                *it = (u < fc)
-                    ? left + std::sqrt(u * (right - left) * (mode - left))
-                    : right - std::sqrt((T{1} - u) * (right - left) * (right - mode));
-            }
-            return result;
-        }
-
-        /**
          * @brief Draw samples from a hypergeometric distribution.
          * Reference: numpy-reference/reference/random/generated/numpy.random.Generator.hypergeometric.html
          */
-        auto hypergeometric(std::int64_t ngood, std::int64_t nbad, std::int64_t nsample,
-                           const std::vector<int>& size = {}) -> Ndarray<std::int64_t> {
-            std::hypergeometric_distribution<std::int64_t> dist(nsample, ngood, ngood + nbad);
-            return _fill_distribution(dist, size);
+        auto hypergeometric(std::int64_t ngood, std::int64_t nbad,
+                            std::int64_t nsample,
+                            const std::vector<int>& size = {})
+            -> Ndarray<std::int64_t> {
+            if (ngood < 0 || nbad < 0 || nsample < 0 ||
+                nsample > ngood + nbad) {
+                throw std::invalid_argument(
+                    "hypergeometric: invalid parameters");
+            }
+
+            // Draw nsample items without replacement from ngood + nbad and
+            // count how many of the drawn items were "good". std has no
+            // hypergeometric_distribution before C++26, so sample directly.
+            auto sample_one = [&]() -> std::int64_t {
+                std::int64_t good = ngood;
+                std::int64_t bad = nbad;
+                std::int64_t successes = 0;
+                std::uniform_real_distribution<double> u(0.0, 1.0);
+                for (std::int64_t d = 0; d < nsample; ++d) {
+                    const double p = static_cast<double>(good) /
+                                     static_cast<double>(good + bad);
+                    if (u(engine_) < p) {
+                        ++successes;
+                        --good;
+                    } else {
+                        --bad;
+                    }
+                }
+                return successes;
+            };
+
+            if (size.empty()) {
+                return Ndarray<std::int64_t>::from_data({1}, {sample_one()});
+            }
+
+            Ndarray<std::int64_t> result(size, dtype_of<std::int64_t>);
+            for (auto it = result.begin(); it != result.end(); ++it) {
+                *it = sample_one();
+            }
+            return result;
         }
 
         /**
@@ -819,18 +827,22 @@ namespace random {
         /**
          * @brief Fill an array using a distribution.
          */
-        template <typename Dist>
-        auto _fill_distribution(Dist& dist, const std::vector<int>& size)
-            -> Ndarray<typename Dist::result_type> {
-            using T = typename Dist::result_type;
-            
+        template <typename TargetType, typename Dist, typename Engine>
+        auto _fill_distribution(Engine& rng, Dist& dist, const std::vector<int>& size)
+            -> Ndarray<TargetType> {
             if (size.empty()) {
-                return Ndarray<T>::from_data({1}, {dist(engine_)});
+                return Ndarray<TargetType>::from_data(
+                    {1}, {static_cast<TargetType>(dist(rng))});
             }
-            
-            Ndarray<T> result(size, dtype_of<T>);
-            for (auto it = result.begin(); it != result.end(); ++it) {
-                *it = dist(engine_);
+
+            std::size_t total_elements = 1;
+            for (int d : size) {
+                total_elements *= static_cast<std::size_t>(d);
+            }
+
+            Ndarray<TargetType> result(size, dtype_of<TargetType>);
+            for (std::size_t i = 0; i < total_elements; ++i) {
+                result[i] = static_cast<TargetType>(dist(rng));
             }
             return result;
         }

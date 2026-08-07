@@ -39,37 +39,41 @@
 #include "dtype.hpp"
 #include "exceptions.hpp"
 #include "detail/proxy.hpp"
+#include "api_macros.hpp"
 
 namespace np {
-
     namespace matrix {
         /**
          * @brief Memory layout order.
          */
         enum class Order : std::uint8_t {
-            C,  ///< Row-major (C style)
-            F   ///< Column-major (Fortran style)
+            C,  // Row-major (C style)
+            F   // Column-major (Fortran style)
         };
     } // namespace matrix
-
+    
     namespace detail {
 
-        /**
-         * @brief True when U is a std::initializer_list instantiation.
-         */
-        template <typename U>
-        struct is_init_list : std::false_type {};
+#if __cpp_initializer_lists >= 200806L
+        // True when _ElementType is a std::initializer_list instantiation.
+        // Most of the time, when _ElementType will be range, the user automatically uses 
+        // std::initializer_list without noticing the default type of braces 
+        // initializer list in __cplusplus >= 11
 
-        template <typename V>
-        struct is_init_list<std::initializer_list<V>> : std::true_type {};
+        template <typename _ElementType>
+        NP_INTERNAL
+            struct _Np_is_init_list : std::false_type {};
 
-        /**
-         * @brief The real element type of a (possibly complex) scalar type.
-         *        For std::complex<T> this is T, for everything else the type
-         *        itself (used by real()/imag()).
-         */
-        template <typename T> struct real_of { using type = T; };
-        template <typename T> struct real_of<std::complex<T>> { using type = T; };
+        template <typename _ElementType>
+        NP_INTERNAL 
+            struct _Np_is_init_list<std::initializer_list<_ElementType>> : std::true_type {};
+#endif 
+        
+        // The real element type of a (possibly complex) scalar type.
+        // For std::complex<_ElementType> this is _ElementType, 
+        // for everything else the type itself (used by real()/imag()).
+        template <typename _ElementType> struct _Np_real_of { using type = _ElementType; };
+        template <typename _ElementType> struct _Np_real_of<std::complex<_ElementType>> { using type = _ElementType; };
 
         /**
          * @brief NumPy `%` (mod): remainder with the sign of the divisor
@@ -1351,7 +1355,7 @@ namespace np {
          *         types.
          * @complexity O(n).
          */
-        auto real() const -> Ndarray<typename detail::real_of<T>::type>;
+        auto real() const -> Ndarray<typename detail::_Np_real_of<T>::type>;
 
         /**
          * @brief Imaginary part: for complex element types the
@@ -1361,7 +1365,7 @@ namespace np {
          *         for real types.
          * @complexity O(n).
          */
-        auto imag() const -> Ndarray<typename detail::real_of<T>::type>;
+        auto imag() const -> Ndarray<typename detail::_Np_real_of<T>::type>;
 
         /**
          * @brief View transposing the last two dimensions
@@ -4253,8 +4257,8 @@ namespace np {
     }
 
     template <typename T>
-    auto Ndarray<T>::real() const -> Ndarray<typename detail::real_of<T>::type> {
-        using R = typename detail::real_of<T>::type;
+    auto Ndarray<T>::real() const -> Ndarray<typename detail::_Np_real_of<T>::type> {
+        using R = typename detail::_Np_real_of<T>::type;
         if constexpr (detail::is_complex_v<T>) {
             Ndarray<R> out(shape);
             std::size_t i = 0;
@@ -4266,8 +4270,8 @@ namespace np {
     }
 
     template <typename T>
-    auto Ndarray<T>::imag() const -> Ndarray<typename detail::real_of<T>::type> {
-        using R = typename detail::real_of<T>::type;
+    auto Ndarray<T>::imag() const -> Ndarray<typename detail::_Np_real_of<T>::type> {
+        using R = typename detail::_Np_real_of<T>::type;
         if constexpr (detail::is_complex_v<T>) {
             Ndarray<R> out(shape);
             std::size_t i = 0;

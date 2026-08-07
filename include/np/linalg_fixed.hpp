@@ -52,6 +52,10 @@
 #include "ndarray_fixed.hpp"
 #include "dtype.hpp"
 #include "exceptions.hpp"
+// The fixed (compile-time) path reuses NormOrd and SlogdetResult from the
+// dynamic path, so it must be self-contained rather than relying on np.hpp
+// including linalg.hpp first.
+#include "linalg.hpp"
 
 namespace np::linalg {
 

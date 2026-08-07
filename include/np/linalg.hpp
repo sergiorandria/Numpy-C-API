@@ -33,6 +33,19 @@
 
 namespace np::linalg {
 
+    // Norm order enum for norm() and matrix_norm() functions
+    enum class NormOrd {
+        None,    // Frobenius norm for matrices, 2-norm for vectors
+        One,     // 1-norm (max column sum or L1 norm)
+        NegOne,  // Negative 1-norm
+        Two,     // 2-norm (spectral norm for matrices)
+        NegTwo,  // Negative 2-norm
+        Inf,     // Infinity norm (max row sum or max element)
+        NegInf,  // Negative infinity norm
+        Fro,     // Frobenius norm (matrices only)
+        Nuc      // Nuclear norm (matrices only)
+    };
+
     // Result element type: floating T stays T, everything else promotes to
     // double (numpy casts integral/bool input to float64).
     template <typename T>
@@ -1808,6 +1821,7 @@ namespace np::linalg {
     template <typename T>
         requires(!np::detail::is_complex_v<T>)
     auto cond(const Ndarray<T>& x) -> real_t<T> {
+        using R = real_t<T>;
         if (x.ndim() != 2) {
             throw std::invalid_argument("cond requires a 2D array");
         }

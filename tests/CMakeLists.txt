@@ -12,6 +12,9 @@ set(NP_TESTS
     test_concatenate
     test_random
     test_simd
+    test_manipulation
+    test_char
+    test_chararray
     test_unimplemented)
 
 if(NP_COMPILED_UNITS)

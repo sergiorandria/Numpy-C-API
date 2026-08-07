@@ -59,6 +59,37 @@ ctest --test-dir build -C Release --output-on-failure
   (split: runtime tests in the base list, compile-time units gated on
   `NP_COMPILED_UNITS`).
 
+## API Visibility & Naming Conventions
+
+- **Public API**: Functions users should call directly
+  - Mark with `NP_API` macro (from `api_macros.hpp`)
+  - Full Doxygen documentation with `@brief`, `@param`, `@return`
+  - Reference to NumPy docs
+  - Stable across minor versions
+  - Example: `NP_API template <typename T> auto sum(const Ndarray<T>&) -> T;`
+
+- **Internal API**: Implementation helpers in public headers
+  - Mark with `NP_INTERNAL` macro
+  - Use `@internal` Doxygen tag
+  - May change without notice
+  - Example: `NP_INTERNAL inline auto validate_axis(int, int) -> int;`
+
+- **Private Details**: Pure implementation
+  - Place in `detail::` namespace (preferred)
+  - Or anonymous namespace in .cpp files
+  - No special macro needed
+  - Example: `namespace detail { auto compute_kernel(...) -> void; }`
+
+- **Deprecated Functions**:
+  - Mark with `NP_DEPRECATED("message")` macro
+  - Provide migration path in message
+
+- **Return Value Usage**:
+  - Pure functions returning new arrays: `NP_NODISCARD`
+  - Prevents accidentally ignoring return value
+
+- **Include `api_macros.hpp`**: All public headers should include it
+
 ## C++20 / toolchain pitfalls (learned the hard way)
 
 - **No `a[i, j]` indexing.** Multi-argument `operator[]` is C++23 (P2128).

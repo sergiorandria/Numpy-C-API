@@ -15,8 +15,9 @@
 #include <string_view>
 #include <type_traits>
 
-namespace np {
+#include "api_macros.hpp"
 
+namespace np {
     /**
      * @brief Enumeration of NumPy-compatible data types.
      *
@@ -81,24 +82,26 @@ namespace np {
          * @tparam D  A np::dtype enumeration value.
          */
         template <dtype D>
-        struct np_type_to_cxx;
+        struct _Np_type_to_cxx;
 
-        template <> struct np_type_to_cxx<dtype::int8>      { using type = std::int8_t; };
-        template <> struct np_type_to_cxx<dtype::int16>     { using type = std::int16_t; };
-        template <> struct np_type_to_cxx<dtype::int32>     { using type = std::int32_t; };
-        template <> struct np_type_to_cxx<dtype::int64>     { using type = std::int64_t; };
-        template <> struct np_type_to_cxx<dtype::uint8>     { using type = std::uint8_t; };
-        template <> struct np_type_to_cxx<dtype::uint16>    { using type = std::uint16_t; };
-        template <> struct np_type_to_cxx<dtype::uint32>    { using type = std::uint32_t; };
-        template <> struct np_type_to_cxx<dtype::uint64>    { using type = std::uint64_t; };
-        template <> struct np_type_to_cxx<dtype::float16>   { using type = std::uint16_t; };
-        template <> struct np_type_to_cxx<dtype::float32>   { using type = float; };
-        template <> struct np_type_to_cxx<dtype::float64>   { using type = double; };
-        template <> struct np_type_to_cxx<dtype::longdouble>{ using type = long double; };
-        template <> struct np_type_to_cxx<dtype::complex64> { using type = std::complex<float>; };
-        template <> struct np_type_to_cxx<dtype::complex128>{ using type = std::complex<double>; };
-        template <> struct np_type_to_cxx<dtype::clongdouble>{ using type = std::complex<long double>; };
-        template <> struct np_type_to_cxx<dtype::bool_>     { using type = bool; };
+        template <> struct _Np_type_to_cxx<dtype::int8>      { using type = std::int8_t; };
+        template <> struct _Np_type_to_cxx<dtype::int16>     { using type = std::int16_t; };
+        template <> struct _Np_type_to_cxx<dtype::int32>     { using type = std::int32_t; };
+        template <> struct _Np_type_to_cxx<dtype::int64>     { using type = std::int64_t; };
+        template <> struct _Np_type_to_cxx<dtype::uint8>     { using type = std::uint8_t; };
+        template <> struct _Np_type_to_cxx<dtype::uint16>    { using type = std::uint16_t; };
+        template <> struct _Np_type_to_cxx<dtype::uint32>    { using type = std::uint32_t; };
+        template <> struct _Np_type_to_cxx<dtype::uint64>    { using type = std::uint64_t; };
+        template <> struct _Np_type_to_cxx<dtype::float16>   { using type = std::uint16_t; };
+        template <> struct _Np_type_to_cxx<dtype::float32>   { using type = float; };
+        template <> struct _Np_type_to_cxx<dtype::float64>   { using type = double; };
+        template <> struct _Np_type_to_cxx<dtype::longdouble>{ using type = long double; };
+        template <> struct _Np_type_to_cxx<dtype::complex64> { using type = std::complex<float>; };
+        template <> struct _Np_type_to_cxx<dtype::complex128>{ using type = std::complex<double>; };
+        template <> struct _Np_type_to_cxx<dtype::clongdouble>{ using type = std::complex<long double>; };
+        template <> struct _Np_type_to_cxx<dtype::bool_>     { using type = bool; };
+        template <> struct _Np_type_to_cxx<dtype::datetime64> { using type = std::int64_t; };
+        template <> struct _Np_type_to_cxx<dtype::timedelta64>{ using type = std::int64_t; };
 
         /**
          * @brief Maps a native C++ type to its np::dtype value.
@@ -148,8 +151,37 @@ namespace np {
         template <typename T> struct is_complex : std::false_type {};
         template <typename T> struct is_complex<std::complex<T>> : std::true_type {};
         template <typename T> inline constexpr bool is_complex_v = is_complex<T>::value;
-
     } // namespace detail
+
+    namespace _Np_dtype {
+        /**
+         * @brief Storage type aliases mirroring the numpy C-API `npy_*`
+         *        typedefs. Each alias names the native C++ storage of the
+         *        matching np::dtype (the `value_type` of
+         *        detail::_Np_type_to_cxx), so it can be used as a
+         *        compile-time dtype tag. `string_`, `unicode_`, `void_`
+         *        and `object_` have no fixed C++ storage and are omitted.
+         */
+        using _Np_int8        = std::int8_t;
+        using _Np_int16       = std::int16_t;
+        using _Np_int32       = std::int32_t;
+        using _Np_int64       = std::int64_t;
+        using _Np_uint8       = std::uint8_t;
+        using _Np_uint16      = std::uint16_t;
+        using _Np_uint32      = std::uint32_t;
+        using _Np_uint64      = std::uint64_t;
+        using _Np_float16     = std::uint16_t; // half-precision bit storage
+        using _Np_float32     = float;
+        using _Np_float64     = double;
+        using _Np_longdouble  = long double;
+        using _Np_complex64   = std::complex<float>;
+        using _Np_complex128  = std::complex<double>;
+        using _Np_clongdouble = std::complex<long double>;
+        using _Np_bool_       = bool;
+        // datetime64 / timedelta64 count their units in int64_t.
+        using _Np_datetime64  = std::int64_t;
+        using _Np_timedelta64 = std::int64_t;
+    } // namespace _Np_dtype
 
     /**
      * @brief Native C++ type corresponding to a np::dtype value.
@@ -157,7 +189,7 @@ namespace np {
      * @tparam D  A np::dtype enumeration value.
      */
     template <dtype D>
-    using dtype_t = typename detail::np_type_to_cxx<D>::type;
+    using dtype_t = typename detail::_Np_type_to_cxx<D>::type;
 
     /**
      * @brief np::dtype value corresponding to a native C++ type.
