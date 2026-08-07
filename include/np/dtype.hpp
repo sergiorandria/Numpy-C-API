@@ -79,9 +79,9 @@ namespace np {
         /**
          * @brief Maps a np::dtype value to its native C++ type.
          *
-         * @tparam D  A np::dtype enumeration value.
+         * @tparam _DtypeElement  A np::dtype enumeration value.
          */
-        template <dtype D>
+        template <dtype _DtypeElement>
         struct _Np_type_to_cxx;
 
         template <> struct _Np_type_to_cxx<dtype::int8>      { using type = std::int8_t; };
@@ -154,6 +154,26 @@ namespace np {
     } // namespace detail
 
     namespace _Np_dtype {
+        template <auto _DtypeElement> 
+        struct _Np_StorageClassifier
+        {
+            using value_type = typename detail::_Np_type_to_cxx<_DtypeElement>::type;
+            
+            static constexpr np::dtype type = _DtypeElement;  
+            value_type v{};
+            
+            _Np_StorageClassifier() noexcept = default;
+            _Np_StorageClassifier(value_type&& __v) : v(__v) { } 
+
+            constexpr operator value_type&() noexcept { return v; }
+            constexpr operator value_type() const noexcept { return v; } 
+
+            _Np_StorageClassifier& operator=(value_type &&other) { 
+                v = other; 
+                return *this;
+            } 
+        };
+#ifdef _NP_USE_DIRECT_STD_TYPES      
         /**
          * @brief Storage type aliases mirroring the numpy C-API `npy_*`
          *        typedefs. Each alias names the native C++ storage of the
@@ -181,6 +201,9 @@ namespace np {
         // datetime64 / timedelta64 count their units in int64_t.
         using _Np_datetime64  = std::int64_t;
         using _Np_timedelta64 = std::int64_t;
+#else 
+        using _Np_int64    = _Np_StorageClassifier<np::dtype::int64>;
+#endif 
     } // namespace _Np_dtype
 
     /**

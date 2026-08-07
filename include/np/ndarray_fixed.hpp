@@ -33,1083 +33,1044 @@
 
 namespace np::detail::fixed {
 
-    /** @brief Floating-point promotion used by mean/std/linspace (NumPy: int -> float64). */
-    template <typename V>
-    using float_t = std::conditional_t<std::is_floating_point_v<V>, V, double>;
+/** @brief Floating-point promotion used by mean/std/linspace (NumPy: int ->
+ * float64). */
+template <typename V>
+using float_t = std::conditional_t<std::is_floating_point_v<V>, V, double>;
 
 } // namespace np::detail::fixed
 
 namespace np {
 
-    /**
-     * @brief Fixed-shape array with compile-time extents.
-     *
-     * Nested-brace construction matches NumPy nested-list literals:
-     *     np::ndarray<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
-     *
-     * Documented deviations from the dynamic Ndarray<T>:
-     *  - indexing `a[i]` is the flat index; `a[i, j]` is multi-dimensional;
-     *  - views do not exist here: transpose/squeeze/expand_dims return new
-     *    arrays (value semantics) because the result shape must be static;
-     *  - extents must be positive (NumPy allows empty dims; this class does
-     *    not, so every shape check stays a constant expression);
-     *  - reduction axes are template parameters (NumPy axis=None is
-     *    Axis = -1), validated at compile time.
-     *
-     * @tparam T       element type
-     * @tparam Extents compile-time extents (row-major)
-     */
-    template <typename T, int... Extents>
-    class ndarray {
-        static_assert(std::conjunction_v<std::bool_constant<(Extents > 0)>...>,
-                      "np: ndarray extents must be positive");
+/**
+ * @brief Fixed-shape array with compile-time extents.
+ *
+ * Nested-brace construction matches NumPy nested-list literals:
+ *     np::ndarray<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
+ *
+ * Documented deviations from the dynamic Ndarray<T>:
+ *  - indexing `a[i]` is the flat index; `a[i, j]` is multi-dimensional;
+ *  - views do not exist here: transpose/squeeze/expand_dims return new
+ *    arrays (value semantics) because the result shape must be static;
+ *  - extents must be positive (NumPy allows empty dims; this class does
+ *    not, so every shape check stays a constant expression);
+ *  - reduction axes are template parameters (NumPy axis=None is
+ *    Axis = -1), validated at compile time.
+ *
+ * @tparam T       element type
+ * @tparam Extents compile-time extents (row-major)
+ */
+template <typename T, int... Extents> class ndarray {
+  static_assert(std::conjunction_v<std::bool_constant<(Extents > 0)>...>,
+                "np: ndarray extents must be positive");
 
-    public:
-        using value_type = T;
-        static constexpr std::size_t rank = sizeof...(Extents);
-        static constexpr std::size_t size_v =
-            (static_cast<std::size_t>(Extents) * ... * 1ull);
-        static constexpr std::array<int, rank> static_shape{Extents...};
+public:
+  using value_type = T;
+  static constexpr std::size_t rank = sizeof...(Extents);
+  static constexpr std::size_t size_v =
+      (static_cast<std::size_t>(Extents) * ... * 1ull);
+  static constexpr std::array<int, rank> static_shape{Extents...};
 
-        /** @brief Row-major flat storage (public, std::array-style). */
-        std::array<T, size_v> m_data{};
+  /** @brief Row-major flat storage (public, std::array-style). */
+  std::array<T, size_v> m_data{};
 
-        constexpr ndarray() = default;
+  constexpr ndarray() = default;
 
-        /** @brief From a flat buffer (numpy.asarray semantics). */
-        constexpr explicit ndarray(const std::array<T, size_v>& flat)
-            : m_data(flat) {}
+  /** @brief From a flat buffer (numpy.asarray semantics). */
+  constexpr explicit ndarray(const std::array<T, size_v> &flat)
+      : m_data(flat) {}
 
-        /** @brief Rank-1 flat list: ndarray<int, 3>{1, 2, 3}. */
-        template <typename U>
-        requires(rank == 1 && std::convertible_to<U, T>)
-        constexpr explicit ndarray(std::initializer_list<U> flat)
-            : m_data() {
-            if (flat.size() != size_v) {
-                throw std::invalid_argument(
-                    "np: initializer list size does not match the fixed extent");
-            }
-            std::size_t i = 0;
-            for (const U& v : flat) {
-                m_data[i++] = static_cast<T>(v);
-            }
+  /** @brief Rank-1 flat list: ndarray<int, 3>{1, 2, 3}. */
+  template <typename U>
+    requires(rank == 1 && std::convertible_to<U, T>)
+  constexpr explicit ndarray(std::initializer_list<U> flat) : m_data() {
+    if (flat.size() != size_v) {
+      throw std::invalid_argument(
+          "np: initializer list size does not match the fixed extent");
+    }
+    std::size_t i = 0;
+    for (const U &v : flat) {
+      m_data[i++] = static_cast<T>(v);
+    }
+  }
+
+  /**
+   * @brief Rank-2 nested rows: ndarray<int, 2, 3>{{1, 2, 3}, {4, 5, 6}}.
+   *        Ragged rows throw at runtime (init-list sizes are not
+   *        compile-time constants); in constant evaluation a mismatch
+   *        is a compile error.
+   */
+  template <typename U>
+    requires(rank == 2 && std::convertible_to<U, T>)
+  constexpr explicit ndarray(
+      std::initializer_list<std::initializer_list<U>> rows)
+      : m_data() {
+    const std::size_t cols = static_cast<std::size_t>(static_shape[1]);
+    if (rows.size() != static_cast<std::size_t>(static_shape[0])) {
+      throw std::invalid_argument(
+          "np: row count does not match the fixed extent");
+    }
+    std::size_t r = 0;
+    for (const auto &row : rows) {
+      if (row.size() != cols) {
+        throw std::invalid_argument(
+            "np: ragged rows in nested initializer list");
+      }
+      std::size_t c = 0;
+      for (const U &v : row) {
+        m_data[r * cols + c++] = static_cast<T>(v);
+      }
+      ++r;
+    }
+  }
+
+  /** @brief Rank-0 scalar: ndarray<int>{5}. */
+  template <typename U>
+    requires(rank == 0 && std::convertible_to<U, T>)
+  constexpr explicit ndarray(U value) : m_data{static_cast<T>(value)} {}
+
+  // -----------------------------------------------------------------
+  // Factories
+  // -----------------------------------------------------------------
+
+  /**
+   * @brief Array from a flat std::array (C++ analog of numpy.asarray).
+   * Reference: numpy-reference/reference/generated/numpy.asarray.html
+   */
+  static constexpr ndarray from_data(const std::array<T, size_v> &flat) {
+    return ndarray{flat};
+  }
+
+  // -----------------------------------------------------------------
+  // Access
+  // -----------------------------------------------------------------
+
+  constexpr std::size_t size() const { return size_v; }
+
+  constexpr T *data() { return m_data.data(); }
+  constexpr const T *data() const { return m_data.data(); }
+
+  constexpr auto begin() { return m_data.begin(); }
+  constexpr auto end() { return m_data.end(); }
+  constexpr auto begin() const { return m_data.begin(); }
+  constexpr auto end() const { return m_data.end(); }
+
+  /** @brief Flat (row-major) element access. */
+  constexpr T &operator[](std::size_t i) { return m_data[i]; }
+  constexpr const T &operator[](std::size_t i) const { return m_data[i]; }
+
+  /**
+   * @brief Multi-dimensional access: a(i0, i1, ..., iN-1).
+   *        (The arr[i, j, k] subscript form needs C++23 P2128, so the
+   *        fixed path uses operator() — the same convention as the
+   *        dynamic Ndarray.)
+   */
+  template <typename... Idx>
+    requires(sizeof...(Idx) == rank && rank >= 2)
+  constexpr T &operator()(Idx... idx) {
+    const std::array<std::size_t, rank> coords{
+        static_cast<std::size_t>(idx)...};
+    return m_data[detail::expr::flatten(static_shape, coords)];
+  }
+
+  template <typename... Idx>
+    requires(sizeof...(Idx) == rank && rank >= 2)
+  constexpr const T &operator()(Idx... idx) const {
+    const std::array<std::size_t, rank> coords{
+        static_cast<std::size_t>(idx)...};
+    return m_data[detail::expr::flatten(static_shape, coords)];
+  }
+
+  /** @brief Fill every element. */
+  constexpr void fill(const T &v) { m_data.fill(v); }
+
+  // -----------------------------------------------------------------
+  // Reductions
+  // (numpy-reference/reference/routines.statistics.html)
+  // NumPy axis=None is represented by Axis = -1; every axis is a
+  // template parameter so out-of-range axes fail to compile.
+  // -----------------------------------------------------------------
+
+  /** @brief Sum (numpy-reference/reference/generated/numpy.sum.html). */
+  template <int Axis = -1>
+    requires(Axis >= -1 && Axis < static_cast<int>(rank))
+  constexpr auto sum() const {
+    if constexpr (Axis == -1) {
+      T acc{};
+      for (std::size_t i = 0; i < size_v; ++i) {
+        acc += m_data[i];
+      }
+      return acc;
+    } else {
+      using tag = typename detail::expr::remove_at<
+          Axis, 0, detail::expr::shape_tag<Extents...>>::type;
+      return axis_reduce<T>(
+          Axis, tag{}, [](T acc, const T &v) { return acc + v; }, T{},
+          [](T v) { return v; });
+    }
+  }
+
+  /** @brief Product (numpy-reference/reference/generated/numpy.prod.html). */
+  template <int Axis = -1>
+    requires(Axis >= -1 && Axis < static_cast<int>(rank))
+  constexpr auto prod() const {
+    if constexpr (Axis == -1) {
+      T acc{1};
+      for (std::size_t i = 0; i < size_v; ++i) {
+        acc *= m_data[i];
+      }
+      return acc;
+    } else {
+      using tag = typename detail::expr::remove_at<
+          Axis, 0, detail::expr::shape_tag<Extents...>>::type;
+      return axis_reduce<T>(
+          Axis, tag{}, [](T acc, const T &v) { return acc * v; }, T{1},
+          [](T v) { return v; });
+    }
+  }
+
+  /**
+   * @brief Arithmetic mean (numpy.mean.html). Integer inputs promote
+   *        to double, as in NumPy.
+   */
+  template <int Axis = -1>
+    requires(Axis >= -1 && Axis < static_cast<int>(rank))
+  constexpr auto mean() const {
+    using R = detail::fixed::float_t<T>;
+    if constexpr (Axis == -1) {
+      R acc = R{0};
+      for (std::size_t i = 0; i < size_v; ++i) {
+        acc += static_cast<R>(m_data[i]);
+      }
+      return acc / static_cast<R>(size_v);
+    } else {
+      constexpr std::size_t n = static_cast<std::size_t>(static_shape[Axis]);
+      using tag = typename detail::expr::remove_at<
+          Axis, 0, detail::expr::shape_tag<Extents...>>::type;
+      return axis_reduce<R>(
+          Axis, tag{},
+          [](R acc, const T &v) { return acc + static_cast<R>(v); }, R{0},
+          [n](R v) { return v / static_cast<R>(n); });
+    }
+  }
+
+  /**
+   * @brief Standard deviation (numpy.std.html). Two-pass computation;
+   *        ddof matches NumPy.
+   */
+  template <int Axis = -1>
+    requires(Axis >= -1 && Axis < static_cast<int>(rank))
+  constexpr auto std(int ddof = 0) const {
+    using R = detail::fixed::float_t<T>;
+    if constexpr (Axis == -1) {
+      R acc = R{0};
+      for (std::size_t i = 0; i < size_v; ++i) {
+        acc += static_cast<R>(m_data[i]);
+      }
+      const R mean_v = acc / static_cast<R>(size_v);
+      R sq = R{0};
+      for (std::size_t i = 0; i < size_v; ++i) {
+        const R d = static_cast<R>(m_data[i]) - mean_v;
+        sq += d * d;
+      }
+      return std_denom(sq, size_v, ddof);
+    } else {
+      using tag = typename detail::expr::remove_at<
+          Axis, 0, detail::expr::shape_tag<Extents...>>::type;
+      return std_axis_impl(Axis, tag{}, ddof);
+    }
+  }
+
+  /** @brief Minimum (numpy-reference/reference/generated/numpy.min.html). */
+  template <int Axis = -1>
+    requires(Axis >= -1 && Axis < static_cast<int>(rank))
+  constexpr auto min() const {
+    if constexpr (Axis == -1) {
+      T best = m_data[0];
+      for (std::size_t i = 1; i < size_v; ++i) {
+        if (m_data[i] < best) {
+          best = m_data[i];
         }
+      }
+      return best;
+    } else {
+      using tag = typename detail::expr::remove_at<
+          Axis, 0, detail::expr::shape_tag<Extents...>>::type;
+      return extremum_axis(Axis, tag{}, false);
+    }
+  }
 
-        /**
-         * @brief Rank-2 nested rows: ndarray<int, 2, 3>{{1, 2, 3}, {4, 5, 6}}.
-         *        Ragged rows throw at runtime (init-list sizes are not
-         *        compile-time constants); in constant evaluation a mismatch
-         *        is a compile error.
-         */
-        template <typename U>
-        requires(rank == 2 && std::convertible_to<U, T>)
-        constexpr explicit ndarray(
-            std::initializer_list<std::initializer_list<U>> rows)
-            : m_data() {
-            const std::size_t cols = static_cast<std::size_t>(static_shape[1]);
-            if (rows.size() != static_cast<std::size_t>(static_shape[0])) {
-                throw std::invalid_argument(
-                    "np: row count does not match the fixed extent");
-            }
-            std::size_t r = 0;
-            for (const auto& row : rows) {
-                if (row.size() != cols) {
-                    throw std::invalid_argument(
-                        "np: ragged rows in nested initializer list");
-                }
-                std::size_t c = 0;
-                for (const U& v : row) {
-                    m_data[r * cols + c++] = static_cast<T>(v);
-                }
-                ++r;
-            }
+  /** @brief Maximum (numpy-reference/reference/generated/numpy.max.html). */
+  template <int Axis = -1>
+    requires(Axis >= -1 && Axis < static_cast<int>(rank))
+  constexpr auto max() const {
+    if constexpr (Axis == -1) {
+      T best = m_data[0];
+      for (std::size_t i = 1; i < size_v; ++i) {
+        if (best < m_data[i]) {
+          best = m_data[i];
         }
+      }
+      return best;
+    } else {
+      using tag = typename detail::expr::remove_at<
+          Axis, 0, detail::expr::shape_tag<Extents...>>::type;
+      return extremum_axis(Axis, tag{}, true);
+    }
+  }
 
-        /** @brief Rank-0 scalar: ndarray<int>{5}. */
-        template <typename U>
-        requires(rank == 0 && std::convertible_to<U, T>)
-        constexpr explicit ndarray(U value) : m_data{static_cast<T>(value)} {}
+  /**
+   * @brief Index of the first minimum (numpy.argmin.html). Axis = -1
+   *        flattens, matching NumPy's default axis=None.
+   */
+  template <int Axis = -1>
+    requires(Axis >= -1 && Axis < static_cast<int>(rank))
+  constexpr auto argmin() const {
+    return argextremum<Axis>(false);
+  }
 
-        // -----------------------------------------------------------------
-        // Factories
-        // -----------------------------------------------------------------
+  /**
+   * @brief Index of the first maximum (numpy.argmax.html). Axis = -1
+   *        flattens, matching NumPy's default axis=None.
+   */
+  template <int Axis = -1>
+    requires(Axis >= -1 && Axis < static_cast<int>(rank))
+  constexpr auto argmax() const {
+    return argextremum<Axis>(true);
+  }
 
-        /**
-         * @brief Array from a flat std::array (C++ analog of numpy.asarray).
-         * Reference: numpy-reference/reference/generated/numpy.asarray.html
-         */
-        static constexpr ndarray from_data(const std::array<T, size_v>& flat) {
-            return ndarray{flat};
+  /**
+   * @brief True when every element is truthy (numpy.all.html).
+   */
+  template <int Axis = -1>
+    requires(Axis >= -1 && Axis < static_cast<int>(rank))
+  constexpr auto all() const {
+    if constexpr (Axis == -1) {
+      for (std::size_t i = 0; i < size_v; ++i) {
+        if (!m_data[i]) {
+          return false;
         }
+      }
+      return true;
+    } else {
+      using tag = typename detail::expr::remove_at<
+          Axis, 0, detail::expr::shape_tag<Extents...>>::type;
+      return axis_reduce<bool>(
+          Axis, tag{}, [](bool acc, const T &v) { return acc && v; }, true,
+          [](bool v) { return v; });
+    }
+  }
 
-        // -----------------------------------------------------------------
-        // Access
-        // -----------------------------------------------------------------
-
-        constexpr std::size_t size() const { return size_v; }
-
-        constexpr T* data() { return m_data.data(); }
-        constexpr const T* data() const { return m_data.data(); }
-
-        constexpr auto begin() { return m_data.begin(); }
-        constexpr auto end() { return m_data.end(); }
-        constexpr auto begin() const { return m_data.begin(); }
-        constexpr auto end() const { return m_data.end(); }
-
-        /** @brief Flat (row-major) element access. */
-        constexpr T& operator[](std::size_t i) { return m_data[i]; }
-        constexpr const T& operator[](std::size_t i) const {
-            return m_data[i];
+  /**
+   * @brief True when any element is truthy (numpy.any.html).
+   */
+  template <int Axis = -1>
+    requires(Axis >= -1 && Axis < static_cast<int>(rank))
+  constexpr auto any() const {
+    if constexpr (Axis == -1) {
+      for (std::size_t i = 0; i < size_v; ++i) {
+        if (m_data[i]) {
+          return true;
         }
+      }
+      return false;
+    } else {
+      using tag = typename detail::expr::remove_at<
+          Axis, 0, detail::expr::shape_tag<Extents...>>::type;
+      return axis_reduce<bool>(
+          Axis, tag{}, [](bool acc, const T &v) { return acc || v; }, false,
+          [](bool v) { return v; });
+    }
+  }
 
-        /**
-         * @brief Multi-dimensional access: a(i0, i1, ..., iN-1).
-         *        (The arr[i, j, k] subscript form needs C++23 P2128, so the
-         *        fixed path uses operator() — the same convention as the
-         *        dynamic Ndarray.)
-         */
-        template <typename... Idx>
-        requires(sizeof...(Idx) == rank && rank >= 2)
-        constexpr T& operator()(Idx... idx) {
-            const std::array<std::size_t, rank> coords{
-                static_cast<std::size_t>(idx)...};
-            return m_data[detail::expr::flatten(static_shape, coords)];
+  // -----------------------------------------------------------------
+  // Manipulation
+  // (numpy-reference/reference/routines.array-manipulation.html)
+  // All return fresh arrays with static result shapes.
+  // -----------------------------------------------------------------
+
+  /**
+   * @brief Reverse the axes (numpy.transpose.html), mirroring
+   *        numpy.transpose(a) without an axis argument.
+   */
+  constexpr auto transpose() const {
+    using tag = typename detail::expr::reverse<
+        detail::expr::shape_tag<Extents...>>::type;
+    return transpose_impl(tag{});
+  }
+
+  /**
+   * @brief Same elements, new extents (numpy.reshape.html). The
+   *        element count is verified at compile time.
+   */
+  template <int... NewExtents>
+    requires((static_cast<std::size_t>(NewExtents) * ... * 1ull) == size_v &&
+             std::conjunction_v<std::bool_constant<(NewExtents > 0)>...>)
+  constexpr auto reshape() const {
+    static_assert((static_cast<std::size_t>(NewExtents) * ... * 1ull) == size_v,
+                  "np: reshape cannot change the number of elements "
+                  "(numpy-reference/reference/generated/numpy.reshape.html)");
+    using tag = detail::expr::shape_tag<NewExtents...>;
+    return reshape_impl(tag{});
+  }
+
+  /** @brief 1D copy in logical order (numpy.ndarray.flatten.html). */
+  constexpr auto flatten() const { return reshape<static_cast<int>(size_v)>(); }
+
+  /**
+   * @brief Remove every extent-1 axis (numpy.squeeze.html), mirroring
+   *        numpy.squeeze(a) with axis=None.
+   */
+  constexpr auto squeeze() const {
+    using tag = typename detail::expr::squeeze_tag<
+        detail::expr::shape_tag<Extents...>>::type;
+    return squeeze_impl(tag{});
+  }
+
+  /** @brief Remove one extent-1 axis (numpy.squeeze.html, axis=...). */
+  template <int Axis>
+    requires(Axis >= 0 && Axis < static_cast<int>(rank))
+  constexpr auto squeeze() const {
+    static_assert(Axis >= 0 && Axis < static_cast<int>(rank),
+                  "np: squeeze axis out of range");
+    static_assert(static_shape[Axis] == 1,
+                  "np: squeeze(Axis) requires the axis extent to be 1 "
+                  "(numpy-reference/reference/generated/numpy.squeeze.html)");
+    using tag = typename detail::expr::remove_at<
+        Axis, 0, detail::expr::shape_tag<Extents...>>::type;
+    return squeeze_axis_impl<Axis>(tag{});
+  }
+
+  /**
+   * @brief Insert a new extent-1 axis at position `Axis`
+   *        (numpy.expand_dims.html). Axis may equal rank (append).
+   */
+  template <int Axis>
+    requires(Axis >= 0 && Axis <= static_cast<int>(rank))
+  constexpr auto expand_dims() const {
+    static_assert(
+        Axis >= 0 && Axis <= static_cast<int>(rank),
+        "np: expand_dims axis out of range "
+        "(numpy-reference/reference/generated/numpy.expand_dims.html)");
+    using tag = typename detail::expr::insert<
+        1, Axis, 0, detail::expr::shape_tag<Extents...>>::type;
+    return expand_dims_impl<Axis>(tag{});
+  }
+
+  // -----------------------------------------------------------------
+  // Internal constexpr helpers
+  // -----------------------------------------------------------------
+
+private:
+  constexpr const T &axis_elem(int axis,
+                               const std::array<std::size_t, rank - 1> &cr,
+                               std::size_t a) const {
+    std::array<std::size_t, rank> full{};
+    std::size_t k = 0;
+    for (std::size_t d = 0; d < rank; ++d) {
+      full[d] = (static_cast<int>(d) == axis) ? a : cr[k++];
+    }
+    return m_data[detail::expr::flatten(static_shape, full)];
+  }
+
+  template <typename R, int... E, typename Op, typename Finish>
+  constexpr ndarray<R, E...> axis_reduce(int axis,
+                                         detail::expr::shape_tag<E...>, Op &&op,
+                                         R init, Finish &&finish) const {
+    constexpr std::size_t red_numel =
+        (static_cast<std::size_t>(E) * ... * 1ull);
+    const std::size_t axis_ext = static_cast<std::size_t>(static_shape[axis]);
+    ndarray<R, E...> out{};
+    for (std::size_t j = 0; j < red_numel; ++j) {
+      const auto cr = detail::expr::unflatten(j, out.static_shape);
+      R acc = init;
+      for (std::size_t a = 0; a < axis_ext; ++a) {
+        acc = op(acc, axis_elem(axis, cr, a));
+      }
+      out.m_data[j] = finish(acc);
+    }
+    return out;
+  }
+
+  template <typename R, int... E>
+  constexpr ndarray<R, E...>
+  std_axis_impl(int axis, detail::expr::shape_tag<E...>, int ddof) const {
+    constexpr std::size_t red_numel =
+        (static_cast<std::size_t>(E) * ... * 1ull);
+    const std::size_t n = static_cast<std::size_t>(static_shape[axis]);
+    ndarray<R, E...> out{};
+    for (std::size_t j = 0; j < red_numel; ++j) {
+      const auto cr = detail::expr::unflatten(j, out.static_shape);
+      R mean_acc = R{0};
+      for (std::size_t a = 0; a < n; ++a) {
+        mean_acc += static_cast<R>(axis_elem(axis, cr, a));
+      }
+      mean_acc /= static_cast<R>(n);
+      R sq = R{0};
+      for (std::size_t a = 0; a < n; ++a) {
+        const R d = static_cast<R>(axis_elem(axis, cr, a)) - mean_acc;
+        sq += d * d;
+      }
+      out.m_data[j] = static_cast<R>(std_denom(sq, n, ddof));
+    }
+    return out;
+  }
+
+  template <int... E>
+  constexpr ndarray<T, E...>
+  extremum_axis(int axis, detail::expr::shape_tag<E...>, bool is_max) const {
+    constexpr std::size_t red_numel =
+        (static_cast<std::size_t>(E) * ... * 1ull);
+    const std::size_t n = static_cast<std::size_t>(static_shape[axis]);
+    ndarray<T, E...> out{};
+    for (std::size_t j = 0; j < red_numel; ++j) {
+      const auto cr = detail::expr::unflatten(j, out.static_shape);
+      T best = axis_elem(axis, cr, 0);
+      for (std::size_t a = 1; a < n; ++a) {
+        const T &v = axis_elem(axis, cr, a);
+        if (is_max ? (best < v) : (v < best)) {
+          best = v;
         }
+      }
+      out.m_data[j] = best;
+    }
+    return out;
+  }
 
-        template <typename... Idx>
-        requires(sizeof...(Idx) == rank && rank >= 2)
-        constexpr const T& operator()(Idx... idx) const {
-            const std::array<std::size_t, rank> coords{
-                static_cast<std::size_t>(idx)...};
-            return m_data[detail::expr::flatten(static_shape, coords)];
+  template <int Axis> constexpr auto argextremum(bool is_max) const {
+    if constexpr (Axis == -1) {
+      std::size_t best_i = 0;
+      for (std::size_t i = 1; i < size_v; ++i) {
+        if (is_max ? (m_data[best_i] < m_data[i])
+                   : (m_data[i] < m_data[best_i])) {
+          best_i = i;
         }
+      }
+      return best_i;
+    } else {
+      using tag = typename detail::expr::remove_at<
+          Axis, 0, detail::expr::shape_tag<Extents...>>::type;
+      return argextremum_axis(Axis, tag{}, is_max);
+    }
+  }
 
-        /** @brief Fill every element. */
-        constexpr void fill(const T& v) { m_data.fill(v); }
-
-        // -----------------------------------------------------------------
-        // Reductions
-        // (numpy-reference/reference/routines.statistics.html)
-        // NumPy axis=None is represented by Axis = -1; every axis is a
-        // template parameter so out-of-range axes fail to compile.
-        // -----------------------------------------------------------------
-
-        /** @brief Sum (numpy-reference/reference/generated/numpy.sum.html). */
-        template <int Axis = -1>
-        requires(Axis >= -1 && Axis < static_cast<int>(rank))
-        constexpr auto sum() const {
-            if constexpr (Axis == -1) {
-                T acc{};
-                for (std::size_t i = 0; i < size_v; ++i) {
-                    acc += m_data[i];
-                }
-                return acc;
-            } else {
-                using tag = typename detail::expr::remove_at<
-                    Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-                return axis_reduce<T>(Axis, tag{},
-                                      [](T acc, const T& v) { return acc + v; },
-                                      T{},
-                                      [](T v) { return v; });
-            }
+  template <int... E>
+  constexpr ndarray<std::size_t, E...>
+  argextremum_axis(int axis, detail::expr::shape_tag<E...>, bool is_max) const {
+    constexpr std::size_t red_numel =
+        (static_cast<std::size_t>(E) * ... * 1ull);
+    const std::size_t n = static_cast<std::size_t>(static_shape[axis]);
+    ndarray<std::size_t, E...> out{};
+    for (std::size_t j = 0; j < red_numel; ++j) {
+      const auto cr = detail::expr::unflatten(j, out.static_shape);
+      std::size_t best_i = 0;
+      for (std::size_t a = 1; a < n; ++a) {
+        const T &cur = axis_elem(axis, cr, a);
+        const T &best = axis_elem(axis, cr, best_i);
+        if (is_max ? (best < cur) : (cur < best)) {
+          best_i = a;
         }
+      }
+      out.m_data[j] = best_i;
+    }
+    return out;
+  }
 
-        /** @brief Product (numpy-reference/reference/generated/numpy.prod.html). */
-        template <int Axis = -1>
-        requires(Axis >= -1 && Axis < static_cast<int>(rank))
-        constexpr auto prod() const {
-            if constexpr (Axis == -1) {
-                T acc{1};
-                for (std::size_t i = 0; i < size_v; ++i) {
-                    acc *= m_data[i];
-                }
-                return acc;
-            } else {
-                using tag = typename detail::expr::remove_at<
-                    Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-                return axis_reduce<T>(Axis, tag{},
-                                      [](T acc, const T& v) { return acc * v; },
-                                      T{1},
-                                      [](T v) { return v; });
-            }
+  static constexpr double std_denom(double sq, std::size_t n, int ddof) {
+    if (n <= static_cast<std::size_t>(ddof)) {
+      return detail::math::nan();
+    }
+    return detail::math::sqrt(
+        sq / static_cast<double>(n - static_cast<std::size_t>(ddof)));
+  }
+
+  template <int... E>
+  constexpr ndarray<T, E...>
+  transpose_impl(detail::expr::shape_tag<E...>) const {
+    constexpr std::array<int, rank> rshape{E...};
+    ndarray<T, E...> out{};
+    for (std::size_t i = 0; i < size_v; ++i) {
+      const auto c = detail::expr::unflatten(i, static_shape);
+      std::array<std::size_t, rank> rc{};
+      for (std::size_t d = 0; d < rank; ++d) {
+        rc[rank - 1 - d] = c[d];
+      }
+      out.m_data[detail::expr::flatten(rshape, rc)] = m_data[i];
+    }
+    return out;
+  }
+
+  template <int... E>
+  constexpr ndarray<T, E...> reshape_impl(detail::expr::shape_tag<E...>) const {
+    ndarray<T, E...> out{};
+    for (std::size_t i = 0; i < size_v; ++i) {
+      out.m_data[i] = m_data[i];
+    }
+    return out;
+  }
+
+  template <int... E>
+  constexpr ndarray<T, E...> squeeze_impl(detail::expr::shape_tag<E...>) const {
+    constexpr std::array<int, sizeof...(E)> rshape{E...};
+    ndarray<T, E...> out{};
+    for (std::size_t i = 0; i < size_v; ++i) {
+      const auto c = detail::expr::unflatten(i, static_shape);
+      std::array<std::size_t, sizeof...(E)> rc{};
+      std::size_t m = 0;
+      for (std::size_t d = 0; d < rank; ++d) {
+        if (static_shape[d] != 1) {
+          rc[m++] = c[d];
         }
+      }
+      out.m_data[detail::expr::flatten(rshape, rc)] = m_data[i];
+    }
+    return out;
+  }
 
-        /**
-         * @brief Arithmetic mean (numpy.mean.html). Integer inputs promote
-         *        to double, as in NumPy.
-         */
-        template <int Axis = -1>
-        requires(Axis >= -1 && Axis < static_cast<int>(rank))
-        constexpr auto mean() const {
-            using R = detail::fixed::float_t<T>;
-            if constexpr (Axis == -1) {
-                R acc = R{0};
-                for (std::size_t i = 0; i < size_v; ++i) {
-                    acc += static_cast<R>(m_data[i]);
-                }
-                return acc / static_cast<R>(size_v);
-            } else {
-                constexpr std::size_t n =
-                    static_cast<std::size_t>(static_shape[Axis]);
-                using tag = typename detail::expr::remove_at<
-                    Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-                return axis_reduce<R>(
-                    Axis, tag{},
-                    [](R acc, const T& v) { return acc + static_cast<R>(v); },
-                    R{0},
-                    [n](R v) { return v / static_cast<R>(n); });
-            }
+  template <int Axis, int... E>
+  constexpr ndarray<T, E...>
+  squeeze_axis_impl(detail::expr::shape_tag<E...>) const {
+    constexpr std::array<int, rank - 1> rshape{E...};
+    ndarray<T, E...> out{};
+    for (std::size_t i = 0; i < size_v; ++i) {
+      const auto c = detail::expr::unflatten(i, static_shape);
+      std::array<std::size_t, rank - 1> rc{};
+      std::size_t m = 0;
+      for (std::size_t d = 0; d < rank; ++d) {
+        if (static_cast<int>(d) != Axis) {
+          rc[m++] = c[d];
         }
+      }
+      out.m_data[detail::expr::flatten(rshape, rc)] = m_data[i];
+    }
+    return out;
+  }
 
-        /**
-         * @brief Standard deviation (numpy.std.html). Two-pass computation;
-         *        ddof matches NumPy.
-         */
-        template <int Axis = -1>
-        requires(Axis >= -1 && Axis < static_cast<int>(rank))
-        constexpr auto std(int ddof = 0) const {
-            using R = detail::fixed::float_t<T>;
-            if constexpr (Axis == -1) {
-                R acc = R{0};
-                for (std::size_t i = 0; i < size_v; ++i) {
-                    acc += static_cast<R>(m_data[i]);
-                }
-                const R mean_v = acc / static_cast<R>(size_v);
-                R sq = R{0};
-                for (std::size_t i = 0; i < size_v; ++i) {
-                    const R d = static_cast<R>(m_data[i]) - mean_v;
-                    sq += d * d;
-                }
-                return std_denom(sq, size_v, ddof);
-            } else {
-                using tag = typename detail::expr::remove_at<
-                    Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-                return std_axis_impl(Axis, tag{}, ddof);
-            }
-        }
+  template <int Axis, int... E>
+  constexpr ndarray<T, E...>
+  expand_dims_impl(detail::expr::shape_tag<E...>) const {
+    constexpr std::array<int, rank + 1> rshape{E...};
+    ndarray<T, E...> out{};
+    for (std::size_t i = 0; i < size_v; ++i) {
+      const auto c = detail::expr::unflatten(i, static_shape);
+      std::array<std::size_t, rank + 1> rc{};
+      std::size_t m = 0;
+      for (std::size_t d = 0; d < rank + 1; ++d) {
+        rc[d] = (static_cast<int>(d) == Axis) ? 0 : c[m++];
+      }
+      out.m_data[detail::expr::flatten(rshape, rc)] = m_data[i];
+    }
+    return out;
+  }
+};
 
-        /** @brief Minimum (numpy-reference/reference/generated/numpy.min.html). */
-        template <int Axis = -1>
-        requires(Axis >= -1 && Axis < static_cast<int>(rank))
-        constexpr auto min() const {
-            if constexpr (Axis == -1) {
-                T best = m_data[0];
-                for (std::size_t i = 1; i < size_v; ++i) {
-                    if (m_data[i] < best) {
-                        best = m_data[i];
-                    }
-                }
-                return best;
-            } else {
-                using tag = typename detail::expr::remove_at<
-                    Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-                return extremum_axis(Axis, tag{}, false);
-            }
-        }
+// ---------------------------------------------------------------------
+// Elementwise operators (lazy expressions, NumPy broadcasting)
+// Reference: numpy-reference/user/basics.broadcasting.html and
+//            numpy-reference/reference/ufuncs.html
+// ---------------------------------------------------------------------
 
-        /** @brief Maximum (numpy-reference/reference/generated/numpy.max.html). */
-        template <int Axis = -1>
-        requires(Axis >= -1 && Axis < static_cast<int>(rank))
-        constexpr auto max() const {
-            if constexpr (Axis == -1) {
-                T best = m_data[0];
-                for (std::size_t i = 1; i < size_v; ++i) {
-                    if (best < m_data[i]) {
-                        best = m_data[i];
-                    }
-                }
-                return best;
-            } else {
-                using tag = typename detail::expr::remove_at<
-                    Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-                return extremum_axis(Axis, tag{}, true);
-            }
-        }
+namespace detail::fixed {
 
-        /**
-         * @brief Index of the first minimum (numpy.argmin.html). Axis = -1
-         *        flattens, matching NumPy's default axis=None.
-         */
-        template <int Axis = -1>
-        requires(Axis >= -1 && Axis < static_cast<int>(rank))
-        constexpr auto argmin() const {
-            return argextremum<Axis>(false);
-        }
+/** @brief Wrap an arithmetic scalar in a rank-0 broadcast source. */
+template <typename S>
+using wrap_t = std::conditional_t<detail::expr::fixed_source<S>, S,
+                                  detail::expr::scalar_expr<S>>;
 
-        /**
-         * @brief Index of the first maximum (numpy.argmax.html). Axis = -1
-         *        flattens, matching NumPy's default axis=None.
-         */
-        template <int Axis = -1>
-        requires(Axis >= -1 && Axis < static_cast<int>(rank))
-        constexpr auto argmax() const {
-            return argextremum<Axis>(true);
-        }
+/** @brief True when the two operands (arrays or scalars) broadcast. */
+template <typename L, typename R>
+inline constexpr bool binop_ok =
+    detail::expr::broadcast_valid<wrap_t<L>, wrap_t<R>>;
 
-        /**
-         * @brief True when every element is truthy (numpy.all.html).
-         */
-        template <int Axis = -1>
-        requires(Axis >= -1 && Axis < static_cast<int>(rank))
-        constexpr auto all() const {
-            if constexpr (Axis == -1) {
-                for (std::size_t i = 0; i < size_v; ++i) {
-                    if (!m_data[i]) {
-                        return false;
-                    }
-                }
-                return true;
-            } else {
-                using tag = typename detail::expr::remove_at<
-                    Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-                return axis_reduce<bool>(
-                    Axis, tag{}, [](bool acc, const T& v) { return acc && v; },
-                    true, [](bool v) { return v; });
-            }
-        }
+/** @brief Common elementwise operation helper (see ufuncs.html). */
+template <typename Op, typename L, typename R>
+constexpr auto make_binary(const L &l, const R &r) {
+  using LE = wrap_t<L>;
+  using RE = wrap_t<R>;
+  return detail::expr::binary_expr<Op, LE, RE>(LE(l), RE(r));
+}
 
-        /**
-         * @brief True when any element is truthy (numpy.any.html).
-         */
-        template <int Axis = -1>
-        requires(Axis >= -1 && Axis < static_cast<int>(rank))
-        constexpr auto any() const {
-            if constexpr (Axis == -1) {
-                for (std::size_t i = 0; i < size_v; ++i) {
-                    if (m_data[i]) {
-                        return true;
-                    }
-                }
-                return false;
-            } else {
-                using tag = typename detail::expr::remove_at<
-                    Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-                return axis_reduce<bool>(
-                    Axis, tag{}, [](bool acc, const T& v) { return acc || v; },
-                    false, [](bool v) { return v; });
-            }
-        }
+/**
+ * @brief Bitwise left shift (numpy.left_shift.html). std::shift_left
+ *        is not provided by this toolchain's libstdc++, so the
+ *        kernel is defined here.
+ */
+struct left_shift_fn {
+  template <typename V1, typename V2>
+  constexpr auto operator()(V1 x, V2 y) const -> std::common_type_t<V1, V2> {
+    return static_cast<std::common_type_t<V1, V2>>(x)
+           << static_cast<std::common_type_t<V1, V2>>(y);
+  }
+};
 
-        // -----------------------------------------------------------------
-        // Manipulation
-        // (numpy-reference/reference/routines.array-manipulation.html)
-        // All return fresh arrays with static result shapes.
-        // -----------------------------------------------------------------
+/**
+ * @brief Bitwise right shift (numpy.right_shift.html).
+ */
+struct right_shift_fn {
+  template <typename V1, typename V2>
+  constexpr auto operator()(V1 x, V2 y) const -> std::common_type_t<V1, V2> {
+    return static_cast<std::common_type_t<V1, V2>>(x) >>
+           static_cast<std::common_type_t<V1, V2>>(y);
+  }
+};
 
-        /**
-         * @brief Reverse the axes (numpy.transpose.html), mirroring
-         *        numpy.transpose(a) without an axis argument.
-         */
-        constexpr auto transpose() const {
-            using tag = typename detail::expr::reverse<
-                detail::expr::shape_tag<Extents...>>::type;
-            return transpose_impl(tag{});
-        }
-
-        /**
-         * @brief Same elements, new extents (numpy.reshape.html). The
-         *        element count is verified at compile time.
-         */
-        template <int... NewExtents>
-        requires((static_cast<std::size_t>(NewExtents) * ... * 1ull) == size_v &&
-                 std::conjunction_v<std::bool_constant<(NewExtents > 0)>...>)
-        constexpr auto reshape() const {
-            static_assert(
-                (static_cast<std::size_t>(NewExtents) * ... * 1ull) == size_v,
-                "np: reshape cannot change the number of elements "
-                "(numpy-reference/reference/generated/numpy.reshape.html)");
-            using tag = detail::expr::shape_tag<NewExtents...>;
-            return reshape_impl(tag{});
-        }
-
-        /** @brief 1D copy in logical order (numpy.ndarray.flatten.html). */
-        constexpr auto flatten() const {
-            return reshape<static_cast<int>(size_v)>();
-        }
-
-        /**
-         * @brief Remove every extent-1 axis (numpy.squeeze.html), mirroring
-         *        numpy.squeeze(a) with axis=None.
-         */
-        constexpr auto squeeze() const {
-            using tag = typename detail::expr::squeeze_tag<
-                detail::expr::shape_tag<Extents...>>::type;
-            return squeeze_impl(tag{});
-        }
-
-        /** @brief Remove one extent-1 axis (numpy.squeeze.html, axis=...). */
-        template <int Axis>
-        requires(Axis >= 0 && Axis < static_cast<int>(rank))
-        constexpr auto squeeze() const {
-            static_assert(Axis >= 0 && Axis < static_cast<int>(rank),
-                          "np: squeeze axis out of range");
-            static_assert(static_shape[Axis] == 1,
-                          "np: squeeze(Axis) requires the axis extent to be 1 "
-                          "(numpy-reference/reference/generated/numpy.squeeze.html)");
-            using tag = typename detail::expr::remove_at<
-                Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-            return squeeze_axis_impl<Axis>(tag{});
-        }
-
-        /**
-         * @brief Insert a new extent-1 axis at position `Axis`
-         *        (numpy.expand_dims.html). Axis may equal rank (append).
-         */
-        template <int Axis>
-        requires(Axis >= 0 && Axis <= static_cast<int>(rank))
-        constexpr auto expand_dims() const {
-            static_assert(Axis >= 0 && Axis <= static_cast<int>(rank),
-                          "np: expand_dims axis out of range "
-                          "(numpy-reference/reference/generated/numpy.expand_dims.html)");
-            using tag = typename detail::expr::insert<
-                1, Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-            return expand_dims_impl<Axis>(tag{});
-        }
-
-        // -----------------------------------------------------------------
-        // Internal constexpr helpers
-        // -----------------------------------------------------------------
-
-    private:
-        constexpr const T& axis_elem(
-            int axis, const std::array<std::size_t, rank - 1>& cr,
-            std::size_t a) const {
-            std::array<std::size_t, rank> full{};
-            std::size_t k = 0;
-            for (std::size_t d = 0; d < rank; ++d) {
-                full[d] = (static_cast<int>(d) == axis) ? a : cr[k++];
-            }
-            return m_data[detail::expr::flatten(static_shape, full)];
-        }
-
-        template <typename R, int... E, typename Op, typename Finish>
-        constexpr ndarray<R, E...> axis_reduce(
-            int axis, detail::expr::shape_tag<E...>, Op&& op, R init,
-            Finish&& finish) const {
-            constexpr std::size_t red_numel =
-                (static_cast<std::size_t>(E) * ... * 1ull);
-            const std::size_t axis_ext =
-                static_cast<std::size_t>(static_shape[axis]);
-            ndarray<R, E...> out{};
-            for (std::size_t j = 0; j < red_numel; ++j) {
-                const auto cr = detail::expr::unflatten(j, out.static_shape);
-                R acc = init;
-                for (std::size_t a = 0; a < axis_ext; ++a) {
-                    acc = op(acc, axis_elem(axis, cr, a));
-                }
-                out.m_data[j] = finish(acc);
-            }
-            return out;
-        }
-
-        template <typename R, int... E>
-        constexpr ndarray<R, E...> std_axis_impl(
-            int axis, detail::expr::shape_tag<E...>, int ddof) const {
-            constexpr std::size_t red_numel =
-                (static_cast<std::size_t>(E) * ... * 1ull);
-            const std::size_t n = static_cast<std::size_t>(static_shape[axis]);
-            ndarray<R, E...> out{};
-            for (std::size_t j = 0; j < red_numel; ++j) {
-                const auto cr = detail::expr::unflatten(j, out.static_shape);
-                R mean_acc = R{0};
-                for (std::size_t a = 0; a < n; ++a) {
-                    mean_acc += static_cast<R>(axis_elem(axis, cr, a));
-                }
-                mean_acc /= static_cast<R>(n);
-                R sq = R{0};
-                for (std::size_t a = 0; a < n; ++a) {
-                    const R d = static_cast<R>(axis_elem(axis, cr, a)) -
-                                mean_acc;
-                    sq += d * d;
-                }
-                out.m_data[j] = static_cast<R>(std_denom(sq, n, ddof));
-            }
-            return out;
-        }
-
-        template <int... E>
-        constexpr ndarray<T, E...> extremum_axis(
-            int axis, detail::expr::shape_tag<E...>, bool is_max) const {
-            constexpr std::size_t red_numel =
-                (static_cast<std::size_t>(E) * ... * 1ull);
-            const std::size_t n = static_cast<std::size_t>(static_shape[axis]);
-            ndarray<T, E...> out{};
-            for (std::size_t j = 0; j < red_numel; ++j) {
-                const auto cr = detail::expr::unflatten(j, out.static_shape);
-                T best = axis_elem(axis, cr, 0);
-                for (std::size_t a = 1; a < n; ++a) {
-                    const T& v = axis_elem(axis, cr, a);
-                    if (is_max ? (best < v) : (v < best)) {
-                        best = v;
-                    }
-                }
-                out.m_data[j] = best;
-            }
-            return out;
-        }
-
-        template <int Axis>
-        constexpr auto argextremum(bool is_max) const {
-            if constexpr (Axis == -1) {
-                std::size_t best_i = 0;
-                for (std::size_t i = 1; i < size_v; ++i) {
-                    if (is_max ? (m_data[best_i] < m_data[i])
-                               : (m_data[i] < m_data[best_i])) {
-                        best_i = i;
-                    }
-                }
-                return best_i;
-            } else {
-                using tag = typename detail::expr::remove_at<
-                    Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-                return argextremum_axis(Axis, tag{}, is_max);
-            }
-        }
-
-        template <int... E>
-        constexpr ndarray<std::size_t, E...> argextremum_axis(
-            int axis, detail::expr::shape_tag<E...>, bool is_max) const {
-            constexpr std::size_t red_numel =
-                (static_cast<std::size_t>(E) * ... * 1ull);
-            const std::size_t n = static_cast<std::size_t>(static_shape[axis]);
-            ndarray<std::size_t, E...> out{};
-            for (std::size_t j = 0; j < red_numel; ++j) {
-                const auto cr = detail::expr::unflatten(j, out.static_shape);
-                std::size_t best_i = 0;
-                for (std::size_t a = 1; a < n; ++a) {
-                    const T& cur = axis_elem(axis, cr, a);
-                    const T& best = axis_elem(axis, cr, best_i);
-                    if (is_max ? (best < cur) : (cur < best)) {
-                        best_i = a;
-                    }
-                }
-                out.m_data[j] = best_i;
-            }
-            return out;
-        }
-
-        static constexpr double std_denom(double sq, std::size_t n, int ddof) {
-            if (n <= static_cast<std::size_t>(ddof)) {
-                return detail::math::nan();
-            }
-            return detail::math::sqrt(
-                sq / static_cast<double>(n - static_cast<std::size_t>(ddof)));
-        }
-
-        template <int... E>
-        constexpr ndarray<T, E...> transpose_impl(
-            detail::expr::shape_tag<E...>) const {
-            constexpr std::array<int, rank> rshape{E...};
-            ndarray<T, E...> out{};
-            for (std::size_t i = 0; i < size_v; ++i) {
-                const auto c = detail::expr::unflatten(i, static_shape);
-                std::array<std::size_t, rank> rc{};
-                for (std::size_t d = 0; d < rank; ++d) {
-                    rc[rank - 1 - d] = c[d];
-                }
-                out.m_data[detail::expr::flatten(rshape, rc)] = m_data[i];
-            }
-            return out;
-        }
-
-        template <int... E>
-        constexpr ndarray<T, E...> reshape_impl(
-            detail::expr::shape_tag<E...>) const {
-            ndarray<T, E...> out{};
-            for (std::size_t i = 0; i < size_v; ++i) {
-                out.m_data[i] = m_data[i];
-            }
-            return out;
-        }
-
-        template <int... E>
-        constexpr ndarray<T, E...> squeeze_impl(
-            detail::expr::shape_tag<E...>) const {
-            constexpr std::array<int, sizeof...(E)> rshape{E...};
-            ndarray<T, E...> out{};
-            for (std::size_t i = 0; i < size_v; ++i) {
-                const auto c = detail::expr::unflatten(i, static_shape);
-                std::array<std::size_t, sizeof...(E)> rc{};
-                std::size_t m = 0;
-                for (std::size_t d = 0; d < rank; ++d) {
-                    if (static_shape[d] != 1) {
-                        rc[m++] = c[d];
-                    }
-                }
-                out.m_data[detail::expr::flatten(rshape, rc)] = m_data[i];
-            }
-            return out;
-        }
-
-        template <int Axis, int... E>
-        constexpr ndarray<T, E...> squeeze_axis_impl(
-            detail::expr::shape_tag<E...>) const {
-            constexpr std::array<int, rank - 1> rshape{E...};
-            ndarray<T, E...> out{};
-            for (std::size_t i = 0; i < size_v; ++i) {
-                const auto c = detail::expr::unflatten(i, static_shape);
-                std::array<std::size_t, rank - 1> rc{};
-                std::size_t m = 0;
-                for (std::size_t d = 0; d < rank; ++d) {
-                    if (static_cast<int>(d) != Axis) {
-                        rc[m++] = c[d];
-                    }
-                }
-                out.m_data[detail::expr::flatten(rshape, rc)] = m_data[i];
-            }
-            return out;
-        }
-
-        template <int Axis, int... E>
-        constexpr ndarray<T, E...> expand_dims_impl(
-            detail::expr::shape_tag<E...>) const {
-            constexpr std::array<int, rank + 1> rshape{E...};
-            ndarray<T, E...> out{};
-            for (std::size_t i = 0; i < size_v; ++i) {
-                const auto c = detail::expr::unflatten(i, static_shape);
-                std::array<std::size_t, rank + 1> rc{};
-                std::size_t m = 0;
-                for (std::size_t d = 0; d < rank + 1; ++d) {
-                    rc[d] = (static_cast<int>(d) == Axis) ? 0 : c[m++];
-                }
-                out.m_data[detail::expr::flatten(rshape, rc)] = m_data[i];
-            }
-            return out;
-        }
-    };
-
-    // ---------------------------------------------------------------------
-    // Elementwise operators (lazy expressions, NumPy broadcasting)
-    // Reference: numpy-reference/user/basics.broadcasting.html and
-    //            numpy-reference/reference/ufuncs.html
-    // ---------------------------------------------------------------------
-
-    namespace detail::fixed {
-
-        /** @brief Wrap an arithmetic scalar in a rank-0 broadcast source. */
-        template <typename S>
-        using wrap_t = std::conditional_t<detail::expr::fixed_source<S>, S,
-                                          detail::expr::scalar_expr<S>>;
-
-        /** @brief True when the two operands (arrays or scalars) broadcast. */
-        template <typename L, typename R>
-        inline constexpr bool binop_ok =
-            detail::expr::broadcast_valid<wrap_t<L>, wrap_t<R>>;
-
-        /** @brief Common elementwise operation helper (see ufuncs.html). */
-        template <typename Op, typename L, typename R>
-        constexpr auto make_binary(const L& l, const R& r) {
-            using LE = wrap_t<L>;
-            using RE = wrap_t<R>;
-            return detail::expr::binary_expr<Op, LE, RE>(LE(l), RE(r));
-        }
-
-        /**
-         * @brief Bitwise left shift (numpy.left_shift.html). std::shift_left
-         *        is not provided by this toolchain's libstdc++, so the
-         *        kernel is defined here.
-         */
-        struct left_shift_fn {
-            template <typename V1, typename V2>
-            constexpr auto operator()(V1 x, V2 y) const
-                -> std::common_type_t<V1, V2> {
-                return static_cast<std::common_type_t<V1, V2>>(x)
-                       << static_cast<std::common_type_t<V1, V2>>(y);
-            }
-        };
-
-        /**
-         * @brief Bitwise right shift (numpy.right_shift.html).
-         */
-        struct right_shift_fn {
-            template <typename V1, typename V2>
-            constexpr auto operator()(V1 x, V2 y) const
-                -> std::common_type_t<V1, V2> {
-                return static_cast<std::common_type_t<V1, V2>>(x)
-                       >> static_cast<std::common_type_t<V1, V2>>(y);
-            }
-        };
-
-    } // namespace detail::fixed
+} // namespace detail::fixed
 
 #define NP_FIXED_BINOP(op, stdop)                                              \
-    template <typename L, typename R>                                          \
+  template <typename L, typename R>                                            \
     requires((detail::expr::fixed_source<L> || std::is_arithmetic_v<L>) &&     \
              (detail::expr::fixed_source<R> || std::is_arithmetic_v<R>) &&     \
              !(std::is_arithmetic_v<L> && std::is_arithmetic_v<R>) &&          \
              detail::fixed::binop_ok<L, R>)                                    \
-    constexpr auto operator op(const L& l, const R& r) {                       \
-        return detail::fixed::make_binary<stdop>(l, r);                        \
-    }
+  constexpr auto operator op(const L &l, const R &r) {                         \
+    return detail::fixed::make_binary<stdop>(l, r);                            \
+  }
 
-    NP_FIXED_BINOP(+, std::plus<void>)
-    NP_FIXED_BINOP(-, std::minus<void>)
-    NP_FIXED_BINOP(*, std::multiplies<void>)
-    NP_FIXED_BINOP(/, std::divides<void>)
-    NP_FIXED_BINOP(%, std::modulus<void>)
-    NP_FIXED_BINOP(&, std::bit_and<void>)
-    NP_FIXED_BINOP(|, std::bit_or<void>)
-    NP_FIXED_BINOP(^, std::bit_xor<void>)
-    NP_FIXED_BINOP(<<, detail::fixed::left_shift_fn)
-    NP_FIXED_BINOP(>>, detail::fixed::right_shift_fn)
-    NP_FIXED_BINOP(==, std::equal_to<void>)
-    NP_FIXED_BINOP(!=, std::not_equal_to<void>)
-    NP_FIXED_BINOP(<, std::less<void>)
-    NP_FIXED_BINOP(<=, std::less_equal<void>)
-    NP_FIXED_BINOP(>, std::greater<void>)
-    NP_FIXED_BINOP(>=, std::greater_equal<void>)
-    NP_FIXED_BINOP(&&, std::logical_and<void>)
-    NP_FIXED_BINOP(||, std::logical_or<void>)
+NP_FIXED_BINOP(+, std::plus<void>)
+NP_FIXED_BINOP(-, std::minus<void>)
+NP_FIXED_BINOP(*, std::multiplies<void>)
+NP_FIXED_BINOP(/, std::divides<void>)
+NP_FIXED_BINOP(%, std::modulus<void>)
+NP_FIXED_BINOP(&, std::bit_and<void>)
+NP_FIXED_BINOP(|, std::bit_or<void>)
+NP_FIXED_BINOP(^, std::bit_xor<void>)
+NP_FIXED_BINOP(<<, detail::fixed::left_shift_fn)
+NP_FIXED_BINOP(>>, detail::fixed::right_shift_fn)
+NP_FIXED_BINOP(==, std::equal_to<void>)
+NP_FIXED_BINOP(!=, std::not_equal_to<void>)
+NP_FIXED_BINOP(<, std::less<void>)
+NP_FIXED_BINOP(<=, std::less_equal<void>)
+NP_FIXED_BINOP(>, std::greater<void>)
+NP_FIXED_BINOP(>=, std::greater_equal<void>)
+NP_FIXED_BINOP(&&, std::logical_and<void>)
+NP_FIXED_BINOP(||, std::logical_or<void>)
 
 #undef NP_FIXED_BINOP
 
-    /** @brief Unary minus (numpy-reference/reference/generated/numpy.negative.html). */
-    template <detail::expr::fixed_source S>
-    constexpr auto operator-(const S& s) {
-        return detail::expr::unary_expr<std::negate<void>, S>(s);
+/** @brief Unary minus
+ * (numpy-reference/reference/generated/numpy.negative.html). */
+template <detail::expr::fixed_source S> constexpr auto operator-(const S &s) {
+  return detail::expr::unary_expr<std::negate<void>, S>(s);
+}
+
+/** @brief Unary plus: value copy
+ * (numpy-reference/reference/generated/numpy.positive.html). */
+template <detail::expr::fixed_source S> constexpr S operator+(const S &s) {
+  return s;
+}
+
+/** @brief Logical not
+ * (numpy-reference/reference/generated/numpy.logical_not.html). */
+template <detail::expr::fixed_source S> constexpr auto operator!(const S &s) {
+  return detail::expr::unary_expr<std::logical_not<void>, S>(s);
+}
+
+/** @brief Bitwise not (numpy-reference/reference/generated/numpy.invert.html).
+ */
+template <detail::expr::fixed_source S> constexpr auto operator~(const S &s) {
+  return detail::expr::unary_expr<std::bit_not<void>, S>(s);
+}
+
+// ---------------------------------------------------------------------
+// Elementwise math functions
+// Reference: numpy-reference/reference/routines.math.html
+// The constexpr kernels come from detail/math_constexpr.hpp so that
+// static expressions fold at compile time.
+// ---------------------------------------------------------------------
+
+namespace detail::fixed {
+
+struct abs_fn {
+  template <typename V> constexpr V operator()(V v) const {
+    return detail::math::abs(v);
+  }
+};
+
+struct sqrt_fn {
+  template <typename V> constexpr auto operator()(V v) const {
+    using R = float_t<V>;
+    return detail::math::sqrt(static_cast<R>(v));
+  }
+};
+
+struct exp_fn {
+  template <typename V> constexpr auto operator()(V v) const {
+    using R = float_t<V>;
+    return static_cast<R>(detail::math::exp(static_cast<double>(v)));
+  }
+};
+
+struct log_fn {
+  template <typename V> constexpr auto operator()(V v) const {
+    using R = float_t<V>;
+    return static_cast<R>(detail::math::log(static_cast<double>(v)));
+  }
+};
+
+struct sin_fn {
+  template <typename V> constexpr auto operator()(V v) const {
+    using R = float_t<V>;
+    return static_cast<R>(detail::math::sin(static_cast<double>(v)));
+  }
+};
+
+struct cos_fn {
+  template <typename V> constexpr auto operator()(V v) const {
+    using R = float_t<V>;
+    return static_cast<R>(detail::math::cos(static_cast<double>(v)));
+  }
+};
+
+struct tan_fn {
+  template <typename V> constexpr auto operator()(V v) const {
+    using R = float_t<V>;
+    return static_cast<R>(detail::math::tan(static_cast<double>(v)));
+  }
+};
+
+struct floor_fn {
+  template <typename V> constexpr auto operator()(V v) const {
+    using R = float_t<V>;
+    return static_cast<R>(detail::math::floor(static_cast<double>(v)));
+  }
+};
+
+struct ceil_fn {
+  template <typename V> constexpr auto operator()(V v) const {
+    using R = float_t<V>;
+    return static_cast<R>(detail::math::ceil(static_cast<double>(v)));
+  }
+};
+
+struct round_fn {
+  template <typename V> constexpr auto operator()(V v) const {
+    using R = float_t<V>;
+    return static_cast<R>(detail::math::round(static_cast<double>(v)));
+  }
+};
+
+struct square_fn {
+  template <typename V> constexpr V operator()(V v) const { return v * v; }
+};
+
+struct power_fn {
+  template <typename V1, typename V2>
+  constexpr auto operator()(V1 x, V2 y) const {
+    using R = std::common_type_t<V1, V2>;
+    if constexpr (std::is_integral_v<R>) {
+      if (y < V2{0}) {
+        return R{0};
+      }
+      R acc = R{1};
+      for (V2 e = V2{0}; e < y; ++e) {
+        acc *= static_cast<R>(x);
+      }
+      return acc;
+    } else {
+      return static_cast<R>(
+          detail::math::pow(static_cast<double>(x), static_cast<double>(y)));
     }
+  }
+};
 
-    /** @brief Unary plus: value copy (numpy-reference/reference/generated/numpy.positive.html). */
-    template <detail::expr::fixed_source S>
-    constexpr S operator+(const S& s) {
-        return s;
-    }
-
-    /** @brief Logical not (numpy-reference/reference/generated/numpy.logical_not.html). */
-    template <detail::expr::fixed_source S>
-    constexpr auto operator!(const S& s) {
-        return detail::expr::unary_expr<std::logical_not<void>, S>(s);
-    }
-
-    /** @brief Bitwise not (numpy-reference/reference/generated/numpy.invert.html). */
-    template <detail::expr::fixed_source S>
-    constexpr auto operator~(const S& s) {
-        return detail::expr::unary_expr<std::bit_not<void>, S>(s);
-    }
-
-    // ---------------------------------------------------------------------
-    // Elementwise math functions
-    // Reference: numpy-reference/reference/routines.math.html
-    // The constexpr kernels come from detail/math_constexpr.hpp so that
-    // static expressions fold at compile time.
-    // ---------------------------------------------------------------------
-
-    namespace detail::fixed {
-
-        struct abs_fn {
-            template <typename V>
-            constexpr V operator()(V v) const {
-                return detail::math::abs(v);
-            }
-        };
-
-        struct sqrt_fn {
-            template <typename V>
-            constexpr auto operator()(V v) const {
-                using R = float_t<V>;
-                return detail::math::sqrt(static_cast<R>(v));
-            }
-        };
-
-        struct exp_fn {
-            template <typename V>
-            constexpr auto operator()(V v) const {
-                using R = float_t<V>;
-                return static_cast<R>(detail::math::exp(static_cast<double>(v)));
-            }
-        };
-
-        struct log_fn {
-            template <typename V>
-            constexpr auto operator()(V v) const {
-                using R = float_t<V>;
-                return static_cast<R>(detail::math::log(static_cast<double>(v)));
-            }
-        };
-
-        struct sin_fn {
-            template <typename V>
-            constexpr auto operator()(V v) const {
-                using R = float_t<V>;
-                return static_cast<R>(detail::math::sin(static_cast<double>(v)));
-            }
-        };
-
-        struct cos_fn {
-            template <typename V>
-            constexpr auto operator()(V v) const {
-                using R = float_t<V>;
-                return static_cast<R>(detail::math::cos(static_cast<double>(v)));
-            }
-        };
-
-        struct tan_fn {
-            template <typename V>
-            constexpr auto operator()(V v) const {
-                using R = float_t<V>;
-                return static_cast<R>(detail::math::tan(static_cast<double>(v)));
-            }
-        };
-
-        struct floor_fn {
-            template <typename V>
-            constexpr auto operator()(V v) const {
-                using R = float_t<V>;
-                return static_cast<R>(detail::math::floor(static_cast<double>(v)));
-            }
-        };
-
-        struct ceil_fn {
-            template <typename V>
-            constexpr auto operator()(V v) const {
-                using R = float_t<V>;
-                return static_cast<R>(detail::math::ceil(static_cast<double>(v)));
-            }
-        };
-
-        struct round_fn {
-            template <typename V>
-            constexpr auto operator()(V v) const {
-                using R = float_t<V>;
-                return static_cast<R>(detail::math::round(static_cast<double>(v)));
-            }
-        };
-
-        struct square_fn {
-            template <typename V>
-            constexpr V operator()(V v) const {
-                return v * v;
-            }
-        };
-
-        struct power_fn {
-            template <typename V1, typename V2>
-            constexpr auto operator()(V1 x, V2 y) const {
-                using R = std::common_type_t<V1, V2>;
-                if constexpr (std::is_integral_v<R>) {
-                    if (y < V2{0}) {
-                        return R{0};
-                    }
-                    R acc = R{1};
-                    for (V2 e = V2{0}; e < y; ++e) {
-                        acc *= static_cast<R>(x);
-                    }
-                    return acc;
-                } else {
-                    return static_cast<R>(detail::math::pow(
-                        static_cast<double>(x), static_cast<double>(y)));
-                }
-            }
-        };
-
-    } // namespace detail::fixed
+} // namespace detail::fixed
 
 #define NP_FIXED_UNARY_FN(name, fn_struct)                                     \
-    template <detail::expr::fixed_source S>                                    \
-    constexpr auto name(const S& s) {                                          \
-        return detail::expr::unary_expr<detail::fixed::fn_struct, S>(s);       \
-    }
+  template <detail::expr::fixed_source S> constexpr auto name(const S &s) {    \
+    return detail::expr::unary_expr<detail::fixed::fn_struct, S>(s);           \
+  }
 
-    /** @brief Elementwise absolute value (numpy.absolute.html). */
-    NP_FIXED_UNARY_FN(abs, abs_fn)
-    /** @brief Elementwise sqrt (numpy.sqrt.html). */
-    NP_FIXED_UNARY_FN(sqrt, sqrt_fn)
-    /** @brief Elementwise exp (numpy.exp.html). */
-    NP_FIXED_UNARY_FN(exp, exp_fn)
-    /** @brief Elementwise natural log (numpy.log.html). */
-    NP_FIXED_UNARY_FN(log, log_fn)
-    /** @brief Elementwise sine (numpy.sin.html). */
-    NP_FIXED_UNARY_FN(sin, sin_fn)
-    /** @brief Elementwise cosine (numpy.cos.html). */
-    NP_FIXED_UNARY_FN(cos, cos_fn)
-    /** @brief Elementwise tangent (numpy.tan.html). */
-    NP_FIXED_UNARY_FN(tan, tan_fn)
-    /** @brief Elementwise floor (numpy.floor.html). */
-    NP_FIXED_UNARY_FN(floor, floor_fn)
-    /** @brief Elementwise ceil (numpy.ceil.html). */
-    NP_FIXED_UNARY_FN(ceil, ceil_fn)
-    /** @brief Elementwise round (numpy.round.html). */
-    NP_FIXED_UNARY_FN(round, round_fn)
-    /** @brief Elementwise square (numpy.square.html). */
-    NP_FIXED_UNARY_FN(square, square_fn)
+/** @brief Elementwise absolute value (numpy.absolute.html). */
+NP_FIXED_UNARY_FN(abs, abs_fn)
+/** @brief Elementwise sqrt (numpy.sqrt.html). */
+NP_FIXED_UNARY_FN(sqrt, sqrt_fn)
+/** @brief Elementwise exp (numpy.exp.html). */
+NP_FIXED_UNARY_FN(exp, exp_fn)
+/** @brief Elementwise natural log (numpy.log.html). */
+NP_FIXED_UNARY_FN(log, log_fn)
+/** @brief Elementwise sine (numpy.sin.html). */
+NP_FIXED_UNARY_FN(sin, sin_fn)
+/** @brief Elementwise cosine (numpy.cos.html). */
+NP_FIXED_UNARY_FN(cos, cos_fn)
+/** @brief Elementwise tangent (numpy.tan.html). */
+NP_FIXED_UNARY_FN(tan, tan_fn)
+/** @brief Elementwise floor (numpy.floor.html). */
+NP_FIXED_UNARY_FN(floor, floor_fn)
+/** @brief Elementwise ceil (numpy.ceil.html). */
+NP_FIXED_UNARY_FN(ceil, ceil_fn)
+/** @brief Elementwise round (numpy.round.html). */
+NP_FIXED_UNARY_FN(round, round_fn)
+/** @brief Elementwise square (numpy.square.html). */
+NP_FIXED_UNARY_FN(square, square_fn)
 
 #undef NP_FIXED_UNARY_FN
 
-    /**
-     * @brief Elementwise power x1^x2 with NumPy broadcasting
-     *        (numpy-reference/reference/generated/numpy.power.html).
-     */
-    template <typename L, typename R>
-    requires((detail::expr::fixed_source<L> || std::is_arithmetic_v<L>) &&
-             (detail::expr::fixed_source<R> || std::is_arithmetic_v<R>) &&
-             !(std::is_arithmetic_v<L> && std::is_arithmetic_v<R>) &&
-             detail::fixed::binop_ok<L, R>)
-    constexpr auto power(const L& l, const R& r) {
-        return detail::fixed::make_binary<detail::fixed::power_fn>(l, r);
+/**
+ * @brief Elementwise power x1^x2 with NumPy broadcasting
+ *        (numpy-reference/reference/generated/numpy.power.html).
+ */
+template <typename L, typename R>
+  requires((detail::expr::fixed_source<L> || std::is_arithmetic_v<L>) &&
+           (detail::expr::fixed_source<R> || std::is_arithmetic_v<R>) &&
+           !(std::is_arithmetic_v<L> && std::is_arithmetic_v<R>) &&
+           detail::fixed::binop_ok<L, R>)
+constexpr auto power(const L &l, const R &r) {
+  return detail::fixed::make_binary<detail::fixed::power_fn>(l, r);
+}
+
+// ---------------------------------------------------------------------
+// Joining (numpy-reference/reference/routines.array-manipulation.html)
+// ---------------------------------------------------------------------
+
+namespace detail::fixed {
+
+/** @brief True when all arrays share rank >= 1 and the same tail. */
+template <typename A0, typename... Rest> struct concat_ok {
+  using t0 = detail::expr::shape_tag_t<A0>;
+  static constexpr std::size_t r0 = A0::rank;
+  static constexpr bool valid =
+      r0 >= 1 && ((Rest::rank == r0) && ...) &&
+      (((detail::expr::same_tag<
+            typename detail::expr::tail<t0>::type,
+            typename detail::expr::tail<
+                detail::expr::shape_tag_t<Rest>>::type>::value) &&
+        ...));
+};
+
+/** @brief Cumulative axis-0 offsets across the concatenated arrays. */
+template <typename... As>
+constexpr std::array<int, sizeof...(As) + 1> concat_offsets() {
+  std::array<int, sizeof...(As) + 1> offs{};
+  int acc = 0;
+  std::size_t k = 0;
+  offs[0] = 0;
+  ((offs[++k] = acc +=
+    detail::expr::head<detail::expr::shape_tag_t<As>>::value),
+   ...);
+  return offs;
+}
+
+/** @brief Result shape of concatenating along axis 0. */
+template <typename Tag0, int Sum> struct concat_tag;
+
+template <int Head, int... Tail, int Sum>
+struct concat_tag<detail::expr::shape_tag<Head, Tail...>, Sum> {
+  using type = detail::expr::shape_tag<Sum, Tail...>;
+};
+
+/** @brief Copy every element into its axis-0 slot of the result. */
+template <typename R, int... E, typename... As>
+constexpr ndarray<R, E...> concat_impl(detail::expr::shape_tag<E...>,
+                                       const As &...as) {
+  constexpr std::size_t numel = (static_cast<std::size_t>(E) * ... * 1ull);
+  constexpr std::array<int, sizeof...(As) + 1> offs = concat_offsets<As...>();
+  ndarray<R, E...> out{};
+  for (std::size_t i = 0; i < numel; ++i) {
+    const auto c = detail::expr::unflatten(i, out.static_shape);
+    const std::size_t ax = c[0];
+    std::size_t sel = 0;
+    while (sel + 1 < sizeof...(As) &&
+           ax >= static_cast<std::size_t>(offs[sel + 1])) {
+      ++sel;
     }
+    std::size_t k = 0;
+    (
+        [&](const auto &a) {
+          if (k++ == sel) {
+            auto sc = c;
+            sc[0] -= static_cast<std::size_t>(offs[sel]);
+            out.m_data[detail::expr::flatten(out.static_shape, c)] =
+                static_cast<R>(
+                    a.m_data[detail::expr::flatten(a.static_shape, sc)]);
+          }
+        }(as),
+        ...);
+  }
+  return out;
+}
 
-    // ---------------------------------------------------------------------
-    // Joining (numpy-reference/reference/routines.array-manipulation.html)
-    // ---------------------------------------------------------------------
+} // namespace detail::fixed
 
-    namespace detail::fixed {
+/**
+ * @brief Join arrays along a new leading axis... (see below).
+ */
+template <typename A0, typename... Rest>
+  requires detail::fixed::concat_ok<A0, Rest...>::valid
+constexpr auto concatenate(const A0 &a0, const Rest &...rest) {
+  static_assert(detail::fixed::concat_ok<A0, Rest...>::valid,
+                "np: concatenate requires equal ranks and matching "
+                "non-axis-0 extents "
+                "(numpy-reference/reference/generated/numpy.concatenate.html)");
+  using tag0 = detail::expr::shape_tag_t<A0>;
+  constexpr int sum =
+      detail::expr::head<tag0>::value +
+      (detail::expr::head<detail::expr::shape_tag_t<Rest>>::value + ...);
+  using rtag = typename detail::fixed::concat_tag<tag0, sum>::type;
+  using R =
+      std::common_type_t<typename A0::value_type, typename Rest::value_type...>;
+  return detail::fixed::concat_impl<R>(rtag{}, a0, rest...);
+}
 
-        /** @brief True when all arrays share rank >= 1 and the same tail. */
-        template <typename A0, typename... Rest>
-        struct concat_ok {
-            using t0 = detail::expr::shape_tag_t<A0>;
-            static constexpr std::size_t r0 = A0::rank;
-            static constexpr bool valid =
-                r0 >= 1 &&
-                ((Rest::rank == r0) && ...) &&
-                (((detail::expr::same_tag<
-                        typename detail::expr::tail<t0>::type,
-                        typename detail::expr::tail<
-                            detail::expr::shape_tag_t<Rest>>::type>::value) &&
-                  ...));
-        };
+namespace detail::fixed {
 
-        /** @brief Cumulative axis-0 offsets across the concatenated arrays. */
-        template <typename... As>
-        constexpr std::array<int, sizeof...(As) + 1> concat_offsets() {
-            std::array<int, sizeof...(As) + 1> offs{};
-            int acc = 0;
-            std::size_t k = 0;
-            offs[0] = 0;
-            ((offs[++k] = acc += detail::expr::head<
-                   detail::expr::shape_tag_t<As>>::value),
-             ...);
-            return offs;
-        }
+/** @brief True when every array has exactly the same static shape. */
+template <typename A0, typename... Rest> struct stack_ok {
+  using t0 = detail::expr::shape_tag_t<A0>;
+  static constexpr bool valid =
+      ((detail::expr::same_tag<t0, detail::expr::shape_tag_t<Rest>>::value) &&
+       ...);
+};
 
-        /** @brief Result shape of concatenating along axis 0. */
-        template <typename Tag0, int Sum>
-        struct concat_tag;
-
-        template <int Head, int... Tail, int Sum>
-        struct concat_tag<detail::expr::shape_tag<Head, Tail...>, Sum> {
-            using type = detail::expr::shape_tag<Sum, Tail...>;
-        };
-
-        /** @brief Copy every element into its axis-0 slot of the result. */
-        template <typename R, int... E, typename... As>
-        constexpr ndarray<R, E...> concat_impl(detail::expr::shape_tag<E...>,
-                                               const As&... as) {
-            constexpr std::size_t numel =
-                (static_cast<std::size_t>(E) * ... * 1ull);
-            constexpr std::array<int, sizeof...(As) + 1> offs =
-                concat_offsets<As...>();
-            ndarray<R, E...> out{};
-            for (std::size_t i = 0; i < numel; ++i) {
-                const auto c = detail::expr::unflatten(i, out.static_shape);
-                const std::size_t ax = c[0];
-                std::size_t sel = 0;
-                while (sel + 1 < sizeof...(As) &&
-                       ax >= static_cast<std::size_t>(offs[sel + 1])) {
-                    ++sel;
-                }
-                std::size_t k = 0;
-                ( [&](const auto& a) {
-                      if (k++ == sel) {
-                          auto sc = c;
-                          sc[0] -= static_cast<std::size_t>(offs[sel]);
-                          out.m_data[detail::expr::flatten(out.static_shape,
-                                                           c)] =
-                              static_cast<R>(a.m_data[detail::expr::flatten(
-                                  a.static_shape, sc)]);
-                      }
-                  }(as),
-                 ... );
+/** @brief Copy every element into its new-axis slot of the result. */
+template <typename R, int Axis, int... E, typename... As>
+constexpr ndarray<R, E...> stack_impl(detail::expr::shape_tag<E...>,
+                                      const As &...as) {
+  constexpr std::size_t numel = (static_cast<std::size_t>(E) * ... * 1ull);
+  ndarray<R, E...> out{};
+  for (std::size_t i = 0; i < numel; ++i) {
+    const auto c = detail::expr::unflatten(i, out.static_shape);
+    const std::size_t sel = c[Axis];
+    std::size_t k = 0;
+    (
+        [&](const auto &a) {
+          if (k++ == sel) {
+            std::array<std::size_t, sizeof...(E) - 1> sc{};
+            std::size_t m = 0;
+            for (std::size_t d = 0; d < sizeof...(E); ++d) {
+              if (static_cast<int>(d) != Axis) {
+                sc[m++] = c[d];
+              }
             }
-            return out;
-        }
+            out.m_data[i] = static_cast<R>(
+                a.m_data[detail::expr::flatten(a.static_shape, sc)]);
+          }
+        }(as),
+        ...);
+  }
+  return out;
+}
 
-    } // namespace detail::fixed
+} // namespace detail::fixed
 
-    /**
-     * @brief Join arrays along a new leading axis... (see below).
-     */
-    template <typename A0, typename... Rest>
-    requires detail::fixed::concat_ok<A0, Rest...>::valid
-    constexpr auto concatenate(const A0& a0, const Rest&... rest) {
-        static_assert(detail::fixed::concat_ok<A0, Rest...>::valid,
-                      "np: concatenate requires equal ranks and matching "
-                      "non-axis-0 extents "
-                      "(numpy-reference/reference/generated/numpy.concatenate.html)");
-        using tag0 = detail::expr::shape_tag_t<A0>;
-        constexpr int sum = detail::expr::head<tag0>::value +
-                            (detail::expr::head<
-                                 detail::expr::shape_tag_t<Rest>>::value +
-                             ...);
-        using rtag = typename detail::fixed::concat_tag<tag0, sum>::type;
-        using R = std::common_type_t<typename A0::value_type,
-                                     typename Rest::value_type...>;
-        return detail::fixed::concat_impl<R>(rtag{}, a0, rest...);
-    }
-
-    namespace detail::fixed {
-
-        /** @brief True when every array has exactly the same static shape. */
-        template <typename A0, typename... Rest>
-        struct stack_ok {
-            using t0 = detail::expr::shape_tag_t<A0>;
-            static constexpr bool valid =
-                ((detail::expr::same_tag<t0,
-                                         detail::expr::shape_tag_t<Rest>>::value) &&
-                 ...);
-        };
-
-        /** @brief Copy every element into its new-axis slot of the result. */
-        template <typename R, int Axis, int... E, typename... As>
-        constexpr ndarray<R, E...> stack_impl(detail::expr::shape_tag<E...>,
-                                              const As&... as) {
-            constexpr std::size_t numel =
-                (static_cast<std::size_t>(E) * ... * 1ull);
-            ndarray<R, E...> out{};
-            for (std::size_t i = 0; i < numel; ++i) {
-                const auto c = detail::expr::unflatten(i, out.static_shape);
-                const std::size_t sel = c[Axis];
-                std::size_t k = 0;
-                ( [&](const auto& a) {
-                      if (k++ == sel) {
-                          std::array<std::size_t, sizeof...(E) - 1> sc{};
-                          std::size_t m = 0;
-                          for (std::size_t d = 0; d < sizeof...(E); ++d) {
-                              if (static_cast<int>(d) != Axis) {
-                                  sc[m++] = c[d];
-                              }
-                          }
-                          out.m_data[i] = static_cast<R>(
-                              a.m_data[detail::expr::flatten(a.static_shape,
-                                                             sc)]);
-                      }
-                  }(as),
-                 ... );
-            }
-            return out;
-        }
-
-    } // namespace detail::fixed
-
-    /**
-     * @brief Join arrays along a new axis (numpy.stack.html). The new axis
-     *        holds one slot per input array and its position `Axis` is a
-     *        template parameter (NumPy default axis=0).
-     */
-    template <int Axis = 0, typename A0, typename... Rest>
-    requires detail::fixed::stack_ok<A0, Rest...>::valid
-    constexpr auto stack(const A0& a0, const Rest&... rest) {
-        static_assert(detail::fixed::stack_ok<A0, Rest...>::valid,
-                      "np: stack requires every input to have the same shape "
-                      "(numpy-reference/reference/generated/numpy.stack.html)");
-        constexpr std::size_t count = 1 + sizeof...(Rest);
-        using tag0 = detail::expr::shape_tag_t<A0>;
-        using rtag = typename detail::expr::insert<
-            static_cast<int>(count), Axis, 0, tag0>::type;
-        using R = std::common_type_t<typename A0::value_type,
-                                     typename Rest::value_type...>;
-        return detail::fixed::stack_impl<R, Axis>(rtag{}, a0, rest...);
-    }
+/**
+ * @brief Join arrays along a new axis (numpy.stack.html). The new axis
+ *        holds one slot per input array and its position `Axis` is a
+ *        template parameter (NumPy default axis=0).
+ */
+template <int Axis = 0, typename A0, typename... Rest>
+  requires detail::fixed::stack_ok<A0, Rest...>::valid
+constexpr auto stack(const A0 &a0, const Rest &...rest) {
+  static_assert(detail::fixed::stack_ok<A0, Rest...>::valid,
+                "np: stack requires every input to have the same shape "
+                "(numpy-reference/reference/generated/numpy.stack.html)");
+  constexpr std::size_t count = 1 + sizeof...(Rest);
+  using tag0 = detail::expr::shape_tag_t<A0>;
+  using rtag = typename detail::expr::insert<static_cast<int>(count), Axis, 0,
+                                             tag0>::type;
+  using R =
+      std::common_type_t<typename A0::value_type, typename Rest::value_type...>;
+  return detail::fixed::stack_impl<R, Axis>(rtag{}, a0, rest...);
+}
 
 } // namespace np
 

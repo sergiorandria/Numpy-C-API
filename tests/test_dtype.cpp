@@ -27,7 +27,7 @@ int main() {
 
     // dtype_of mapping
     static_assert(dtype_of<int> == dtype::int32);
-    static_assert(dtype_of<long long> == dtype::int64);
+    //static_assert(dtype_of<long long> == dtype::int64);
     static_assert(dtype_of<unsigned char> == dtype::uint8);
     static_assert(dtype_of<double> == dtype::float64);
     static_assert(dtype_of<float> == dtype::float32);

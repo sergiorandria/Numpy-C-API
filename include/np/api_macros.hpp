@@ -51,7 +51,8 @@
 
 /**
  * @def NP_PRIVATE
- * @brief Marks implementation details (should be in detail:: namespace or .cpp).
+ * @brief Marks implementation details (should be in detail:: namespace or
+ * .cpp).
  *
  * Private functions are:
  * - Implementation-only
@@ -78,11 +79,11 @@
  * @endcode
  */
 #if defined(__GNUC__) || defined(__clang__)
-    #define NP_DEPRECATED(msg) [[deprecated(msg)]]
+#define NP_DEPRECATED(msg) [[deprecated(msg)]]
 #elif defined(_MSC_VER)
-    #define NP_DEPRECATED(msg) __declspec(deprecated(msg))
+#define NP_DEPRECATED(msg) __declspec(deprecated(msg))
 #else
-    #define NP_DEPRECATED(msg)
+#define NP_DEPRECATED(msg)
 #endif
 
 /**
@@ -99,13 +100,13 @@
  * @endcode
  */
 #if __cplusplus >= 201703L
-    #define NP_NODISCARD [[nodiscard]]
+#define NP_NODISCARD [[nodiscard]]
 #elif defined(__GNUC__) || defined(__clang__)
-    #define NP_NODISCARD __attribute__((warn_unused_result))
+#define NP_NODISCARD __attribute__((warn_unused_result))
 #elif defined(_MSC_VER)
-    #define NP_NODISCARD _Check_return_
+#define NP_NODISCARD _Check_return_
 #else
-    #define NP_NODISCARD
+#define NP_NODISCARD
 #endif
 
 /**
@@ -121,11 +122,11 @@
  * @brief Strong inline hint for performance-critical functions.
  */
 #if defined(__GNUC__) || defined(__clang__)
-    #define NP_INLINE inline __attribute__((always_inline))
+#define NP_INLINE inline __attribute__((always_inline))
 #elif defined(_MSC_VER)
-    #define NP_INLINE __forceinline
+#define NP_INLINE __forceinline
 #else
-    #define NP_INLINE inline
+#define NP_INLINE inline
 #endif
 
 #endif // NP_API_MACROS_HPP

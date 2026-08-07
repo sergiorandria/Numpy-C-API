@@ -20,207 +20,200 @@
 
 namespace np {
 
-    template <typename T> class Ndarray;
+template <typename T> class Ndarray;
 
-    namespace detail {
+namespace detail {
 
-        /**
-         * @brief Stack-based index storage that avoids heap allocations.
-         * @tparam MaxDims Maximum supported dimensionality (default 8).
-         */
-        template <std::size_t MaxDims = 8>
-        struct IndexStack {
-            std::array<std::size_t, MaxDims> m_data{};
-            std::size_t m_count = 0;
+/**
+ * @brief Stack-based index storage that avoids heap allocations.
+ * @tparam MaxDims Maximum supported dimensionality (default 8).
+ */
+template <std::size_t MaxDims = 8> struct IndexStack {
+  std::array<std::size_t, MaxDims> m_data{};
+  std::size_t m_count = 0;
 
-            constexpr void push_back(std::size_t v) noexcept {
-                m_data[m_count++] = v;
-            }
+  constexpr void push_back(std::size_t v) noexcept { m_data[m_count++] = v; }
 
-            [[nodiscard]] constexpr std::size_t size() const noexcept {
-                return m_count;
-            }
+  [[nodiscard]] constexpr std::size_t size() const noexcept { return m_count; }
 
-            [[nodiscard]] constexpr auto operator[](std::size_t i) const noexcept
-                -> std::size_t {
-                return m_data[i];
-            }
+  [[nodiscard]] constexpr auto operator[](std::size_t i) const noexcept
+      -> std::size_t {
+    return m_data[i];
+  }
 
-            [[nodiscard]] constexpr const std::size_t* begin() const noexcept {
-                return m_data.data();
-            }
+  [[nodiscard]] constexpr const std::size_t *begin() const noexcept {
+    return m_data.data();
+  }
 
-            [[nodiscard]] constexpr const std::size_t* end() const noexcept {
-                return m_data.data() + m_count;
-            }
-        };
+  [[nodiscard]] constexpr const std::size_t *end() const noexcept {
+    return m_data.data() + m_count;
+  }
+};
 
-        /**
-         * @brief Incrementing multi-dimensional counter (C order).
-         *
-         * Iterates every multi-index of the given shape exactly once.
-         * An empty shape yields a single iteration (0-d array).
-         */
-        class Odometer {
-          public:
-            explicit Odometer(std::vector<int> dims) : dims_(dims.size()) {
-                for (std::size_t i = 0; i < dims.size(); ++i) {
-                    dims_[i] = static_cast<std::size_t>(dims[i]);
-                }
-                idx_.resize(dims_.size(), 0);
-                done_ = !dims_.empty() &&
-                        std::any_of(dims_.begin(), dims_.end(),
-                                    [](std::size_t d) { return d == 0; });
-            }
+/**
+ * @brief Incrementing multi-dimensional counter (C order).
+ *
+ * Iterates every multi-index of the given shape exactly once.
+ * An empty shape yields a single iteration (0-d array).
+ */
+class Odometer {
+public:
+  explicit Odometer(std::vector<int> dims) : dims_(dims.size()) {
+    for (std::size_t i = 0; i < dims.size(); ++i) {
+      dims_[i] = static_cast<std::size_t>(dims[i]);
+    }
+    idx_.resize(dims_.size(), 0);
+    done_ = !dims_.empty() && std::any_of(dims_.begin(), dims_.end(),
+                                          [](std::size_t d) { return d == 0; });
+  }
 
-            [[nodiscard]] bool done() const noexcept { return done_; }
+  [[nodiscard]] bool done() const noexcept { return done_; }
 
-            [[nodiscard]] const std::vector<std::size_t>& idx() const noexcept {
-                return idx_;
-            }
+  [[nodiscard]] const std::vector<std::size_t> &idx() const noexcept {
+    return idx_;
+  }
 
-            /** @brief Number of dimensions being iterated. */
-            [[nodiscard]] std::size_t ndim() const noexcept { return dims_.size(); }
+  /** @brief Number of dimensions being iterated. */
+  [[nodiscard]] std::size_t ndim() const noexcept { return dims_.size(); }
 
-            void advance() noexcept {
-                if (dims_.empty()) {
-                    done_ = true;
-                    return;
-                }
-                for (std::size_t d = dims_.size(); d-- > 0;) {
-                    if (++idx_[d] < dims_[d]) {
-                        return;
-                    }
-                    idx_[d] = 0;
-                }
-                done_ = true;
-            }
+  void advance() noexcept {
+    if (dims_.empty()) {
+      done_ = true;
+      return;
+    }
+    for (std::size_t d = dims_.size(); d-- > 0;) {
+      if (++idx_[d] < dims_[d]) {
+        return;
+      }
+      idx_[d] = 0;
+    }
+    done_ = true;
+  }
 
-          private:
-            std::vector<std::size_t> dims_;
-            std::vector<std::size_t> idx_;
-            bool done_ = false;
-        };
+private:
+  std::vector<std::size_t> dims_;
+  std::vector<std::size_t> idx_;
+  bool done_ = false;
+};
 
-        /**
-         * @brief Flat offset of a multi-index given strides (in elements).
-         */
-        [[nodiscard]] inline std::size_t flat_index(
-            const std::vector<std::size_t>& idx,
-            const std::vector<std::size_t>& strides,
-            std::size_t offset = 0) noexcept {
-            std::size_t flat = offset;
-            for (std::size_t i = 0; i < idx.size() && i < strides.size(); ++i) {
-                flat += idx[i] * strides[i];
-            }
-            return flat;
-        }
+/**
+ * @brief Flat offset of a multi-index given strides (in elements).
+ */
+[[nodiscard]] inline std::size_t
+flat_index(const std::vector<std::size_t> &idx,
+           const std::vector<std::size_t> &strides,
+           std::size_t offset = 0) noexcept {
+  std::size_t flat = offset;
+  for (std::size_t i = 0; i < idx.size() && i < strides.size(); ++i) {
+    flat += idx[i] * strides[i];
+  }
+  return flat;
+}
 
-    } // namespace detail
+} // namespace detail
 
-    /**
-     * @brief Base class for multidimensional subscript proxies.
-     *
-     * @tparam T Element type of the array
-     * @tparam IsConst Whether this proxy provides read-only access
-     */
-    template <typename T, bool IsConst, std::size_t MaxDims = 8>
-    class ProxyBase {
-        using Array = std::conditional_t<IsConst, const Ndarray<T>, Ndarray<T>>;
-        using Stack = detail::IndexStack<MaxDims>;
-        using Self = ProxyBase<T, IsConst, MaxDims>;
+/**
+ * @brief Base class for multidimensional subscript proxies.
+ *
+ * @tparam T Element type of the array
+ * @tparam IsConst Whether this proxy provides read-only access
+ */
+template <typename T, bool IsConst, std::size_t MaxDims = 8> class ProxyBase {
+  using Array = std::conditional_t<IsConst, const Ndarray<T>, Ndarray<T>>;
+  using Stack = detail::IndexStack<MaxDims>;
+  using Self = ProxyBase<T, IsConst, MaxDims>;
 
-        Array& m_array;   ///< Underlying array (const or not)
-        Stack m_indices;  ///< Accumulated indices (stack-allocated)
+  Array &m_array;  ///< Underlying array (const or not)
+  Stack m_indices; ///< Accumulated indices (stack-allocated)
 
-      public:
-        constexpr ProxyBase(Array& arr, Stack idx) noexcept
-            : m_array(arr), m_indices(idx) {}
+public:
+  constexpr ProxyBase(Array &arr, Stack idx) noexcept
+      : m_array(arr), m_indices(idx) {}
 
-        // --- assignment (write) -------------------------------------------
+  // --- assignment (write) -------------------------------------------
 
-        template <bool C = IsConst>
-        constexpr auto operator=(const T& v) noexcept -> Self&
-            requires(!C)
-        {
-            m_array.set(m_indices, v);
-            return *this;
-        }
+  template <bool C = IsConst>
+  constexpr auto operator=(const T &v) noexcept -> Self &
+    requires(!C)
+  {
+    m_array.set(m_indices, v);
+    return *this;
+  }
 
-        template <bool C = IsConst>
-        constexpr auto operator=(T&& v) noexcept -> Self&
-            requires(!C)
-        {
-            m_array.set(m_indices, std::move(v));
-            return *this;
-        }
+  template <bool C = IsConst>
+  constexpr auto operator=(T &&v) noexcept -> Self &
+    requires(!C)
+  {
+    m_array.set(m_indices, std::move(v));
+    return *this;
+  }
 
-        constexpr auto operator=(const Self& other) -> Self& {
-            if (*this != other) {
-                T value = static_cast<T>(other);
-                m_array.set(m_indices, value);
-            }
-            return *this;
-        }
+  constexpr auto operator=(const Self &other) -> Self & {
+    if (*this != other) {
+      T value = static_cast<T>(other);
+      m_array.set(m_indices, value);
+    }
+    return *this;
+  }
 
-        // --- reading ------------------------------------------------------
+  // --- reading ------------------------------------------------------
 
-        [[nodiscard]] constexpr operator T() const noexcept {
-            return m_array.get(m_indices);
-        }
+  [[nodiscard]] constexpr operator T() const noexcept {
+    return m_array.get(m_indices);
+  }
 
-        [[nodiscard]] constexpr auto operator==(const T& v) const noexcept -> bool {
-            return static_cast<T>(*this) == v;
-        }
+  [[nodiscard]] constexpr auto operator==(const T &v) const noexcept -> bool {
+    return static_cast<T>(*this) == v;
+  }
 
-        [[nodiscard]] constexpr auto operator!=(const T& v) const noexcept -> bool {
-            return static_cast<T>(*this) != v;
-        }
+  [[nodiscard]] constexpr auto operator!=(const T &v) const noexcept -> bool {
+    return static_cast<T>(*this) != v;
+  }
 
-        [[nodiscard]] constexpr auto operator==(const Self& other) const noexcept
-            -> bool {
-            return static_cast<T>(*this) == static_cast<T>(other);
-        }
+  [[nodiscard]] constexpr auto operator==(const Self &other) const noexcept
+      -> bool {
+    return static_cast<T>(*this) == static_cast<T>(other);
+  }
 
-        [[nodiscard]] constexpr auto operator!=(const Self& other) const noexcept
-            -> bool {
-            return !(*this == other);
-        }
+  [[nodiscard]] constexpr auto operator!=(const Self &other) const noexcept
+      -> bool {
+    return !(*this == other);
+  }
 
-        template <typename U>
-        [[nodiscard]] constexpr auto operator==(const U& v) const noexcept -> bool {
-            return static_cast<T>(*this) == static_cast<T>(v);
-        }
+  template <typename U>
+  [[nodiscard]] constexpr auto operator==(const U &v) const noexcept -> bool {
+    return static_cast<T>(*this) == static_cast<T>(v);
+  }
 
-        template <typename U>
-        [[nodiscard]] constexpr auto operator!=(const U& v) const noexcept -> bool {
-            return static_cast<T>(*this) != static_cast<T>(v);
-        }
+  template <typename U>
+  [[nodiscard]] constexpr auto operator!=(const U &v) const noexcept -> bool {
+    return static_cast<T>(*this) != static_cast<T>(v);
+  }
 
-        [[nodiscard]] friend auto operator<<(std::ostream& os, const Self& proxy)
-            -> std::ostream& {
-            os << static_cast<T>(proxy);
-            return os;
-        }
+  [[nodiscard]] friend auto operator<<(std::ostream &os, const Self &proxy)
+      -> std::ostream & {
+    os << static_cast<T>(proxy);
+    return os;
+  }
 
-        /**
-         * @brief Descend one dimension, appending the new index.
-         */
-        [[nodiscard]] constexpr auto operator[](std::size_t idx) const noexcept
-            -> Self {
-            Stack next = m_indices;  // trivial copy -- no heap touch
-            next.push_back(idx);
-            return Self(m_array, next);
-        }
-    };
+  /**
+   * @brief Descend one dimension, appending the new index.
+   */
+  [[nodiscard]] constexpr auto operator[](std::size_t idx) const noexcept
+      -> Self {
+    Stack next = m_indices; // trivial copy -- no heap touch
+    next.push_back(idx);
+    return Self(m_array, next);
+  }
+};
 
-    /** @brief Read-write proxy. */
-    template <typename T, std::size_t MaxDims = 8>
-    using Proxy = ProxyBase<T, false, MaxDims>;
+/** @brief Read-write proxy. */
+template <typename T, std::size_t MaxDims = 8>
+using Proxy = ProxyBase<T, false, MaxDims>;
 
-    /** @brief Read-only proxy. */
-    template <typename T, std::size_t MaxDims = 8>
-    using ConstProxy = ProxyBase<T, true, MaxDims>;
+/** @brief Read-only proxy. */
+template <typename T, std::size_t MaxDims = 8>
+using ConstProxy = ProxyBase<T, true, MaxDims>;
 
 } // namespace np
 

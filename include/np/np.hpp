@@ -10,18 +10,18 @@
 #ifndef NP_NP_HPP
 #define NP_NP_HPP
 
-#include "exceptions.hpp"
-#include "dtype.hpp"
-#include "ndarray.hpp"
 #include "creation.hpp"
-#include "linalg.hpp"
-#include "fft.hpp"
-#include "matrix.hpp"
-#include "ndarray_fixed.hpp"
 #include "creation_fixed.hpp"
+#include "dtype.hpp"
+#include "exceptions.hpp"
+#include "fft.hpp"
+#include "linalg.hpp"
 #include "linalg_fixed.hpp"
-#include "math.hpp"
 #include "logic.hpp"
+#include "math.hpp"
+#include "matrix.hpp"
+#include "ndarray.hpp"
+#include "ndarray_fixed.hpp"
 // Note: random.hpp and concatenate.hpp are not included by default.
 // Include them explicitly if needed to avoid template conflicts.
 
