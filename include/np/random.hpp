@@ -23,8 +23,8 @@
 #include "dtype.hpp"
 #include "ndarray.hpp"
 
-namespace np {
-namespace random {
+
+namespace np::random {
 
 /**
  * @brief Random number generator (NumPy Generator equivalent).
@@ -91,6 +91,10 @@ public:
 
     std::uniform_real_distribution<T> dist(T{0}, T{1});
     Ndarray<T> result(size, dtype_of<T>);
+
+#ifdef _NP_KERNEL_PERFORMANCE_LOOP_UNROLL
+#pragma unroll loop 
+#endif // _NP_KERNEL_PERFORMANCE_LOOP_UNROLL
     for (auto it = result.begin(); it != result.end(); ++it) {
       *it = dist(engine_);
     }
@@ -529,7 +533,7 @@ public:
     Ndarray<T> result(size, dtype_of<T>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       T u = dist(engine_);
-      *it = loc + scale * std::log(u / (T{1} - u));
+      *it = loc + (scale * std::log(u / (T{1} - u)));
     }
     return result;
   }
@@ -980,7 +984,7 @@ inline auto choice(const Ndarray<T> &a, std::size_t size = 1,
   return default_rng().choice(a, size, replace);
 }
 
-} // namespace random
-} // namespace np
+} // namespace np::random
+
 
 #endif // NP_RANDOM_HPP

@@ -12,8 +12,10 @@
 
 #include <complex>
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 #include "api_macros.hpp"
 
@@ -154,33 +156,174 @@ namespace np {
     } // namespace detail
 
     namespace _Np_dtype {
-        template <auto _DtypeElement> 
-        struct _Np_StorageClassifier
-        {
+        /** @brief Trivial branch used when the other dtype branch is unused. */
+        struct _Np_unused_branch {};
+
+        /**
+         * @brief Storage type for the character dtypes.
+         *
+         * @tparam _DtypeElement  A np::dtype value (`string_` or `unicode_`).
+         */
+        template <dtype _DtypeElement>
+        struct _Np_string_value { using type = std::string; };
+        template <>
+        struct _Np_string_value<dtype::unicode_> { using type = std::u32string; };
+
+        /** @brief Compile-time check: the dtype stores its value as text. */
+        template <dtype D>
+        inline constexpr bool is_string_dtype_v =
+            D == dtype::string_ || D == dtype::unicode_;
+
+        /**
+         * @brief Union-backed storage with two branch structures.
+         *
+         * The first branch holds the contiguous scalar value for the
+         * integral/numeric dtypes (via `value_type`); the second branch holds
+         * the string attribute for `string_` / `unicode_`. Exactly one branch
+         * is ever used — the other stays latent with a trivial placeholder —
+         * so the numeric case keeps a literal type usable in constant
+         * expressions.
+         *
+         * @tparam _DtypeElement  A np::dtype enumeration value.
+         * @tparam _IsString      True when the dtype stores text.
+         */
+        template <auto _DtypeElement, bool _IsString = is_string_dtype_v<_DtypeElement>>
+        struct _Np_StorageClassifier;
+
+        /**
+         * @brief Integral/numeric branch of the storage classifier.
+         *
+         * @tparam _DtypeElement  A np::dtype enumeration value.
+         */
+        template <auto _DtypeElement>
+        struct _Np_StorageClassifier<_DtypeElement, /* _IsString */ false> {
             using value_type = typename detail::_Np_type_to_cxx<_DtypeElement>::type;
-            
-            static constexpr np::dtype type = _DtypeElement;  
-            value_type v{};
-            
-            _Np_StorageClassifier() noexcept = default;
-            _Np_StorageClassifier(value_type&& __v) : v(__v) { } 
 
-            constexpr operator value_type&() noexcept { return v; }
-            constexpr operator value_type() const noexcept { return v; } 
+            static constexpr np::dtype type = _DtypeElement;
+            static constexpr bool is_text = false;
 
-            _Np_StorageClassifier& operator=(value_type &&other) { 
-                v = other; 
+        private:
+            union _Np_storage {
+                value_type value;           // numeric branch
+                _Np_unused_branch unused;   // string branch placeholder
+            } storage_{};
+
+        public:
+            constexpr _Np_StorageClassifier() noexcept = default;
+            constexpr _Np_StorageClassifier(const value_type &__v)
+                : storage_{.value = __v} {}
+            constexpr _Np_StorageClassifier(value_type &&__v) noexcept
+                : storage_{.value = static_cast<value_type &&>(__v)} {}
+
+            constexpr auto operator=(const value_type &other)
+                -> _Np_StorageClassifier & {
+                storage_.value = other;
                 return *this;
-            } 
+            }
+            constexpr auto operator=(value_type &&other) -> _Np_StorageClassifier & {
+                storage_.value = static_cast<value_type &&>(other);
+                return *this;
+            }
+
+            constexpr operator value_type &() noexcept { return storage_.value; }
+            constexpr operator value_type() const noexcept { return storage_.value; }
+
+            /** @brief The compile-time dtype. */
+            static constexpr auto get_type() noexcept -> np::dtype { return type; }
+            /** @brief Access the underlying numeric value by reference. */
+            constexpr auto value() noexcept -> value_type & { return storage_.value; }
+            constexpr auto value() const noexcept -> const value_type & {
+                return storage_.value;
+            }
         };
+
+        /**
+         * @brief String branch of the storage classifier.
+         *
+         * @tparam _DtypeElement  A np::dtype enumeration value.
+         */
+        template <auto _DtypeElement>
+        struct _Np_StorageClassifier<_DtypeElement, /* is_string */ true> {
+            using value_type = typename _Np_string_value<_DtypeElement>::type;
+
+            static constexpr np::dtype type = _DtypeElement;
+            static constexpr bool is_text = true;
+
+        private:
+            union _Np_storage {
+                _Np_unused_branch unused;   // numeric branch placeholder
+                value_type value;           // string branch
+
+                constexpr _Np_storage() noexcept : value{} {}
+                _Np_storage(const value_type &__v) noexcept : value(__v) {}
+                _Np_storage(value_type &&__v) noexcept
+                    : value(static_cast<value_type &&>(__v)) {}
+
+                ~_Np_storage() { value.~value_type(); }
+            };
+
+            _Np_storage storage_{};
+
+        public:
+            _Np_StorageClassifier() noexcept = default;
+            _Np_StorageClassifier(const value_type &__v) noexcept
+                : storage_(__v) {}
+            _Np_StorageClassifier(value_type && __v) noexcept
+                : storage_(static_cast<value_type &&>(__v)) {}
+            _Np_StorageClassifier(const _Np_StorageClassifier &other) noexcept
+                : storage_(other.storage_.value) {}
+            _Np_StorageClassifier(_Np_StorageClassifier &&other) noexcept
+                : storage_(static_cast<value_type &&>(other.storage_.value)) {}
+
+            auto operator=(const value_type &other) -> _Np_StorageClassifier & {
+                storage_.value = other;
+                return *this;
+            }
+            auto operator=(value_type &&other) -> _Np_StorageClassifier & {
+                storage_.value = static_cast<value_type &&>(other);
+                return *this;
+            }
+            auto operator=(const _Np_StorageClassifier &other)
+                -> _Np_StorageClassifier & {
+                storage_.value = other.storage_.value;
+                return *this;
+            }
+            auto operator=(_Np_StorageClassifier &&other) ->
+                _Np_StorageClassifier & {
+                storage_.value = static_cast<value_type &&>(other.storage_.value);
+                return *this;
+            }
+
+            operator value_type &() noexcept { return storage_.value; }
+            operator const value_type &() const noexcept { return storage_.value; }
+
+            /** @brief The compile-time dtype. */
+            static constexpr auto get_type() noexcept -> np::dtype { return type; }
+            /** @brief Access the underlying string by reference. */
+            auto value() noexcept -> value_type & { return storage_.value; }
+            auto value() const noexcept -> const value_type & { return storage_.value; }
+        };
+
+        /** @brief Compile-time compare of two storage classifiers. */
+        template <auto _L, bool _Lb, auto _R, bool _Rb>
+        constexpr auto operator==(_Np_StorageClassifier<_L, _Lb>,
+                                  _Np_StorageClassifier<_R, _Rb>) noexcept -> bool {
+            return _L == _R;
+        }
+        template <auto _L, bool _Lb, auto _R, bool _Rb>
+        constexpr auto operator!=(_Np_StorageClassifier<_L, _Lb>,
+                                  _Np_StorageClassifier<_R, _Rb>) noexcept -> bool {
+            return _L != _R;
+        }
 #ifdef _NP_USE_DIRECT_STD_TYPES      
         /**
          * @brief Storage type aliases mirroring the numpy C-API `npy_*`
          *        typedefs. Each alias names the native C++ storage of the
          *        matching np::dtype (the `value_type` of
          *        detail::_Np_type_to_cxx), so it can be used as a
-         *        compile-time dtype tag. `string_`, `unicode_`, `void_`
-         *        and `object_` have no fixed C++ storage and are omitted.
+         *        compile-time dtype tag. `string_` / `unicode_` use a string
+         *        attribute; only `void_` and `object_` have no fixed
+         *        C++ storage and are omitted.
          */
         using _Np_int8        = std::int8_t;
         using _Np_int16       = std::int16_t;
@@ -201,9 +344,44 @@ namespace np {
         // datetime64 / timedelta64 count their units in int64_t.
         using _Np_datetime64  = std::int64_t;
         using _Np_timedelta64 = std::int64_t;
-#else 
-        using _Np_int64    = _Np_StorageClassifier<np::dtype::int64>;
-#endif 
+        // String dtypes have no contiguous scalar; use a string attribute.
+        using _Np_string  = std::string;
+        using _Np_unicode = std::u32string;
+#else
+        /**
+         * @brief Classifier-based storage aliases used when
+         *        `_NP_USE_DIRECT_STD_TYPES` is not defined.
+         *
+         * Each alias is a `_Np_StorageClassifier` instantiation, binding a
+         * compile-time `np::dtype` (`type`) to an instance of its native
+         * C++ storage (`value_type`), so the storage is self-describing at
+         * compile time while remaining usable as a plain scalar. `string_`
+         * and `unicode_` use the string branch of the classifier; only
+         * `void_` and `object_` have no fixed C++ storage.
+         */
+        using _Np_int8        = _Np_StorageClassifier<np::dtype::int8>;
+        using _Np_int16       = _Np_StorageClassifier<np::dtype::int16>;
+        using _Np_int32       = _Np_StorageClassifier<np::dtype::int32>;
+        using _Np_int64       = _Np_StorageClassifier<np::dtype::int64>;
+        using _Np_uint8       = _Np_StorageClassifier<np::dtype::uint8>;
+        using _Np_uint16      = _Np_StorageClassifier<np::dtype::uint16>;
+        using _Np_uint32      = _Np_StorageClassifier<np::dtype::uint32>;
+        using _Np_uint64      = _Np_StorageClassifier<np::dtype::uint64>;
+        using _Np_float16     = _Np_StorageClassifier<np::dtype::float16>;
+        using _Np_float32     = _Np_StorageClassifier<np::dtype::float32>;
+        using _Np_float64     = _Np_StorageClassifier<np::dtype::float64>;
+        using _Np_longdouble  = _Np_StorageClassifier<np::dtype::longdouble>;
+        using _Np_complex64   = _Np_StorageClassifier<np::dtype::complex64>;
+        using _Np_complex128  = _Np_StorageClassifier<np::dtype::complex128>;
+        using _Np_clongdouble = _Np_StorageClassifier<np::dtype::clongdouble>;
+        using _Np_bool_       = _Np_StorageClassifier<np::dtype::bool_>;
+        // datetime64 / timedelta64 count their units in int64_t.
+        using _Np_datetime64  = _Np_StorageClassifier<np::dtype::datetime64>;
+        using _Np_timedelta64 = _Np_StorageClassifier<np::dtype::timedelta64>;
+        // String dtypes use the string branch of the classifier.
+        using _Np_string  = _Np_StorageClassifier<np::dtype::string_>;
+        using _Np_unicode = _Np_StorageClassifier<np::dtype::unicode_>;
+#endif
     } // namespace _Np_dtype
 
     /**
@@ -226,10 +404,50 @@ namespace np {
     template <typename T>
     inline constexpr bool is_complex_v = detail::is_complex<T>::value;
 
-    // ---------------------------------------------------------------------
-    // Runtime helpers
-    // ---------------------------------------------------------------------
+    namespace detail {
+        /**
+         * @brief Compile-time check: the dtype is one of the numeric dtypes.
+         *
+         * True for every dtype that has a scalar `value_type` in
+         * `_Np_type_to_cxx` (integers, floats, complex, bool_, datetime64
+         * and timedelta64). False for `string_`, `unicode_`, `void_` and
+         * `object_`.
+         *
+         * @tparam D  A np::dtype enumeration value.
+         */
+        template <dtype D>
+        struct is_numeric_dtype : std::bool_constant<
+            D >= dtype::int8 && D != dtype::void_ && D != dtype::object_ &&
+            D != dtype::string_ && D != dtype::unicode_> {};
 
+        template <dtype D>
+        inline constexpr bool is_numeric_dtype_v = is_numeric_dtype<D>::value;
+    } // namespace detail
+
+    /**
+     * @brief Compile-time check: the dtype is an integral dtype.
+     *
+     * Analogous to `dtype_is_integer` but evaluated at compile time from a
+     * dtype value. True only for int8 through uint64; bool_ is excluded.
+     *
+     * @tparam D  A dtype value.
+     */
+    template <dtype D>
+    using is_integral_dtype =
+        std::bool_constant<(D >= dtype::int8 && D <= dtype::uint64)>;
+
+    template <dtype D>
+    inline constexpr bool is_integral_dtype_v = is_integral_dtype<D>::value;
+
+    /**
+     * @brief Compile-time check: the dtype is numeric (non-text).
+     *
+     * @tparam D  A np::dtype enumeration value.
+     */
+    template <dtype D>
+    inline constexpr bool is_numeric_dtype_v = detail::is_numeric_dtype<D>::value;
+
+    // Runtime helpers
     /**
      * @brief Human-readable name of a dtype.
      *

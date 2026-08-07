@@ -3,7 +3,7 @@ CompileFlags:
     - "-std=c++20"
     - "-Wall"
     - "-x"
-    - "c++"  # Force le traitement comme C++
+    - "c++"
   Remove:
     - "-x"
     - "-xc"
@@ -12,5 +12,9 @@ Index:
   Background: Build
 
 Diagnostics:
+  Suppress:
+    - "cert-dcl37-c"
+    - "cert-dcl51-cpp"
+    - "bugprone-reserved-identifier"
   ClangTidy:
     Add: "*"
