@@ -13,6 +13,7 @@ set(NP_TESTS
     test_random
     test_simd
     test_manipulation
+    test_scalar_custom
     test_char
     test_chararray
     test_unimplemented)

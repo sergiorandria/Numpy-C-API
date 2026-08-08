@@ -28,13 +28,11 @@
 
 #include "creation.hpp"
 #include "ndarray.hpp"
+#include "api_macros.hpp"
+#include "dtype.hpp"
 
 namespace np {
-
-// =================================================================
 // Rearranging Elements
-// =================================================================
-
 /**
  * @brief Reverse the order of elements along the given axis.
  *
@@ -569,7 +567,7 @@ auto vander(const Ndarray<T> &x, int n = -1, bool increasing = false)
     n = rows;
   }
 
-  Ndarray<T> result({rows, n});
+  Ndarray<T> result(std::vector<int>{rows, n});
 
   for (int i = 0; i < rows; ++i) {
     T val = x(i);
@@ -816,7 +814,7 @@ auto delete_arr(const Ndarray<T> &arr, const std::vector<int> &indices,
       }
     }
 
-    Ndarray<T> result({n - static_cast<int>(to_delete.size())});
+    Ndarray<T> result(std::vector<int>{n - static_cast<int>(to_delete.size())});
     int j = 0;
     for (int i = 0; i < n; ++i) {
       if (to_delete.find(i) == to_delete.end()) {
@@ -911,32 +909,28 @@ auto insert(const Ndarray<T> &arr, const std::vector<int> &indices,
     auto val_flat = values.ravel();
     int n = static_cast<int>(flat.size());
 
-    // Create map of index -> values to insert
-    std::map<int, std::vector<T>> insert_map;
-    for (std::size_t i = 0; i < indices.size(); ++i) {
-      int idx = indices[i] < 0 ? indices[i] + n + 1 : indices[i];
+    // Build (position, value, order) list: value j goes before
+    // indices[j % indices.size()]; equal positions keep value order.
+    std::vector<std::tuple<int, T, std::size_t>> inserts;
+    for (std::size_t j = 0; j < val_flat.size(); ++j) {
+      int raw = indices[j % indices.size()];
+      int idx = raw < 0 ? raw + n + 1 : raw;
       idx = std::max(0, std::min(n, idx));
-
-      if (i < val_flat.size()) {
-        insert_map[idx].push_back(val_flat(i));
-      } else if (!val_flat.empty()) {
-        insert_map[idx].push_back(val_flat(val_flat.size() - 1));
-      }
+      inserts.emplace_back(idx, val_flat(j), j);
     }
+    std::sort(inserts.begin(), inserts.end(),
+              [](const auto &x, const auto &y) {
+                if (std::get<0>(x) != std::get<0>(y))
+                  return std::get<0>(x) < std::get<0>(y);
+                return std::get<2>(x) < std::get<2>(y);
+              });
 
-    // Calculate result size
-    int result_size = n;
-    for (const auto &[idx, vals] : insert_map) {
-      result_size += static_cast<int>(vals.size());
-    }
-
-    Ndarray<T> result({result_size});
+    Ndarray<T> result(std::vector<int>{n + static_cast<int>(val_flat.size())});
     int k = 0;
+    std::size_t v = 0;
     for (int i = 0; i <= n; ++i) {
-      if (insert_map.find(i) != insert_map.end()) {
-        for (const auto &val : insert_map[i]) {
-          result(k++) = val;
-        }
+      while (v < inserts.size() && std::get<0>(inserts[v]) == i) {
+        result(k++) = std::get<1>(inserts[v++]);
       }
       if (i < n) {
         result(k++) = flat(i);
@@ -969,7 +963,7 @@ auto append(const Ndarray<T> &arr, const Ndarray<T> &values,
     auto arr_flat = arr.ravel();
     auto val_flat = values.ravel();
 
-    Ndarray<T> result({static_cast<int>(arr_flat.size() + val_flat.size())});
+    Ndarray<T> result(std::vector<int>{static_cast<int>(arr_flat.size() + val_flat.size())});
 
     for (std::size_t i = 0; i < arr_flat.size(); ++i) {
       result(i) = arr_flat(i);
@@ -1020,10 +1014,10 @@ auto trim_zeros(const Ndarray<T> &arr, const std::string &trim = "fb")
   }
 
   if (start >= end) {
-    return Ndarray<T>({0});
+    return Ndarray<T>(std::vector<int>{0});
   }
 
-  Ndarray<T> result({end - start});
+  Ndarray<T> result(std::vector<int>{end - start});
   for (int i = start; i < end; ++i) {
     result(i - start) = arr(i);
   }
@@ -1071,7 +1065,6 @@ auto unique(const Ndarray<T> &arr, bool return_index = false,
   if (!pairs.empty()) {
     unique_vals.push_back(pairs[0].first);
     unique_indices.push_back(pairs[0].second);
-    std::size_t current_unique_idx = 0;
     std::size_t count = 1;
 
     for (std::size_t i = 1; i < pairs.size(); ++i) {
@@ -1079,7 +1072,6 @@ auto unique(const Ndarray<T> &arr, bool return_index = false,
         counts.push_back(count);
         unique_vals.push_back(pairs[i].first);
         unique_indices.push_back(pairs[i].second);
-        ++current_unique_idx;
         count = 1;
       } else {
         ++count;
@@ -1098,7 +1090,7 @@ auto unique(const Ndarray<T> &arr, bool return_index = false,
   }
 
   // Build result arrays
-  Ndarray<T> result_vals({static_cast<int>(unique_vals.size())});
+  Ndarray<T> result_vals(std::vector<int>{static_cast<int>(unique_vals.size())});
   for (std::size_t i = 0; i < unique_vals.size(); ++i) {
     result_vals(static_cast<int>(i)) = unique_vals[i];
   }
@@ -1107,21 +1099,21 @@ auto unique(const Ndarray<T> &arr, bool return_index = false,
   int inv_size = return_inverse ? static_cast<int>(inverse_indices.size()) : 0;
   int cnt_size = return_counts ? static_cast<int>(counts.size()) : 0;
 
-  Ndarray<std::size_t> result_index({idx_size});
+  Ndarray<std::size_t> result_index(std::vector<int>{idx_size});
   if (return_index) {
     for (std::size_t i = 0; i < unique_indices.size(); ++i) {
       result_index(static_cast<int>(i)) = unique_indices[i];
     }
   }
 
-  Ndarray<std::size_t> result_inverse({inv_size});
+  Ndarray<std::size_t> result_inverse(std::vector<int>{inv_size});
   if (return_inverse) {
     for (std::size_t i = 0; i < inverse_indices.size(); ++i) {
       result_inverse(static_cast<int>(i)) = inverse_indices[i];
     }
   }
 
-  Ndarray<std::size_t> result_counts({cnt_size});
+  Ndarray<std::size_t> result_counts(std::vector<int>{cnt_size});
   if (return_counts) {
     for (std::size_t i = 0; i < counts.size(); ++i) {
       result_counts(static_cast<int>(i)) = counts[i];

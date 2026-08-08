@@ -29,6 +29,10 @@
 #include <type_traits>
 #include <utility>
 
+#include "scalar_builtin.hpp"
+
+#include "scalar_custom.hpp"
+
 namespace np {
 
 /**
@@ -224,8 +228,15 @@ template <typename Op, typename L, typename R> class binary_expr {
 public:
   using lhs_type = L;
   using rhs_type = R;
+  using lhs_element = typename L::value_type;
+  using rhs_element = typename R::value_type;
+  static constexpr bool is_custom =
+      detail::fixed::scalar_traits<lhs_element>::is_custom ||
+      detail::fixed::scalar_traits<rhs_element>::is_custom;
   using value_type =
-      std::invoke_result_t<Op, typename L::value_type, typename R::value_type>;
+      typename detail::fixed::binary_apply<Op,
+                                           lhs_element, rhs_element,
+                                           is_custom>::type;
   static constexpr std::size_t rank = merged<L, R>::rank;
   using tag = typename merged<L, R>::type;
   static constexpr std::array<int, rank> static_shape = tag::arr;
@@ -238,7 +249,10 @@ public:
   /** @brief Element under a flat (row-major) broadcast index. */
   constexpr value_type operator[](std::size_t i) const {
     const auto coords = unflatten(i, static_shape);
-    return Op{}(gather(lhs, coords), gather(rhs, coords));
+    return detail::fixed::binary_apply<Op, lhs_element,
+                                       rhs_element,
+                                       is_custom>::call(gather(lhs, coords),
+                                                        gather(rhs, coords));
   }
 
   /** @brief Element under explicit multi-dimensional coordinates. */
@@ -247,7 +261,10 @@ public:
   constexpr value_type operator()(Idx... idx) const {
     const std::array<std::size_t, rank> coords{
         static_cast<std::size_t>(idx)...};
-    return Op{}(gather(lhs, coords), gather(rhs, coords));
+    return detail::fixed::binary_apply<Op, lhs_element,
+                                       rhs_element,
+                                       is_custom>::call(gather(lhs, coords),
+                                                        gather(rhs, coords));
   }
 
   /** @brief Single fused pass into a fresh fixed-shape array. */
@@ -273,7 +290,10 @@ public:
 template <typename Op, typename S> class unary_expr {
 public:
   using source_type = S;
-  using value_type = std::invoke_result_t<Op, typename S::value_type>;
+  using element_type = typename S::value_type;
+  static constexpr bool is_custom = detail::fixed::scalar_traits<element_type>::is_custom;
+  using value_type =
+      typename detail::fixed::unary_apply<Op, element_type, is_custom>::type;
   static constexpr std::size_t rank = S::rank;
   using tag = shape_tag_t<S>;
   static constexpr std::array<int, rank> static_shape = tag::arr;
@@ -282,14 +302,19 @@ public:
 
   constexpr unary_expr(const S &s) : src(s) {}
 
-  constexpr value_type operator[](std::size_t i) const { return Op{}(src[i]); }
+  constexpr value_type operator[](std::size_t i) const {
+    return detail::fixed::unary_apply<Op, element_type,
+                                      is_custom>::call(src[i]);
+  }
 
   template <typename... Idx>
     requires(sizeof...(Idx) == rank && rank >= 2)
   constexpr value_type operator()(Idx... idx) const {
     const std::array<std::size_t, rank> coords{
         static_cast<std::size_t>(idx)...};
-    return Op{}(src[flatten(static_shape, coords)]);
+    return detail::fixed::unary_apply<Op, element_type,
+                                      is_custom>::call(src[flatten(static_shape,
+                                                                   coords)]);
   }
 
   template <typename V = value_type, int... E>

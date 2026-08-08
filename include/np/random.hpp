@@ -23,7 +23,6 @@
 #include "dtype.hpp"
 #include "ndarray.hpp"
 
-
 namespace np::random {
 
 /**
@@ -93,7 +92,7 @@ public:
     Ndarray<T> result(size, dtype_of<T>);
 
 #ifdef _NP_KERNEL_PERFORMANCE_LOOP_UNROLL
-#pragma unroll loop 
+#pragma unroll loop
 #endif // _NP_KERNEL_PERFORMANCE_LOOP_UNROLL
     for (auto it = result.begin(); it != result.end(); ++it) {
       *it = dist(engine_);
@@ -616,7 +615,8 @@ public:
       std::int64_t successes = 0;
       std::uniform_real_distribution<double> u(0.0, 1.0);
       for (std::int64_t d = 0; d < nsample; ++d) {
-        const double p = static_cast<double>(good) / static_cast<double>(good + bad);
+        const double p =
+            static_cast<double>(good) / static_cast<double>(good + bad);
         if (u(engine_) < p) {
           ++successes;
           --good;
@@ -880,8 +880,7 @@ private:
   auto _fill_distribution(Engine &rng, Dist &dist, const std::vector<int> &size)
       -> Ndarray<TargetType> {
     if (size.empty()) {
-      return Ndarray<TargetType>::from_data(
-          {1}, {(dist(rng))});
+      return Ndarray<TargetType>::from_data({1}, {(dist(rng))});
     }
 
     std::size_t total_elements = 1;
@@ -985,6 +984,5 @@ inline auto choice(const Ndarray<T> &a, std::size_t size = 1,
 }
 
 } // namespace np::random
-
 
 #endif // NP_RANDOM_HPP

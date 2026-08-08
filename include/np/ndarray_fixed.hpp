@@ -30,6 +30,7 @@
 
 #include "detail/expr.hpp"
 #include "detail/math_constexpr.hpp"
+#include "detail/scalar_custom.hpp"
 
 namespace np::detail::fixed {
 
@@ -195,18 +196,21 @@ public:
   template <int Axis = -1>
     requires(Axis >= -1 && Axis < static_cast<int>(rank))
   constexpr auto sum() const {
+    using traits = detail::fixed::scalar_traits<T>;
+    using V = typename traits::value_type;
     if constexpr (Axis == -1) {
-      T acc{};
+      V acc = traits::zero();
       for (std::size_t i = 0; i < size_v; ++i) {
-        acc += m_data[i];
+        acc += traits::get(m_data[i]);
       }
-      return acc;
+      return traits::make(acc);
     } else {
       using tag = typename detail::expr::remove_at<
           Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-      return axis_reduce<T>(
-          Axis, tag{}, [](T acc, const T &v) { return acc + v; }, T{},
-          [](T v) { return v; });
+      return axis_reduce<V>(
+          Axis, tag{}, [](V acc, const V &v) { return acc + v; },
+          traits::zero(), [](V v) { return traits::make(v); },
+          [](const T &v) { return traits::get(v); });
     }
   }
 
@@ -214,18 +218,21 @@ public:
   template <int Axis = -1>
     requires(Axis >= -1 && Axis < static_cast<int>(rank))
   constexpr auto prod() const {
+    using traits = detail::fixed::scalar_traits<T>;
+    using V = typename traits::value_type;
     if constexpr (Axis == -1) {
-      T acc{1};
+      V acc = traits::one();
       for (std::size_t i = 0; i < size_v; ++i) {
-        acc *= m_data[i];
+        acc *= traits::get(m_data[i]);
       }
-      return acc;
+      return traits::make(acc);
     } else {
       using tag = typename detail::expr::remove_at<
           Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-      return axis_reduce<T>(
-          Axis, tag{}, [](T acc, const T &v) { return acc * v; }, T{1},
-          [](T v) { return v; });
+      return axis_reduce<V>(
+          Axis, tag{}, [](V acc, const V &v) { return acc * v; },
+          traits::one(), [](V v) { return traits::make(v); },
+          [](const T &v) { return traits::get(v); });
     }
   }
 
@@ -236,11 +243,12 @@ public:
   template <int Axis = -1>
     requires(Axis >= -1 && Axis < static_cast<int>(rank))
   constexpr auto mean() const {
-    using R = detail::fixed::float_t<T>;
+    using traits = detail::fixed::scalar_traits<T>;
+    using R = detail::fixed::float_t<typename traits::value_type>;
     if constexpr (Axis == -1) {
       R acc = R{0};
       for (std::size_t i = 0; i < size_v; ++i) {
-        acc += static_cast<R>(m_data[i]);
+        acc += static_cast<R>(traits::get(m_data[i]));
       }
       return acc / static_cast<R>(size_v);
     } else {
@@ -248,9 +256,9 @@ public:
       using tag = typename detail::expr::remove_at<
           Axis, 0, detail::expr::shape_tag<Extents...>>::type;
       return axis_reduce<R>(
-          Axis, tag{},
-          [](R acc, const T &v) { return acc + static_cast<R>(v); }, R{0},
-          [n](R v) { return v / static_cast<R>(n); });
+          Axis, tag{}, [](R acc, const R &v) { return acc + v; }, R{0},
+          [n](R v) { return v / static_cast<R>(n); },
+          [](const T &v) { return static_cast<R>(traits::get(v)); });
     }
   }
 
@@ -261,16 +269,17 @@ public:
   template <int Axis = -1>
     requires(Axis >= -1 && Axis < static_cast<int>(rank))
   constexpr auto std(int ddof = 0) const {
-    using R = detail::fixed::float_t<T>;
+    using traits = detail::fixed::scalar_traits<T>;
+    using R = detail::fixed::float_t<typename traits::value_type>;
     if constexpr (Axis == -1) {
       R acc = R{0};
       for (std::size_t i = 0; i < size_v; ++i) {
-        acc += static_cast<R>(m_data[i]);
+        acc += static_cast<R>(traits::get(m_data[i]));
       }
       const R mean_v = acc / static_cast<R>(size_v);
       R sq = R{0};
       for (std::size_t i = 0; i < size_v; ++i) {
-        const R d = static_cast<R>(m_data[i]) - mean_v;
+        const R d = static_cast<R>(traits::get(m_data[i])) - mean_v;
         sq += d * d;
       }
       return std_denom(sq, size_v, ddof);
@@ -285,14 +294,17 @@ public:
   template <int Axis = -1>
     requires(Axis >= -1 && Axis < static_cast<int>(rank))
   constexpr auto min() const {
+    using traits = detail::fixed::scalar_traits<T>;
+    using V = typename traits::value_type;
     if constexpr (Axis == -1) {
-      T best = m_data[0];
+      V best = traits::get(m_data[0]);
       for (std::size_t i = 1; i < size_v; ++i) {
-        if (m_data[i] < best) {
-          best = m_data[i];
+        const V v = traits::get(m_data[i]);
+        if (v < best) {
+          best = v;
         }
       }
-      return best;
+      return traits::make(best);
     } else {
       using tag = typename detail::expr::remove_at<
           Axis, 0, detail::expr::shape_tag<Extents...>>::type;
@@ -304,14 +316,17 @@ public:
   template <int Axis = -1>
     requires(Axis >= -1 && Axis < static_cast<int>(rank))
   constexpr auto max() const {
+    using traits = detail::fixed::scalar_traits<T>;
+    using V = typename traits::value_type;
     if constexpr (Axis == -1) {
-      T best = m_data[0];
+      V best = traits::get(m_data[0]);
       for (std::size_t i = 1; i < size_v; ++i) {
-        if (best < m_data[i]) {
-          best = m_data[i];
+        const V v = traits::get(m_data[i]);
+        if (best < v) {
+          best = v;
         }
       }
-      return best;
+      return traits::make(best);
     } else {
       using tag = typename detail::expr::remove_at<
           Axis, 0, detail::expr::shape_tag<Extents...>>::type;
@@ -345,9 +360,10 @@ public:
   template <int Axis = -1>
     requires(Axis >= -1 && Axis < static_cast<int>(rank))
   constexpr auto all() const {
+    using traits = detail::fixed::scalar_traits<T>;
     if constexpr (Axis == -1) {
       for (std::size_t i = 0; i < size_v; ++i) {
-        if (!m_data[i]) {
+        if (!traits::truthy(m_data[i])) {
           return false;
         }
       }
@@ -356,8 +372,9 @@ public:
       using tag = typename detail::expr::remove_at<
           Axis, 0, detail::expr::shape_tag<Extents...>>::type;
       return axis_reduce<bool>(
-          Axis, tag{}, [](bool acc, const T &v) { return acc && v; }, true,
-          [](bool v) { return v; });
+          Axis, tag{}, [](bool acc, bool v) { return acc && v; }, true,
+          [](bool v) { return v; },
+          [](const T &v) { return traits::truthy(v); });
     }
   }
 
@@ -367,9 +384,10 @@ public:
   template <int Axis = -1>
     requires(Axis >= -1 && Axis < static_cast<int>(rank))
   constexpr auto any() const {
+    using traits = detail::fixed::scalar_traits<T>;
     if constexpr (Axis == -1) {
       for (std::size_t i = 0; i < size_v; ++i) {
-        if (m_data[i]) {
+        if (traits::truthy(m_data[i])) {
           return true;
         }
       }
@@ -378,8 +396,9 @@ public:
       using tag = typename detail::expr::remove_at<
           Axis, 0, detail::expr::shape_tag<Extents...>>::type;
       return axis_reduce<bool>(
-          Axis, tag{}, [](bool acc, const T &v) { return acc || v; }, false,
-          [](bool v) { return v; });
+          Axis, tag{}, [](bool acc, bool v) { return acc || v; }, false,
+          [](bool v) { return v; },
+          [](const T &v) { return traits::truthy(v); });
     }
   }
 
@@ -473,19 +492,20 @@ private:
     return m_data[detail::expr::flatten(static_shape, full)];
   }
 
-  template <typename R, int... E, typename Op, typename Finish>
-  constexpr ndarray<R, E...> axis_reduce(int axis,
-                                         detail::expr::shape_tag<E...>, Op &&op,
-                                         R init, Finish &&finish) const {
+  template <typename R, int... E, typename Op, typename Finish, typename Convert>
+  constexpr auto axis_reduce(int axis, detail::expr::shape_tag<E...>, Op &&op,
+                             R init, Finish &&finish,
+                             Convert &&convert) const {
+    using Out = std::remove_cv_t<std::invoke_result_t<Finish &, R>>;
     constexpr std::size_t red_numel =
         (static_cast<std::size_t>(E) * ... * 1ull);
     const std::size_t axis_ext = static_cast<std::size_t>(static_shape[axis]);
-    ndarray<R, E...> out{};
+    ndarray<Out, E...> out{};
     for (std::size_t j = 0; j < red_numel; ++j) {
       const auto cr = detail::expr::unflatten(j, out.static_shape);
       R acc = init;
       for (std::size_t a = 0; a < axis_ext; ++a) {
-        acc = op(acc, axis_elem(axis, cr, a));
+        acc = op(acc, convert(axis_elem(axis, cr, a)));
       }
       out.m_data[j] = finish(acc);
     }
@@ -495,6 +515,7 @@ private:
   template <typename R, int... E>
   constexpr ndarray<R, E...>
   std_axis_impl(int axis, detail::expr::shape_tag<E...>, int ddof) const {
+    using traits = detail::fixed::scalar_traits<T>;
     constexpr std::size_t red_numel =
         (static_cast<std::size_t>(E) * ... * 1ull);
     const std::size_t n = static_cast<std::size_t>(static_shape[axis]);
@@ -503,12 +524,13 @@ private:
       const auto cr = detail::expr::unflatten(j, out.static_shape);
       R mean_acc = R{0};
       for (std::size_t a = 0; a < n; ++a) {
-        mean_acc += static_cast<R>(axis_elem(axis, cr, a));
+        mean_acc += static_cast<R>(traits::get(axis_elem(axis, cr, a)));
       }
       mean_acc /= static_cast<R>(n);
       R sq = R{0};
       for (std::size_t a = 0; a < n; ++a) {
-        const R d = static_cast<R>(axis_elem(axis, cr, a)) - mean_acc;
+        const R d =
+            static_cast<R>(traits::get(axis_elem(axis, cr, a))) - mean_acc;
         sq += d * d;
       }
       out.m_data[j] = static_cast<R>(std_denom(sq, n, ddof));
@@ -519,30 +541,35 @@ private:
   template <int... E>
   constexpr ndarray<T, E...>
   extremum_axis(int axis, detail::expr::shape_tag<E...>, bool is_max) const {
+    using traits = detail::fixed::scalar_traits<T>;
+    using V = typename traits::value_type;
     constexpr std::size_t red_numel =
         (static_cast<std::size_t>(E) * ... * 1ull);
     const std::size_t n = static_cast<std::size_t>(static_shape[axis]);
     ndarray<T, E...> out{};
     for (std::size_t j = 0; j < red_numel; ++j) {
       const auto cr = detail::expr::unflatten(j, out.static_shape);
-      T best = axis_elem(axis, cr, 0);
+      V best = traits::get(axis_elem(axis, cr, 0));
       for (std::size_t a = 1; a < n; ++a) {
-        const T &v = axis_elem(axis, cr, a);
+        const V v = traits::get(axis_elem(axis, cr, a));
         if (is_max ? (best < v) : (v < best)) {
           best = v;
         }
       }
-      out.m_data[j] = best;
+      out.m_data[j] = traits::make(best);
     }
     return out;
   }
 
   template <int Axis> constexpr auto argextremum(bool is_max) const {
+    using traits = detail::fixed::scalar_traits<T>;
+    using V = typename traits::value_type;
     if constexpr (Axis == -1) {
       std::size_t best_i = 0;
       for (std::size_t i = 1; i < size_v; ++i) {
-        if (is_max ? (m_data[best_i] < m_data[i])
-                   : (m_data[i] < m_data[best_i])) {
+        const V cur = traits::get(m_data[i]);
+        const V best = traits::get(m_data[best_i]);
+        if (is_max ? (best < cur) : (cur < best)) {
           best_i = i;
         }
       }
@@ -557,6 +584,8 @@ private:
   template <int... E>
   constexpr ndarray<std::size_t, E...>
   argextremum_axis(int axis, detail::expr::shape_tag<E...>, bool is_max) const {
+    using traits = detail::fixed::scalar_traits<T>;
+    using V = typename traits::value_type;
     constexpr std::size_t red_numel =
         (static_cast<std::size_t>(E) * ... * 1ull);
     const std::size_t n = static_cast<std::size_t>(static_shape[axis]);
@@ -565,8 +594,8 @@ private:
       const auto cr = detail::expr::unflatten(j, out.static_shape);
       std::size_t best_i = 0;
       for (std::size_t a = 1; a < n; ++a) {
-        const T &cur = axis_elem(axis, cr, a);
-        const T &best = axis_elem(axis, cr, best_i);
+        const V cur = traits::get(axis_elem(axis, cr, a));
+        const V best = traits::get(axis_elem(axis, cr, best_i));
         if (is_max ? (best < cur) : (cur < best)) {
           best_i = a;
         }

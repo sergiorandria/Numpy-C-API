@@ -197,7 +197,7 @@ void test_delete() {
 void test_insert() {
     // Test insert flat
     auto a = arange<int>(5);
-    Ndarray<int> vals({2});
+    Ndarray<int> vals(std::vector<int>{2});
     vals(0) = 99;
     vals(1) = 88;
     auto b = insert(a, {2}, vals);
@@ -217,7 +217,7 @@ void test_append() {
 }
 
 void test_trim_zeros() {
-    Ndarray<int> a({7});
+    Ndarray<int> a(std::vector<int>{7});
     a(0) = 0; a(1) = 0; a(2) = 1; a(3) = 2; a(4) = 0; a(5) = 0; a(6) = 3;
     
     auto b = trim_zeros(a, "f");
@@ -233,7 +233,7 @@ void test_trim_zeros() {
 }
 
 void test_unique() {
-    Ndarray<int> a({8});
+    Ndarray<int> a(std::vector<int>{8});
     a(0) = 1; a(1) = 2; a(2) = 1; a(3) = 3; a(4) = 2; a(5) = 1; a(6) = 3; a(7) = 4;
     
     auto [u, idx, inv, cnt] = unique(a, true, true, true);
