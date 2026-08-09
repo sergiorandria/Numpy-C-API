@@ -22,11 +22,12 @@
 #include <stdexcept>
 #include <vector>
 
+#include "api_macros.hpp"
 #include "ndarray.hpp"
 
 namespace np {
 
-/* @brief Array of zeros with the given shape.
+/** @brief Array of zeros with the given shape.
  *
  * @tparam T  Element type (default: double).
  * @param shape  Shape vector; must have at least one element.
@@ -35,12 +36,12 @@ namespace np {
  *
  * Reference: numpy-reference/reference/generated/numpy.zeros.html
  */
-template <typename T = double>
-auto zeros(const std::vector<int> &shape) -> Ndarray<T> {
+NP_API template <typename T = double>
+NP_NODISCARD auto zeros(const std::vector<int> &shape) -> Ndarray<T> {
   return Ndarray<T>(shape, dtype_of<T>, T{0});
 }
 
-/* @brief Array of ones with the given shape.
+/** @brief Array of ones with the given shape.
  *
  * @tparam T  Element type (default: double).
  * @param shape  Shape vector; must have at least one element.
@@ -49,12 +50,12 @@ auto zeros(const std::vector<int> &shape) -> Ndarray<T> {
  *
  * Reference: numpy-reference/reference/generated/numpy.ones.html
  */
-template <typename T = double>
-auto ones(const std::vector<int> &shape) -> Ndarray<T> {
+NP_API template <typename T = double>
+NP_NODISCARD auto ones(const std::vector<int> &shape) -> Ndarray<T> {
   return Ndarray<T>(shape, dtype_of<T>, T{1});
 }
 
-/* @brief Array filled with a constant value.
+/** @brief Array filled with a constant value.
  *
  * @tparam T  Element type (deduced from fill_value).
  * @param shape      Shape vector.
@@ -64,12 +65,12 @@ auto ones(const std::vector<int> &shape) -> Ndarray<T> {
  *
  * Reference: numpy-reference/reference/generated/numpy.full.html
  */
-template <typename T>
-auto full(const std::vector<int> &shape, const T &fill_value) -> Ndarray<T> {
+NP_API template <typename T>
+NP_NODISCARD auto full(const std::vector<int> &shape, const T &fill_value) -> Ndarray<T> {
   return Ndarray<T>(shape, dtype_of<T>, fill_value);
 }
 
-/* @brief Uninitialized array (values are default-constructed in C++).
+/** @brief Uninitialized array (values are default-constructed in C++).
  *
  * The memory is allocated but not zeroed; elements hold their
  * default-constructed values. For scalar types this means
@@ -83,43 +84,46 @@ auto full(const std::vector<int> &shape, const T &fill_value) -> Ndarray<T> {
  *
  * Reference: numpy-reference/reference/generated/numpy.empty.html
  */
-template <typename T = double>
-auto empty(const std::vector<int> &shape) -> Ndarray<T> {
+NP_API template <typename T = double>
+NP_NODISCARD auto empty(const std::vector<int> &shape) -> Ndarray<T> {
   return Ndarray<T>(shape, dtype_of<T>, T{});
 }
 
-/* @brief New array with the same shape as `a` (uninitialized).
+/** @brief New array with the same shape as `a` (uninitialized).
  *
  * @tparam T  Element type of `a`.
  * @param a   Source array whose shape is copied.
  * @return    Ndarray<T> with the same shape as `a`, default-constructed
  * elements.
  */
-template <typename T> auto empty_like(const Ndarray<T> &a) -> Ndarray<T> {
+NP_API template <typename T>
+NP_NODISCARD auto empty_like(const Ndarray<T> &a) -> Ndarray<T> {
   return Ndarray<T>(a.shape, a.type);
 }
 
-/* @brief Zeros with the same shape as `a`.
+/** @brief Zeros with the same shape as `a`.
  *
  * @tparam T  Element type of `a`.
  * @param a   Source array whose shape is copied.
  * @return    Ndarray<T> with the same shape as `a`, filled with T{0}.
  */
-template <typename T> auto zeros_like(const Ndarray<T> &a) -> Ndarray<T> {
+NP_API template <typename T>
+NP_NODISCARD auto zeros_like(const Ndarray<T> &a) -> Ndarray<T> {
   return Ndarray<T>(a.shape, a.type, T{0});
 }
 
-/* @brief Ones with the same shape as `a`.
+/** @brief Ones with the same shape as `a`.
  *
  * @tparam T  Element type of `a`.
  * @param a   Source array whose shape is copied.
  * @return    Ndarray<T> with the same shape as `a`, filled with T{1}.
  */
-template <typename T> auto ones_like(const Ndarray<T> &a) -> Ndarray<T> {
+NP_API template <typename T>
+NP_NODISCARD auto ones_like(const Ndarray<T> &a) -> Ndarray<T> {
   return Ndarray<T>(a.shape, a.type, T{1});
 }
 
-/* @brief Filled with `fill_value` using the shape and dtype of `a`.
+/** @brief Filled with `fill_value` using the shape and dtype of `a`.
  *
  * @tparam T       Element type of `a` and `fill_value`.
  * @param a        Source array whose shape and dtype are copied.
@@ -127,12 +131,12 @@ template <typename T> auto ones_like(const Ndarray<T> &a) -> Ndarray<T> {
  * @return         Ndarray<T> with the shape and dtype of `a`, filled with
  * fill_value.
  */
-template <typename T>
-auto full_like(const Ndarray<T> &a, const T &fill_value) -> Ndarray<T> {
+NP_API template <typename T>
+NP_NODISCARD auto full_like(const Ndarray<T> &a, const T &fill_value) -> Ndarray<T> {
   return Ndarray<T>(a.shape, a.type, fill_value);
 }
 
-/* @brief Values evenly spaced from start (inclusive) to stop (exclusive).
+/** @brief Values evenly spaced from start (inclusive) to stop (exclusive).
  *
  * Computes the number of elements as ceil((stop - start) / step),
  * then generates start + step * i for i in [0, n). If step > 0 and
@@ -148,8 +152,8 @@ auto full_like(const Ndarray<T> &a, const T &fill_value) -> Ndarray<T> {
  *
  * Reference: numpy-reference/reference/generated/numpy.arange.html
  */
-template <typename T>
-auto arange(T start, T stop, T step = T{1}) -> Ndarray<T> {
+NP_API template <typename T>
+NP_NODISCARD auto arange(T start, T stop, T step = T{1}) -> Ndarray<T> {
   if (step == T{0}) {
     throw std::invalid_argument("arange step cannot be zero");
   }
@@ -181,7 +185,7 @@ auto arange(T start, T stop, T step = T{1}) -> Ndarray<T> {
   return Ndarray<T>::from_data(std::vector<int>{n_elems}, std::move(out));
 }
 
-/* @brief Values from 0 to stop (exclusive).
+/** @brief Values from 0 to stop (exclusive).
  *
  * Equivalent to arange(T{0}, stop, T{1}).
  *
@@ -189,11 +193,12 @@ auto arange(T start, T stop, T step = T{1}) -> Ndarray<T> {
  * @param stop  Exclusive upper bound.
  * @return      1-D Ndarray<T> of length max(0, ceil(stop)).
  */
-template <typename T> auto arange(T stop) -> Ndarray<T> {
+NP_API template <typename T>
+NP_NODISCARD auto arange(T stop) -> Ndarray<T> {
   return arange(T{0}, stop, T{1});
 }
 
-/* @brief num evenly spaced values from start to stop (inclusive).
+/** @brief num evenly spaced values from start to stop (inclusive).
  *
  * When endpoint is true (default), the sequence includes stop.
  * When endpoint is false, stop is excluded and the step is
@@ -209,8 +214,8 @@ template <typename T> auto arange(T stop) -> Ndarray<T> {
  *
  * Reference: numpy-reference/reference/generated/numpy.linspace.html
  */
-template <typename T>
-auto linspace(T start, T stop, std::size_t num = 50, bool endpoint = true)
+NP_API template <typename T>
+NP_NODISCARD auto linspace(T start, T stop, std::size_t num = 50, bool endpoint = true)
     -> Ndarray<std::conditional_t<std::is_floating_point_v<T>, T, double>> {
   using R = std::conditional_t<std::is_floating_point_v<T>, T, double>;
   if (num == 0) {
@@ -233,7 +238,7 @@ auto linspace(T start, T stop, std::size_t num = 50, bool endpoint = true)
                                std::move(out));
 }
 
-/* @brief Logarithmically spaced values from base^start to base^stop.
+/** @brief Logarithmically spaced values from base^start to base^stop.
  *
  * Uses linspace internally to generate the exponent values, then
  * applies std::pow(base, exponent) element-wise.
@@ -247,8 +252,8 @@ auto linspace(T start, T stop, std::size_t num = 50, bool endpoint = true)
  *
  * Reference: numpy-reference/reference/generated/numpy.logspace.html
  */
-template <typename T>
-auto logspace(T start, T stop, std::size_t num = 50, T base = T{10})
+NP_API template <typename T>
+NP_NODISCARD auto logspace(T start, T stop, std::size_t num = 50, T base = T{10})
     -> Ndarray<double> {
   auto powers = linspace(start, stop, num);
   Ndarray<double> out(std::vector<int>{static_cast<int>(num)});
@@ -259,7 +264,7 @@ auto logspace(T start, T stop, std::size_t num = 50, T base = T{10})
   return out;
 }
 
-/* @brief Identity matrix of size n x n with optional offset k.
+/** @brief Identity matrix of size n x n with optional offset k.
  *
  * The diagonal at offset k is set to T{1}. k > 0 places the
  * diagonal above the main diagonal; k < 0 below it.
@@ -272,8 +277,8 @@ auto logspace(T start, T stop, std::size_t num = 50, T base = T{10})
  *
  * Reference: numpy-reference/reference/generated/numpy.eye.html
  */
-template <typename T = double>
-auto eye(std::size_t n, std::size_t m = 0, int k = 0) -> Ndarray<T> {
+NP_API template <typename T = double>
+NP_NODISCARD auto eye(std::size_t n, std::size_t m = 0, int k = 0) -> Ndarray<T> {
   if (m == 0) {
     m = n;
   }
@@ -292,7 +297,7 @@ auto eye(std::size_t n, std::size_t m = 0, int k = 0) -> Ndarray<T> {
   return out;
 }
 
-/* @brief Identity matrix of size n x n.
+/** @brief Identity matrix of size n x n.
  *
  * Equivalent to eye<T>(n, n, 0).
  *
@@ -302,36 +307,38 @@ auto eye(std::size_t n, std::size_t m = 0, int k = 0) -> Ndarray<T> {
  *
  * Reference: numpy-reference/reference/generated/numpy.identity.html
  */
-template <typename T = double> auto identity(std::size_t n) -> Ndarray<T> {
+NP_API template <typename T = double>
+NP_NODISCARD auto identity(std::size_t n) -> Ndarray<T> {
   return eye<T>(n, n, 0);
 }
 
-/* @brief 1D array from a std::vector (copies).
+/** @brief 1D array from a std::vector (copies).
  *
  * @tparam T  Element type.
  * @param values  Source vector (copied).
  * @return        1-D Ndarray<T> with the same elements as values.
  */
-template <typename T> auto asarray(const std::vector<T> &values) -> Ndarray<T> {
+NP_API template <typename T>
+NP_NODISCARD auto asarray(const std::vector<T> &values) -> Ndarray<T> {
   return Ndarray<T>::from_data(
       std::vector<int>{static_cast<int>(values.size())},
       std::vector<T>(values));
 }
 
-/* @brief 1D array from a std::array (copies).
+/** @brief 1D array from a std::array (copies).
  *
  * @tparam T  Element type.
  * @tparam N  Size of the source array.
  * @param values  Source std::array (copied).
  * @return        1-D Ndarray<T> with the same elements.
  */
-template <typename T, std::size_t N>
-auto asarray(const std::array<T, N> &values) -> Ndarray<T> {
+NP_API template <typename T, std::size_t N>
+NP_NODISCARD auto asarray(const std::array<T, N> &values) -> Ndarray<T> {
   return Ndarray<T>::from_data(std::vector<int>{static_cast<int>(N)},
                                std::vector<T>(values.begin(), values.end()));
 }
 
-/* @brief Array of the given shape from a contiguous std::vector.
+/** @brief Array of the given shape from a contiguous std::vector.
  *
  * The total number of elements in values must equal the product
  * of the shape dimensions. The data is copied.
@@ -344,8 +351,8 @@ auto asarray(const std::array<T, N> &values) -> Ndarray<T> {
  *
  * Reference: numpy-reference/reference/generated/numpy.asarray.html
  */
-template <typename T>
-auto asarray(const std::vector<T> &values, const std::vector<int> &shape)
+NP_API template <typename T>
+NP_NODISCARD auto asarray(const std::vector<T> &values, const std::vector<int> &shape)
     -> Ndarray<T> {
   return Ndarray<T>::from_data(shape, std::vector<T>(values));
 }

@@ -15,6 +15,8 @@
 #include <source_location>
 #include <string>
 
+#include "api_macros.hpp"
+
 namespace np::exceptions {
 
 namespace detail {
@@ -26,7 +28,7 @@ format_message(const std::string &msg, const std::source_location &loc) {
 }
 } // namespace detail
 
-/* @brief Base class for all np exceptions.
+/** @brief Base class for all np exceptions.
  *
  * what() returns a string of the form "file:line: function: msg",
  * mirroring the information density of a Python traceback line.
@@ -49,7 +51,7 @@ protected:
   std::string what_msg_;
 };
 
-/* @brief Raised when an axis parameter is out of bounds for the array.
+/** @brief Raised when an axis parameter is out of bounds for the array.
  *
  * Reference:
  * numpy-reference/reference/generated/numpy.exceptions.AxisError.html
@@ -65,7 +67,7 @@ public:
       : NumpyError(msg, loc) {}
 };
 
-/* @brief Non-fatal warning emitted for invalid axis/rank usage.
+/** @brief Non-fatal warning emitted for invalid axis/rank usage.
  *
  * Reference: numpy-reference/reference/generated/numpy.RankWarning.html
  *
@@ -80,7 +82,7 @@ public:
       : NumpyError(msg, loc) {}
 };
 
-/* @brief Raised when matrix dimensions are incompatible for an operation.
+/** @brief Raised when matrix dimensions are incompatible for an operation.
  *
  * @param msg  Description of the dimension mismatch.
  * @param loc  Source location of the throw site.
@@ -93,7 +95,7 @@ public:
       : NumpyError(msg, loc) {}
 };
 
-/* @brief Raised when two dtypes cannot be promoted to a common type.
+/** @brief Raised when two dtypes cannot be promoted to a common type.
  *
  * @param msg  Description of the promotion failure.
  * @param loc  Source location of the throw site.
@@ -106,7 +108,7 @@ public:
       : NumpyError(msg, loc) {}
 };
 
-/* @brief Emitted when an API enters a deprecated code path.
+/** @brief Emitted when an API enters a deprecated code path.
  *
  * @param msg  Deprecation notice.
  * @param loc  Source location of the throw site.
@@ -119,7 +121,7 @@ public:
       : NumpyError(msg, loc) {}
 };
 
-/* @brief Emitted when a complex value is implicitly cast to a real type.
+/** @brief Emitted when a complex value is implicitly cast to a real type.
  *
  * @param msg  Warning message describing the cast.
  * @param loc  Source location of the throw site.
@@ -132,7 +134,7 @@ public:
       : NumpyError(msg, loc) {}
 };
 
-/* @brief Raised by np::linalg when a decomposition fails to converge
+/** @brief Raised by np::linalg when a decomposition fails to converge
  *        or encounters a mathematically singular problem.
  *
  * Reference: numpy-reference/reference/generated/numpy.linalg.LinAlgError.html

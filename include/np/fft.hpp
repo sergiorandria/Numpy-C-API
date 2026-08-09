@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "api_macros.hpp"
 #include "ndarray.hpp"
 
 namespace np::fft {
@@ -158,7 +159,7 @@ inline void transform(std::vector<Cplx> &a, bool inverse) {
 /**
  * @brief 1D discrete Fourier transform of a complex sequence.
  */
-inline auto fft(const std::vector<Cplx> &x) -> std::vector<Cplx> {
+NP_API NP_NODISCARD inline auto fft(const std::vector<Cplx> &x) -> std::vector<Cplx> {
   std::vector<Cplx> out(x);
   detail::transform(out, false);
   return out;
@@ -167,7 +168,7 @@ inline auto fft(const std::vector<Cplx> &x) -> std::vector<Cplx> {
 /**
  * @brief 1D inverse discrete Fourier transform of a complex sequence.
  */
-inline auto ifft(const std::vector<Cplx> &x) -> std::vector<Cplx> {
+NP_API NP_NODISCARD inline auto ifft(const std::vector<Cplx> &x) -> std::vector<Cplx> {
   std::vector<Cplx> out(x);
   detail::transform(out, true);
   return out;
@@ -177,7 +178,7 @@ inline auto ifft(const std::vector<Cplx> &x) -> std::vector<Cplx> {
  * @brief Promotes any numeric Ndarray to complex and FFTs along the last
  *        axis.
  */
-template <typename T> auto fft(const Ndarray<T> &x) -> Ndarray<Cplx> {
+NP_API template <typename T> NP_NODISCARD auto fft(const Ndarray<T> &x) -> Ndarray<Cplx> {
   const std::size_t nd = x.ndim();
   if (nd == 0) {
     throw std::invalid_argument("fft requires ndim >= 1");
@@ -220,7 +221,7 @@ template <typename T> auto fft(const Ndarray<T> &x) -> Ndarray<Cplx> {
 /**
  * @brief Inverse FFT along the last axis of a numeric Ndarray.
  */
-template <typename T> auto ifft(const Ndarray<T> &x) -> Ndarray<Cplx> {
+NP_API template <typename T> NP_NODISCARD auto ifft(const Ndarray<T> &x) -> Ndarray<Cplx> {
   const std::size_t nd = x.ndim();
   if (nd == 0) {
     throw std::invalid_argument("ifft requires ndim >= 1");
@@ -260,7 +261,7 @@ template <typename T> auto ifft(const Ndarray<T> &x) -> Ndarray<Cplx> {
 }
 
 /** @brief Elementwise magnitude |z| as a real Ndarray. */
-template <typename T> auto abs(const Ndarray<T> &x) -> Ndarray<double> {
+NP_API template <typename T> NP_NODISCARD auto abs(const Ndarray<T> &x) -> Ndarray<double> {
   Ndarray<double> out(x.shape);
   for (std::size_t i = 0; i < x._numel(); ++i) {
     const Cplx v = static_cast<Cplx>(x.data()[x._flat_logical(i)]);

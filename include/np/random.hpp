@@ -21,6 +21,7 @@
 
 #include "creation.hpp"
 #include "dtype.hpp"
+ #include "api_macros.hpp"
 #include "ndarray.hpp"
 
 namespace np::random {
@@ -921,64 +922,65 @@ default_rng(std::optional<std::uint64_t> seed = std::nullopt) {
 // Convenience wrappers using default generator
 
 /** @brief Random integers using default generator. */
-template <typename T = std::int64_t>
-inline auto randint(T low, T high, const std::vector<int> &size = {})
+NP_API template <typename T = std::int64_t>
+NP_NODISCARD inline auto randint(T low, T high, const std::vector<int> &size = {})
     -> Ndarray<T> {
   return default_rng().integers(low, high, size);
 }
 
 /** @brief Random floats [0, 1) using default generator. */
-template <typename T = double>
-inline auto rand(const std::vector<int> &size = {}) -> Ndarray<T> {
+NP_API template <typename T = double>
+NP_NODISCARD inline auto rand(const std::vector<int> &size = {}) -> Ndarray<T> {
   return default_rng().random<T>(size);
 }
 
 /** @brief Standard normal using default generator. */
-template <typename T = double>
-inline auto randn(const std::vector<int> &size = {}) -> Ndarray<T> {
+NP_API template <typename T = double>
+NP_NODISCARD inline auto randn(const std::vector<int> &size = {}) -> Ndarray<T> {
   return default_rng().standard_normal<T>(size);
 }
 
 /** @brief Uniform distribution using default generator. */
-template <typename T = double>
-inline auto uniform(T low = T{0}, T high = T{1},
+NP_API template <typename T = double>
+NP_NODISCARD inline auto uniform(T low = T{0}, T high = T{1},
                     const std::vector<int> &size = {}) -> Ndarray<T> {
   return default_rng().uniform(low, high, size);
 }
 
 /** @brief Normal distribution using default generator. */
-template <typename T = double>
-inline auto normal(T loc = T{0}, T scale = T{1},
+NP_API template <typename T = double>
+NP_NODISCARD inline auto normal(T loc = T{0}, T scale = T{1},
                    const std::vector<int> &size = {}) -> Ndarray<T> {
   return default_rng().normal(loc, scale, size);
 }
 
 /** @brief Exponential distribution using default generator. */
-template <typename T = double>
-inline auto exponential(T scale = T{1}, const std::vector<int> &size = {})
+NP_API template <typename T = double>
+NP_NODISCARD inline auto exponential(T scale = T{1}, const std::vector<int> &size = {})
     -> Ndarray<T> {
   return default_rng().exponential(scale, size);
 }
 
 /** @brief Permutation using default generator. */
-template <typename T>
-inline auto permutation(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T>
+NP_NODISCARD inline auto permutation(const Ndarray<T> &x) -> Ndarray<T> {
   return default_rng().permutation(x);
 }
 
 /** @brief Permutation of range using default generator. */
-inline auto permutation(std::int64_t n) -> Ndarray<std::int64_t> {
+NP_API NP_NODISCARD inline auto permutation(std::int64_t n)
+    -> Ndarray<std::int64_t> {
   return default_rng().permutation(n);
 }
 
 /** @brief Shuffle using default generator. */
-template <typename T> inline void shuffle(Ndarray<T> &x) {
+NP_API template <typename T> inline void shuffle(Ndarray<T> &x) {
   default_rng().shuffle(x);
 }
 
 /** @brief Choice using default generator. */
-template <typename T>
-inline auto choice(const Ndarray<T> &a, std::size_t size = 1,
+NP_API template <typename T>
+NP_NODISCARD inline auto choice(const Ndarray<T> &a, std::size_t size = 1,
                    bool replace = true) -> Ndarray<T> {
   return default_rng().choice(a, size, replace);
 }

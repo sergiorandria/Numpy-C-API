@@ -22,6 +22,7 @@
 #include <limits>
 #include <type_traits>
 
+#include "api_macros.hpp"
 #include "ndarray.hpp"
 
 namespace np {
@@ -31,13 +32,13 @@ namespace np {
 // Reference: numpy-reference/reference/generated/numpy.isfinite.html (etc.)
 // =================================================================
 
-/* @brief Test element-wise for finiteness (not infinity and not NaN).
+/** @brief Test element-wise for finiteness (not infinity and not NaN).
  *
  * @tparam T  Element type (floating-point or complex).
  * @param x   Input array.
  * @return    Ndarray<bool> with true where x[i] is finite.
  */
-template <typename T> auto isfinite(const Ndarray<T> &x) -> Ndarray<bool> {
+NP_API template <typename T> NP_NODISCARD auto isfinite(const Ndarray<T> &x) -> Ndarray<bool> {
   Ndarray<bool> result(x.shape, dtype::bool_);
   std::vector<std::size_t> idx(x.ndim(), 0);
   for (std::size_t i = 0; i < x.size(); ++i) {
@@ -53,13 +54,13 @@ template <typename T> auto isfinite(const Ndarray<T> &x) -> Ndarray<bool> {
   return result;
 }
 
-/* @brief Test element-wise for positive or negative infinity.
+/** @brief Test element-wise for positive or negative infinity.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<bool> with true where x[i] is inf.
  */
-template <typename T> auto isinf(const Ndarray<T> &x) -> Ndarray<bool> {
+NP_API template <typename T> NP_NODISCARD auto isinf(const Ndarray<T> &x) -> Ndarray<bool> {
   Ndarray<bool> result(x.shape, dtype::bool_);
   std::vector<std::size_t> idx(x.ndim(), 0);
   for (std::size_t i = 0; i < x.size(); ++i) {
@@ -74,13 +75,13 @@ template <typename T> auto isinf(const Ndarray<T> &x) -> Ndarray<bool> {
   return result;
 }
 
-/* @brief Test element-wise for NaN.
+/** @brief Test element-wise for NaN.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<bool> with true where x[i] is NaN.
  */
-template <typename T> auto isnan(const Ndarray<T> &x) -> Ndarray<bool> {
+NP_API template <typename T> NP_NODISCARD auto isnan(const Ndarray<T> &x) -> Ndarray<bool> {
   Ndarray<bool> result(x.shape, dtype::bool_);
   std::vector<std::size_t> idx(x.ndim(), 0);
   for (std::size_t i = 0; i < x.size(); ++i) {
@@ -95,13 +96,13 @@ template <typename T> auto isnan(const Ndarray<T> &x) -> Ndarray<bool> {
   return result;
 }
 
-/* @brief Test element-wise for negative infinity.
+/** @brief Test element-wise for negative infinity.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<bool> with true where x[i] is -inf.
  */
-template <typename T> auto isneginf(const Ndarray<T> &x) -> Ndarray<bool> {
+NP_API template <typename T> NP_NODISCARD auto isneginf(const Ndarray<T> &x) -> Ndarray<bool> {
   Ndarray<bool> result(x.shape, dtype::bool_);
   std::vector<std::size_t> idx(x.ndim(), 0);
   for (std::size_t i = 0; i < x.size(); ++i) {
@@ -117,13 +118,13 @@ template <typename T> auto isneginf(const Ndarray<T> &x) -> Ndarray<bool> {
   return result;
 }
 
-/* @brief Test element-wise for positive infinity.
+/** @brief Test element-wise for positive infinity.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<bool> with true where x[i] is +inf.
  */
-template <typename T> auto isposinf(const Ndarray<T> &x) -> Ndarray<bool> {
+NP_API template <typename T> NP_NODISCARD auto isposinf(const Ndarray<T> &x) -> Ndarray<bool> {
   Ndarray<bool> result(x.shape, dtype::bool_);
   std::vector<std::size_t> idx(x.ndim(), 0);
   for (std::size_t i = 0; i < x.size(); ++i) {
@@ -139,7 +140,7 @@ template <typename T> auto isposinf(const Ndarray<T> &x) -> Ndarray<bool> {
   return result;
 }
 
-/* @brief Returns True if input is complex.
+/** @brief Returns True if input is complex.
  *
  * The result is uniform across all elements (the dtype
  * of the array determines whether elements are complex).
@@ -149,32 +150,32 @@ template <typename T> auto isposinf(const Ndarray<T> &x) -> Ndarray<bool> {
  * @return    Ndarray<bool> with true for all elements if T
  *            is a complex type, false otherwise.
  */
-template <typename T> auto iscomplex(const Ndarray<T> &x) -> Ndarray<bool> {
+NP_API template <typename T> NP_NODISCARD auto iscomplex(const Ndarray<T> &x) -> Ndarray<bool> {
   Ndarray<bool> result(x.shape, dtype::bool_);
   result.fill(detail::is_complex_v<T>);
   return result;
 }
 
-/* @brief Returns True if input is real (not complex).
+/** @brief Returns True if input is real (not complex).
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<bool> with true for all elements if T
  *            is not a complex type, false otherwise.
  */
-template <typename T> auto isreal(const Ndarray<T> &x) -> Ndarray<bool> {
+NP_API template <typename T> NP_NODISCARD auto isreal(const Ndarray<T> &x) -> Ndarray<bool> {
   Ndarray<bool> result(x.shape, dtype::bool_);
   result.fill(!detail::is_complex_v<T>);
   return result;
 }
 
-/* @brief Returns True if input is a scalar type.
+/** @brief Returns True if input is a scalar type.
  *
  * @tparam T  Type to check.
  * @param x   Value (unused; only the type matters).
  * @return    True if T is arithmetic or a complex instantiation.
  */
-template <typename T> constexpr bool isscalar([[maybe_unused]] const T &x) {
+NP_API template <typename T> constexpr bool isscalar([[maybe_unused]] const T &x) {
   return std::is_arithmetic_v<T> || detail::is_complex_v<T>;
 }
 
@@ -183,7 +184,7 @@ template <typename T> constexpr bool isscalar([[maybe_unused]] const T &x) {
 // Reference: numpy-reference/reference/generated/numpy.logical_and.html (etc.)
 // =================================================================
 
-/* @brief Compute truth value of x1 AND x2 element-wise.
+/** @brief Compute truth value of x1 AND x2 element-wise.
  *
  * Broadcasts x1 and x2 to a common shape.
  *
@@ -194,8 +195,8 @@ template <typename T> constexpr bool isscalar([[maybe_unused]] const T &x) {
  * @return    Ndarray<bool> with x1[i] && x2[i].
  * @throws    std::invalid_argument if shapes cannot be broadcast.
  */
-template <typename T, typename U>
-auto logical_and(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
+NP_API template <typename T, typename U>
+NP_NODISCARD auto logical_and(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
   const auto out_shape = detail::broadcast_shapes(x1.shape, x2.shape);
   Ndarray<bool> result(out_shape, dtype::bool_);
 
@@ -232,7 +233,7 @@ auto logical_and(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
   return result;
 }
 
-/* @brief Compute truth value of x1 OR x2 element-wise.
+/** @brief Compute truth value of x1 OR x2 element-wise.
  *
  * @tparam T  Element type of x1.
  * @tparam U  Element type of x2.
@@ -240,8 +241,8 @@ auto logical_and(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
  * @param x2  Second input array.
  * @return    Ndarray<bool> with x1[i] || x2[i].
  */
-template <typename T, typename U>
-auto logical_or(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
+NP_API template <typename T, typename U>
+NP_NODISCARD auto logical_or(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
   const auto out_shape = detail::broadcast_shapes(x1.shape, x2.shape);
   Ndarray<bool> result(out_shape, dtype::bool_);
 
@@ -278,13 +279,13 @@ auto logical_or(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
   return result;
 }
 
-/* @brief Compute truth value of NOT x element-wise.
+/** @brief Compute truth value of NOT x element-wise.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<bool> with !x[i].
  */
-template <typename T> auto logical_not(const Ndarray<T> &x) -> Ndarray<bool> {
+NP_API template <typename T> NP_NODISCARD auto logical_not(const Ndarray<T> &x) -> Ndarray<bool> {
   Ndarray<bool> result(x.shape, dtype::bool_);
   std::vector<std::size_t> idx(x.ndim(), 0);
   for (std::size_t i = 0; i < x.size(); ++i) {
@@ -299,7 +300,7 @@ template <typename T> auto logical_not(const Ndarray<T> &x) -> Ndarray<bool> {
   return result;
 }
 
-/* @brief Compute truth value of x1 XOR x2 element-wise.
+/** @brief Compute truth value of x1 XOR x2 element-wise.
  *
  * @tparam T  Element type of x1.
  * @tparam U  Element type of x2.
@@ -307,8 +308,8 @@ template <typename T> auto logical_not(const Ndarray<T> &x) -> Ndarray<bool> {
  * @param x2  Second input array.
  * @return    Ndarray<bool> with (x1[i] != x2[i]).
  */
-template <typename T, typename U>
-auto logical_xor(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
+NP_API template <typename T, typename U>
+NP_NODISCARD auto logical_xor(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
   const auto out_shape = detail::broadcast_shapes(x1.shape, x2.shape);
   Ndarray<bool> result(out_shape, dtype::bool_);
 
@@ -350,7 +351,7 @@ auto logical_xor(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
 // Reference: numpy-reference/reference/generated/numpy.greater.html (etc.)
 // =================================================================
 
-/* @brief Return (x1 > x2) element-wise.
+/** @brief Return (x1 > x2) element-wise.
  *
  * @tparam T  Element type of x1.
  * @tparam U  Element type of x2.
@@ -358,12 +359,12 @@ auto logical_xor(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
  * @param x2  Second input array.
  * @return    Ndarray<bool> with x1[i] > x2[i].
  */
-template <typename T, typename U>
-auto greater(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
+NP_API template <typename T, typename U>
+NP_NODISCARD auto greater(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
   return x1 > x2;
 }
 
-/* @brief Return (x1 >= x2) element-wise.
+/** @brief Return (x1 >= x2) element-wise.
  *
  * @tparam T  Element type of x1.
  * @tparam U  Element type of x2.
@@ -371,13 +372,13 @@ auto greater(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
  * @param x2  Second input array.
  * @return    Ndarray<bool> with x1[i] >= x2[i].
  */
-template <typename T, typename U>
-auto greater_equal(const Ndarray<T> &x1, const Ndarray<U> &x2)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto greater_equal(const Ndarray<T> &x1, const Ndarray<U> &x2)
     -> Ndarray<bool> {
   return x1 >= x2;
 }
 
-/* @brief Return (x1 < x2) element-wise.
+/** @brief Return (x1 < x2) element-wise.
  *
  * @tparam T  Element type of x1.
  * @tparam U  Element type of x2.
@@ -385,12 +386,12 @@ auto greater_equal(const Ndarray<T> &x1, const Ndarray<U> &x2)
  * @param x2  Second input array.
  * @return    Ndarray<bool> with x1[i] < x2[i].
  */
-template <typename T, typename U>
-auto less(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
+NP_API template <typename T, typename U>
+NP_NODISCARD auto less(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
   return x1 < x2;
 }
 
-/* @brief Return (x1 <= x2) element-wise.
+/** @brief Return (x1 <= x2) element-wise.
  *
  * @tparam T  Element type of x1.
  * @tparam U  Element type of x2.
@@ -398,12 +399,12 @@ auto less(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
  * @param x2  Second input array.
  * @return    Ndarray<bool> with x1[i] <= x2[i].
  */
-template <typename T, typename U>
-auto less_equal(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
+NP_API template <typename T, typename U>
+NP_NODISCARD auto less_equal(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
   return x1 <= x2;
 }
 
-/* @brief Return (x1 == x2) element-wise.
+/** @brief Return (x1 == x2) element-wise.
  *
  * @tparam T  Element type of x1.
  * @tparam U  Element type of x2.
@@ -411,12 +412,12 @@ auto less_equal(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
  * @param x2  Second input array.
  * @return    Ndarray<bool> with x1[i] == x2[i].
  */
-template <typename T, typename U>
-auto equal(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
+NP_API template <typename T, typename U>
+NP_NODISCARD auto equal(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
   return x1 == x2;
 }
 
-/* @brief Return (x1 != x2) element-wise.
+/** @brief Return (x1 != x2) element-wise.
  *
  * @tparam T  Element type of x1.
  * @tparam U  Element type of x2.
@@ -424,8 +425,8 @@ auto equal(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
  * @param x2  Second input array.
  * @return    Ndarray<bool> with x1[i] != x2[i].
  */
-template <typename T, typename U>
-auto not_equal(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
+NP_API template <typename T, typename U>
+NP_NODISCARD auto not_equal(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
   return x1 != x2;
 }
 
@@ -434,7 +435,7 @@ auto not_equal(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
 // Reference: numpy-reference/reference/generated/numpy.array_equal.html (etc.)
 // =================================================================
 
-/* @brief True if two arrays have the same shape and elements.
+/** @brief True if two arrays have the same shape and elements.
  *
  * Time complexity: O(N) where N is the total element count.
  *
@@ -444,7 +445,7 @@ auto not_equal(const Ndarray<T> &x1, const Ndarray<U> &x2) -> Ndarray<bool> {
  * @param a2  Second array.
  * @return    True if shapes match and all elements are equal.
  */
-template <typename T, typename U>
+NP_API template <typename T, typename U>
 bool array_equal(const Ndarray<T> &a1, const Ndarray<U> &a2) {
   if (a1.shape != a2.shape) {
     return false;
@@ -459,7 +460,7 @@ bool array_equal(const Ndarray<T> &a1, const Ndarray<U> &a2) {
   return true;
 }
 
-/* @brief True if two arrays are element-wise equal within a tolerance.
+/** @brief True if two arrays are element-wise equal within a tolerance.
  *
  * Uses the standard absolute + relative tolerance formula:
  *   |a - b| <= atol + rtol * |b|
@@ -473,8 +474,8 @@ bool array_equal(const Ndarray<T> &a1, const Ndarray<U> &a2) {
  * @return     Ndarray<bool> with true where elements are close.
  * @throws     std::invalid_argument if shapes cannot be broadcast.
  */
-template <typename T, typename U>
-auto isclose(const Ndarray<T> &a, const Ndarray<U> &b, double rtol = 1e-5,
+NP_API template <typename T, typename U>
+NP_NODISCARD auto isclose(const Ndarray<T> &a, const Ndarray<U> &b, double rtol = 1e-5,
              double atol = 1e-8) -> Ndarray<bool> {
   const auto out_shape = detail::broadcast_shapes(a.shape, b.shape);
   Ndarray<bool> result(out_shape, dtype::bool_);
@@ -515,7 +516,7 @@ auto isclose(const Ndarray<T> &a, const Ndarray<U> &b, double rtol = 1e-5,
   return result;
 }
 
-/* @brief True if two arrays are element-wise equal within a tolerance.
+/** @brief True if two arrays are element-wise equal within a tolerance.
  *
  * Reduces isclose() to a single boolean via .all().
  *
@@ -527,13 +528,13 @@ auto isclose(const Ndarray<T> &a, const Ndarray<U> &b, double rtol = 1e-5,
  * @param atol Absolute tolerance (default: 1e-8).
  * @return     True if all elements are close.
  */
-template <typename T, typename U>
+NP_API template <typename T, typename U>
 bool allclose(const Ndarray<T> &a, const Ndarray<U> &b, double rtol = 1e-5,
               double atol = 1e-8) {
   return isclose(a, b, rtol, atol).all();
 }
 
-/* @brief True if two arrays are broadcastable and element-wise equal.
+/** @brief True if two arrays are broadcastable and element-wise equal.
  *
  * Unlike array_equal(), this function broadcasts shapes before
  * comparing. Returns false if broadcasting fails.
@@ -544,7 +545,7 @@ bool allclose(const Ndarray<T> &a, const Ndarray<U> &b, double rtol = 1e-5,
  * @param a2  Second array.
  * @return    True if arrays are broadcast-equal.
  */
-template <typename T, typename U>
+NP_API template <typename T, typename U>
 bool array_equiv(const Ndarray<T> &a1, const Ndarray<U> &a2) {
   try {
     const auto out_shape = detail::broadcast_shapes(a1.shape, a2.shape);

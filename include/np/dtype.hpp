@@ -501,7 +501,7 @@ inline constexpr bool is_numeric_dtype_v = detail::is_numeric_dtype<D>::value;
  * @param t  The dtype value.
  * @return   A string_view naming the dtype (e.g. "int8", "float64").
  */
-NP_NODISCARD constexpr std::string_view dtype_name(dtype t) {
+NP_API NP_NODISCARD constexpr std::string_view dtype_name(dtype t) {
   switch (t) {
   case dtype::int8:
     return "int8";
@@ -561,7 +561,7 @@ NP_NODISCARD constexpr std::string_view dtype_name(dtype t) {
  * @param t  The dtype value.
  * @return   Number of bytes, or 0 for variable-length types.
  */
-NP_NODISCARD constexpr std::size_t dtype_size(dtype t) {
+NP_API NP_NODISCARD constexpr std::size_t dtype_size(dtype t) {
   switch (t) {
   case dtype::int8:
   case dtype::uint8:
@@ -603,7 +603,7 @@ NP_NODISCARD constexpr std::size_t dtype_size(dtype t) {
  * @param t  The dtype value.
  * @return   True if t is complex64, complex128, or clongdouble.
  */
-NP_NODISCARD constexpr bool dtype_is_complex(dtype t) {
+NP_API NP_NODISCARD constexpr bool dtype_is_complex(dtype t) {
   return t == dtype::complex64 || t == dtype::complex128 ||
          t == dtype::clongdouble;
 }
@@ -614,7 +614,7 @@ NP_NODISCARD constexpr bool dtype_is_complex(dtype t) {
  * @param t  The dtype value.
  * @return   True if t is float16, float32, float64, or longdouble.
  */
-NP_NODISCARD constexpr bool dtype_is_floating(dtype t) {
+NP_API NP_NODISCARD constexpr bool dtype_is_floating(dtype t) {
   return t == dtype::float16 || t == dtype::float32 || t == dtype::float64 ||
          t == dtype::longdouble;
 }
@@ -625,7 +625,7 @@ NP_NODISCARD constexpr bool dtype_is_floating(dtype t) {
  * @param t  The dtype value.
  * @return   True if t is int8 through uint64.
  */
-NP_NODISCARD constexpr bool dtype_is_integer(dtype t) {
+NP_API NP_NODISCARD constexpr bool dtype_is_integer(dtype t) {
   return t >= dtype::int8 && t <= dtype::uint64;
 }
 
@@ -635,7 +635,7 @@ NP_NODISCARD constexpr bool dtype_is_integer(dtype t) {
  * @param t  The dtype value.
  * @return   True if t is int8 through int64.
  */
-NP_NODISCARD constexpr bool dtype_is_signed(dtype t) {
+NP_API NP_NODISCARD constexpr bool dtype_is_signed(dtype t) {
   return t >= dtype::int8 && t <= dtype::int64;
 }
 
@@ -645,7 +645,7 @@ NP_NODISCARD constexpr bool dtype_is_signed(dtype t) {
  * @param t  The dtype value.
  * @return   True if t is uint8 through uint64.
  */
-NP_NODISCARD constexpr bool dtype_is_unsigned(dtype t) {
+NP_API NP_NODISCARD constexpr bool dtype_is_unsigned(dtype t) {
   return t >= dtype::uint8 && t <= dtype::uint64;
 }
 
@@ -655,7 +655,7 @@ NP_NODISCARD constexpr bool dtype_is_unsigned(dtype t) {
  * @param t  The dtype value.
  * @return   True if t is bool_.
  */
-NP_NODISCARD constexpr bool dtype_is_bool(dtype t) {
+NP_API NP_NODISCARD constexpr bool dtype_is_bool(dtype t) {
   return t == dtype::bool_;
 }
 

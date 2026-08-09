@@ -25,13 +25,14 @@
 #include <cmath>
 #include <type_traits>
 
+#include "api_macros.hpp"
 #include "ndarray.hpp"
 
 namespace np {
 
 namespace detail {
 
-/* @brief Apply unary function element-wise with broadcasting.
+/** @brief Apply unary function element-wise with broadcasting.
  *
  * Time complexity: O(N) where N is the number of elements
  * in the broadcast output shape. Space complexity: O(N).
@@ -42,8 +43,8 @@ namespace detail {
  * @param fn   Unary function applied to each element.
  * @return     Ndarray<T> with the same shape as `arr`.
  */
-template <typename T, typename Fn>
-auto ufunc_unary(const Ndarray<T> &arr, Fn &&fn) -> Ndarray<T> {
+NP_API template <typename T, typename Fn>
+NP_NODISCARD auto ufunc_unary(const Ndarray<T> &arr, Fn &&fn) -> Ndarray<T> {
   Ndarray<T> result(arr.shape, arr.type);
   auto it_in = arr.begin();
   auto it_out = result.begin();
@@ -53,7 +54,7 @@ auto ufunc_unary(const Ndarray<T> &arr, Fn &&fn) -> Ndarray<T> {
   return result;
 }
 
-/* @brief Apply binary function element-wise with broadcasting.
+/** @brief Apply binary function element-wise with broadcasting.
  *
  * Time complexity: O(N) where N is the number of elements
  * in the broadcast output shape. Space complexity: O(N).
@@ -68,8 +69,8 @@ auto ufunc_unary(const Ndarray<T> &arr, Fn &&fn) -> Ndarray<T> {
  *            broadcast shape.
  * @throws    std::invalid_argument if shapes cannot be broadcast.
  */
-template <typename T, typename U, typename Fn>
-auto ufunc_binary(const Ndarray<T> &lhs, const Ndarray<U> &rhs, Fn &&fn)
+NP_API template <typename T, typename U, typename Fn>
+NP_NODISCARD auto ufunc_binary(const Ndarray<T> &lhs, const Ndarray<U> &rhs, Fn &&fn)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
 
@@ -119,37 +120,37 @@ auto ufunc_binary(const Ndarray<T> &lhs, const Ndarray<U> &rhs, Fn &&fn)
 // Reference: numpy-reference/reference/generated/numpy.sin.html (etc.)
 // =================================================================
 
-/* @brief Trigonometric sine, element-wise.
+/** @brief Trigonometric sine, element-wise.
  *
  * @tparam T  Element type (must be floating-point or complex).
  * @param x   Input array.
  * @return    Ndarray<T> with sin(x[i]) for each element.
  */
-template <typename T> auto sin(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto sin(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::sin(v); });
 }
 
-/* @brief Trigonometric cosine, element-wise.
+/** @brief Trigonometric cosine, element-wise.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with cos(x[i]) for each element.
  */
-template <typename T> auto cos(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto cos(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::cos(v); });
 }
 
-/* @brief Trigonometric tangent, element-wise.
+/** @brief Trigonometric tangent, element-wise.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with tan(x[i]) for each element.
  */
-template <typename T> auto tan(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto tan(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::tan(v); });
 }
 
-/* @brief Inverse sine, element-wise.
+/** @brief Inverse sine, element-wise.
  *
  * Returns values in [-pi/2, pi/2]. For real inputs outside
  * [-1, 1], the result is complex (promoted to complex output).
@@ -158,11 +159,11 @@ template <typename T> auto tan(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with asin(x[i]) for each element.
  */
-template <typename T> auto arcsin(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto arcsin(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::asin(v); });
 }
 
-/* @brief Inverse cosine, element-wise.
+/** @brief Inverse cosine, element-wise.
  *
  * Returns values in [0, pi]. For real inputs outside [-1, 1],
  * the result is complex (promoted to complex output).
@@ -171,11 +172,11 @@ template <typename T> auto arcsin(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with acos(x[i]) for each element.
  */
-template <typename T> auto arccos(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto arccos(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::acos(v); });
 }
 
-/* @brief Inverse tangent, element-wise.
+/** @brief Inverse tangent, element-wise.
  *
  * Returns values in [-pi/2, pi/2].
  *
@@ -183,11 +184,11 @@ template <typename T> auto arccos(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with atan(x[i]) for each element.
  */
-template <typename T> auto arctan(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto arctan(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::atan(v); });
 }
 
-/* @brief Element-wise arc tangent of x1/x2 choosing the quadrant correctly.
+/** @brief Element-wise arc tangent of x1/x2 choosing the quadrant correctly.
  *
  * The four quadrants are distinguished by the signs of both
  * arguments. For real inputs, the result is in [-pi, pi].
@@ -198,8 +199,8 @@ template <typename T> auto arctan(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x2  x-coordinate array.
  * @return    Ndarray<std::common_type_t<T, U>> with atan2(x1[i], x2[i]).
  */
-template <typename T, typename U>
-auto arctan2(const Ndarray<T> &x1, const Ndarray<U> &x2)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto arctan2(const Ndarray<T> &x1, const Ndarray<U> &x2)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   return detail::ufunc_binary(x1, x2, [](const T &y, const U &x) {
@@ -207,7 +208,7 @@ auto arctan2(const Ndarray<T> &x1, const Ndarray<U> &x2)
   });
 }
 
-/* @brief Given sides of a right triangle, return its hypotenuse.
+/** @brief Given sides of a right triangle, return its hypotenuse.
  *
  * Computes sqrt(x1^2 + x2^2) in a numerically stable way.
  *
@@ -217,8 +218,8 @@ auto arctan2(const Ndarray<T> &x1, const Ndarray<U> &x2)
  * @param x2  Second side array.
  * @return    Ndarray<std::common_type_t<T, U>> with hypot(x1[i], x2[i]).
  */
-template <typename T, typename U>
-auto hypot(const Ndarray<T> &x1, const Ndarray<U> &x2)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto hypot(const Ndarray<T> &x1, const Ndarray<U> &x2)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
@@ -226,47 +227,47 @@ auto hypot(const Ndarray<T> &x1, const Ndarray<U> &x2)
   });
 }
 
-/* @brief Convert angles from radians to degrees.
+/** @brief Convert angles from radians to degrees.
  *
  * @tparam T  Element type.
  * @param x   Input array in radians.
  * @return    Ndarray<T> with degrees(x[i]).
  */
-template <typename T> auto degrees(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto degrees(const Ndarray<T> &x) -> Ndarray<T> {
   constexpr double rad_to_deg = 180.0 / 3.14159265358979323846;
   return detail::ufunc_unary(
       x, [](const T &v) { return static_cast<T>(v * rad_to_deg); });
 }
 
-/* @brief Convert angles from degrees to radians.
+/** @brief Convert angles from degrees to radians.
  *
  * @tparam T  Element type.
  * @param x   Input array in degrees.
  * @return    Ndarray<T> with radians(x[i]).
  */
-template <typename T> auto radians(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto radians(const Ndarray<T> &x) -> Ndarray<T> {
   constexpr double deg_to_rad = 3.14159265358979323846 / 180.0;
   return detail::ufunc_unary(
       x, [](const T &v) { return static_cast<T>(v * deg_to_rad); });
 }
 
-/* @brief Alias for degrees().
+/** @brief Alias for degrees().
  *
  * @tparam T  Element type.
  * @param x   Input array in radians.
  * @return    Ndarray<T> with degrees(x[i]).
  */
-template <typename T> auto rad2deg(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto rad2deg(const Ndarray<T> &x) -> Ndarray<T> {
   return degrees(x);
 }
 
-/* @brief Alias for radians().
+/** @brief Alias for radians().
  *
  * @tparam T  Element type.
  * @param x   Input array in degrees.
  * @return    Ndarray<T> with radians(x[i]).
  */
-template <typename T> auto deg2rad(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto deg2rad(const Ndarray<T> &x) -> Ndarray<T> {
   return radians(x);
 }
 
@@ -275,47 +276,47 @@ template <typename T> auto deg2rad(const Ndarray<T> &x) -> Ndarray<T> {
 // Reference: numpy-reference/reference/generated/numpy.sinh.html (etc.)
 // =================================================================
 
-/* @brief Hyperbolic sine, element-wise.
+/** @brief Hyperbolic sine, element-wise.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with sinh(x[i]).
  */
-template <typename T> auto sinh(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto sinh(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::sinh(v); });
 }
 
-/* @brief Hyperbolic cosine, element-wise.
+/** @brief Hyperbolic cosine, element-wise.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with cosh(x[i]).
  */
-template <typename T> auto cosh(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto cosh(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::cosh(v); });
 }
 
-/* @brief Hyperbolic tangent, element-wise.
+/** @brief Hyperbolic tangent, element-wise.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with tanh(x[i]).
  */
-template <typename T> auto tanh(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto tanh(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::tanh(v); });
 }
 
-/* @brief Inverse hyperbolic sine, element-wise.
+/** @brief Inverse hyperbolic sine, element-wise.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with asinh(x[i]).
  */
-template <typename T> auto arcsinh(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto arcsinh(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::asinh(v); });
 }
 
-/* @brief Inverse hyperbolic cosine, element-wise.
+/** @brief Inverse hyperbolic cosine, element-wise.
  *
  * Domain: x >= 1. For real inputs < 1, the result is NaN.
  *
@@ -323,11 +324,11 @@ template <typename T> auto arcsinh(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with acosh(x[i]).
  */
-template <typename T> auto arccosh(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto arccosh(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::acosh(v); });
 }
 
-/* @brief Inverse hyperbolic tangent, element-wise.
+/** @brief Inverse hyperbolic tangent, element-wise.
  *
  * Domain: |x| < 1. For |x| >= 1, the result is NaN or inf.
  *
@@ -335,7 +336,7 @@ template <typename T> auto arccosh(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with atanh(x[i]).
  */
-template <typename T> auto arctanh(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto arctanh(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::atanh(v); });
 }
 
@@ -344,17 +345,17 @@ template <typename T> auto arctanh(const Ndarray<T> &x) -> Ndarray<T> {
 // Reference: numpy-reference/reference/generated/numpy.exp.html (etc.)
 // =================================================================
 
-/* @brief Calculate the exponential of all elements.
+/** @brief Calculate the exponential of all elements.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with exp(x[i]).
  */
-template <typename T> auto exp(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto exp(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::exp(v); });
 }
 
-/* @brief Calculate exp(x) - 1 for all elements.
+/** @brief Calculate exp(x) - 1 for all elements.
  *
  * More accurate than exp(x) - 1 for small x.
  *
@@ -362,21 +363,21 @@ template <typename T> auto exp(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with expm1(x[i]).
  */
-template <typename T> auto expm1(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto expm1(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::expm1(v); });
 }
 
-/* @brief Calculate 2**x for all elements.
+/** @brief Calculate 2**x for all elements.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with 2^x[i].
  */
-template <typename T> auto exp2(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto exp2(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::exp2(v); });
 }
 
-/* @brief Natural logarithm, element-wise.
+/** @brief Natural logarithm, element-wise.
  *
  * For x <= 0, the result is NaN (or -inf for x == 0).
  *
@@ -384,31 +385,31 @@ template <typename T> auto exp2(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with log(x[i]).
  */
-template <typename T> auto log(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto log(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::log(v); });
 }
 
-/* @brief Base-10 logarithm, element-wise.
+/** @brief Base-10 logarithm, element-wise.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with log10(x[i]).
  */
-template <typename T> auto log10(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto log10(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::log10(v); });
 }
 
-/* @brief Base-2 logarithm, element-wise.
+/** @brief Base-2 logarithm, element-wise.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with log2(x[i]).
  */
-template <typename T> auto log2(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto log2(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::log2(v); });
 }
 
-/* @brief Calculate log(1 + x) for all elements.
+/** @brief Calculate log(1 + x) for all elements.
  *
  * More accurate than log(1 + x) for small x.
  *
@@ -416,11 +417,11 @@ template <typename T> auto log2(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with log1p(x[i]).
  */
-template <typename T> auto log1p(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto log1p(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::log1p(v); });
 }
 
-/* @brief Non-negative square root, element-wise.
+/** @brief Non-negative square root, element-wise.
  *
  * For negative real inputs, the result is NaN. For complex
  * inputs, the principal square root is returned.
@@ -429,11 +430,11 @@ template <typename T> auto log1p(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with sqrt(x[i]).
  */
-template <typename T> auto sqrt(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto sqrt(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::sqrt(v); });
 }
 
-/* @brief Cube root, element-wise.
+/** @brief Cube root, element-wise.
  *
  * For real inputs, the real cube root is returned (including
  * for negative inputs).
@@ -442,21 +443,21 @@ template <typename T> auto sqrt(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with cbrt(x[i]).
  */
-template <typename T> auto cbrt(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto cbrt(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::cbrt(v); });
 }
 
-/* @brief Element-wise square.
+/** @brief Element-wise square.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with x[i]^2.
  */
-template <typename T> auto square(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto square(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return v * v; });
 }
 
-/* @brief First array elements raised to powers from second array, element-wise.
+/** @brief First array elements raised to powers from second array, element-wise.
  *
  * For integer exponents, the result is exact (no floating-point
  * rounding in the exponentiation itself). For non-integer
@@ -468,8 +469,8 @@ template <typename T> auto square(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x2  Exponent array.
  * @return    Ndarray<std::common_type_t<T, U>> with x1[i]^x2[i].
  */
-template <typename T, typename U>
-auto power(const Ndarray<T> &x1, const Ndarray<U> &x2)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto power(const Ndarray<T> &x1, const Ndarray<U> &x2)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   return detail::ufunc_binary(x1, x2, [](const T &base, const U &exp) {
@@ -482,7 +483,7 @@ auto power(const Ndarray<T> &x1, const Ndarray<U> &x2)
 // Reference: numpy-reference/reference/generated/numpy.floor.html (etc.)
 // =================================================================
 
-/* @brief Return the floor of the input, element-wise.
+/** @brief Return the floor of the input, element-wise.
  *
  * The floor is the largest integer <= x.
  *
@@ -490,11 +491,11 @@ auto power(const Ndarray<T> &x1, const Ndarray<U> &x2)
  * @param x   Input array.
  * @return    Ndarray<T> with floor(x[i]).
  */
-template <typename T> auto floor(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto floor(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::floor(v); });
 }
 
-/* @brief Return the ceiling of the input, element-wise.
+/** @brief Return the ceiling of the input, element-wise.
  *
  * The ceiling is the smallest integer >= x.
  *
@@ -502,11 +503,11 @@ template <typename T> auto floor(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with ceil(x[i]).
  */
-template <typename T> auto ceil(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto ceil(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::ceil(v); });
 }
 
-/* @brief Return the truncated value of the input, element-wise.
+/** @brief Return the truncated value of the input, element-wise.
  *
  * Truncation rounds toward zero.
  *
@@ -514,11 +515,11 @@ template <typename T> auto ceil(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with trunc(x[i]).
  */
-template <typename T> auto trunc(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto trunc(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::trunc(v); });
 }
 
-/* @brief Round to nearest integer, element-wise.
+/** @brief Round to nearest integer, element-wise.
  *
  * Uses half-to-even rounding (banker's rounding), matching
  * numpy.round semantics.
@@ -527,7 +528,7 @@ template <typename T> auto trunc(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with rint(x[i]).
  */
-template <typename T> auto rint(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto rint(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::rint(v); });
 }
 
@@ -536,7 +537,7 @@ template <typename T> auto rint(const Ndarray<T> &x) -> Ndarray<T> {
 // Reference: numpy-reference/reference/generated/numpy.absolute.html (etc.)
 // =================================================================
 
-/* @brief Calculate the absolute value element-wise.
+/** @brief Calculate the absolute value element-wise.
  *
  * For complex types, returns the magnitude. For real types,
  * returns the absolute value.
@@ -545,31 +546,31 @@ template <typename T> auto rint(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with abs(x[i]).
  */
-template <typename T> auto absolute(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto absolute(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::abs(v); });
 }
 
-/* @brief Alias for absolute().
+/** @brief Alias for absolute().
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with abs(x[i]).
  */
-template <typename T> auto abs(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto abs(const Ndarray<T> &x) -> Ndarray<T> {
   return absolute(x);
 }
 
-/* @brief Alias for absolute().
+/** @brief Alias for absolute().
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with abs(x[i]).
  */
-template <typename T> auto fabs(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto fabs(const Ndarray<T> &x) -> Ndarray<T> {
   return absolute(x);
 }
 
-/* @brief Returns element-wise indication of the sign.
+/** @brief Returns element-wise indication of the sign.
  *
  * sign(x) = -1 if x < 0, 0 if x == 0, 1 if x > 0.
  *
@@ -577,7 +578,7 @@ template <typename T> auto fabs(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Ndarray<T> with sign(x[i]).
  */
-template <typename T> auto sign(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto sign(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) {
     if (v > T{0})
       return T{1};
@@ -587,7 +588,7 @@ template <typename T> auto sign(const Ndarray<T> &x) -> Ndarray<T> {
   });
 }
 
-/* @brief Element-wise maximum of array elements.
+/** @brief Element-wise maximum of array elements.
  *
  * @tparam T  Element type of x1.
  * @tparam U  Element type of x2.
@@ -595,8 +596,8 @@ template <typename T> auto sign(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x2  Second input array.
  * @return    Ndarray<std::common_type_t<T, U>> with max(x1[i], x2[i]).
  */
-template <typename T, typename U>
-auto maximum(const Ndarray<T> &x1, const Ndarray<U> &x2)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto maximum(const Ndarray<T> &x1, const Ndarray<U> &x2)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
@@ -604,7 +605,7 @@ auto maximum(const Ndarray<T> &x1, const Ndarray<U> &x2)
   });
 }
 
-/* @brief Element-wise minimum of array elements.
+/** @brief Element-wise minimum of array elements.
  *
  * @tparam T  Element type of x1.
  * @tparam U  Element type of x2.
@@ -612,8 +613,8 @@ auto maximum(const Ndarray<T> &x1, const Ndarray<U> &x2)
  * @param x2  Second input array.
  * @return    Ndarray<std::common_type_t<T, U>> with min(x1[i], x2[i]).
  */
-template <typename T, typename U>
-auto minimum(const Ndarray<T> &x1, const Ndarray<U> &x2)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto minimum(const Ndarray<T> &x1, const Ndarray<U> &x2)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
@@ -621,7 +622,7 @@ auto minimum(const Ndarray<T> &x1, const Ndarray<U> &x2)
   });
 }
 
-/* @brief Element-wise maximum, propagating NaNs.
+/** @brief Element-wise maximum, propagating NaNs.
  *
  * Unlike maximum(), if either element is NaN, the result is NaN.
  *
@@ -631,8 +632,8 @@ auto minimum(const Ndarray<T> &x1, const Ndarray<U> &x2)
  * @param x2  Second input array.
  * @return    Ndarray<std::common_type_t<T, U>>.
  */
-template <typename T, typename U>
-auto fmax(const Ndarray<T> &x1, const Ndarray<U> &x2)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto fmax(const Ndarray<T> &x1, const Ndarray<U> &x2)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
@@ -640,7 +641,7 @@ auto fmax(const Ndarray<T> &x1, const Ndarray<U> &x2)
   });
 }
 
-/* @brief Element-wise minimum, propagating NaNs.
+/** @brief Element-wise minimum, propagating NaNs.
  *
  * Unlike minimum(), if either element is NaN, the result is NaN.
  *
@@ -650,8 +651,8 @@ auto fmax(const Ndarray<T> &x1, const Ndarray<U> &x2)
  * @param x2  Second input array.
  * @return    Ndarray<std::common_type_t<T, U>>.
  */
-template <typename T, typename U>
-auto fmin(const Ndarray<T> &x1, const Ndarray<U> &x2)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto fmin(const Ndarray<T> &x1, const Ndarray<U> &x2)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
@@ -659,7 +660,7 @@ auto fmin(const Ndarray<T> &x1, const Ndarray<U> &x2)
   });
 }
 
-/* @brief Return the element-wise remainder of division.
+/** @brief Return the element-wise remainder of division.
  *
  * Uses std::fmod for floating-point and the C % operator for
  * integral types. The result has the same sign as the divisor.
@@ -670,8 +671,8 @@ auto fmin(const Ndarray<T> &x1, const Ndarray<U> &x2)
  * @param x2  Divisor array.
  * @return    Ndarray<std::common_type_t<T, U>> with x1[i] % x2[i].
  */
-template <typename T, typename U>
-auto fmod(const Ndarray<T> &x1, const Ndarray<U> &x2)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto fmod(const Ndarray<T> &x1, const Ndarray<U> &x2)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
@@ -679,7 +680,7 @@ auto fmod(const Ndarray<T> &x1, const Ndarray<U> &x2)
   });
 }
 
-/* @brief Return element-wise remainder of division.
+/** @brief Return element-wise remainder of division.
  *
  * Uses std::remainder (IEEE 754 remainder), which rounds to
  * the nearest integer rather than truncating toward zero.
@@ -690,8 +691,8 @@ auto fmod(const Ndarray<T> &x1, const Ndarray<U> &x2)
  * @param x2  Divisor array.
  * @return    Ndarray<std::common_type_t<T, U>> with remainder(x1[i], x2[i]).
  */
-template <typename T, typename U>
-auto remainder(const Ndarray<T> &x1, const Ndarray<U> &x2)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto remainder(const Ndarray<T> &x1, const Ndarray<U> &x2)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
@@ -699,7 +700,7 @@ auto remainder(const Ndarray<T> &x1, const Ndarray<U> &x2)
   });
 }
 
-/* @brief Alias for remainder().
+/** @brief Alias for remainder().
  *
  * @tparam T  Element type of x1.
  * @tparam U  Element type of x2.
@@ -707,13 +708,13 @@ auto remainder(const Ndarray<T> &x1, const Ndarray<U> &x2)
  * @param x2  Divisor array.
  * @return    Ndarray<std::common_type_t<T, U>> with remainder(x1[i], x2[i]).
  */
-template <typename T, typename U>
-auto mod(const Ndarray<T> &x1, const Ndarray<U> &x2)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto mod(const Ndarray<T> &x1, const Ndarray<U> &x2)
     -> Ndarray<std::common_type_t<T, U>> {
   return remainder(x1, x2);
 }
 
-/* @brief Return the reciprocal of the argument, element-wise.
+/** @brief Return the reciprocal of the argument, element-wise.
  *
  * Computes 1/x[i] for each element. Division by zero
  * produces inf or -inf (for non-zero numerator) or NaN
@@ -723,11 +724,11 @@ auto mod(const Ndarray<T> &x1, const Ndarray<U> &x2)
  * @param x   Input array.
  * @return    Ndarray<T> with 1/x[i].
  */
-template <typename T> auto reciprocal(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto reciprocal(const Ndarray<T> &x) -> Ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return T{1} / v; });
 }
 
-/* @brief Numerical positive, element-wise.
+/** @brief Numerical positive, element-wise.
  *
  * Returns a copy of the input array.
  *
@@ -735,17 +736,17 @@ template <typename T> auto reciprocal(const Ndarray<T> &x) -> Ndarray<T> {
  * @param x   Input array.
  * @return    Copy of x.
  */
-template <typename T> auto positive(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto positive(const Ndarray<T> &x) -> Ndarray<T> {
   return x.copy();
 }
 
-/* @brief Numerical negative, element-wise.
+/** @brief Numerical negative, element-wise.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    Ndarray<T> with -x[i].
  */
-template <typename T> auto negative(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto negative(const Ndarray<T> &x) -> Ndarray<T> {
   return -x;
 }
 
@@ -754,7 +755,7 @@ template <typename T> auto negative(const Ndarray<T> &x) -> Ndarray<T> {
 // Reference: numpy-reference/reference/generated/numpy.clip.html (etc.)
 // =================================================================
 
-/* @brief Clip values to [a_min, a_max].
+/** @brief Clip values to [a_min, a_max].
  *
  * Values below a_min are set to a_min; values above a_max
  * are set to a_max. Elements within the range are unchanged.
@@ -765,12 +766,12 @@ template <typename T> auto negative(const Ndarray<T> &x) -> Ndarray<T> {
  * @param a_max   Upper bound.
  * @return        Ndarray<T> with clipped values.
  */
-template <typename T>
-auto clip(const Ndarray<T> &x, const T &a_min, const T &a_max) -> Ndarray<T> {
+NP_API template <typename T>
+NP_NODISCARD auto clip(const Ndarray<T> &x, const T &a_min, const T &a_max) -> Ndarray<T> {
   return x.clip(a_min, a_max);
 }
 
-/* @brief Replace NaN with zero and infinity with large finite numbers.
+/** @brief Replace NaN with zero and infinity with large finite numbers.
  *
  * @tparam T       Element type.
  * @param x        Input array.
@@ -779,8 +780,8 @@ auto clip(const Ndarray<T> &x, const T &a_min, const T &a_max) -> Ndarray<T> {
  * @param neginf_val Replacement for -inf (default: lowest finite value).
  * @return         Ndarray<T> with replaced values.
  */
-template <typename T>
-auto nan_to_num(const Ndarray<T> &x, const T &nan_val = T{0},
+NP_API template <typename T>
+NP_NODISCARD auto nan_to_num(const Ndarray<T> &x, const T &nan_val = T{0},
                 const T &posinf_val = std::numeric_limits<T>::max(),
                 const T &neginf_val = std::numeric_limits<T>::lowest())
     -> Ndarray<T> {
@@ -794,7 +795,7 @@ auto nan_to_num(const Ndarray<T> &x, const T &nan_val = T{0},
   });
 }
 
-/* @brief Return (x1 * x2 + x3) element-wise.
+/** @brief Return (x1 * x2 + x3) element-wise.
  *
  * Fused multiply-add with broadcasting. All three arrays
  * must be broadcast-compatible.
@@ -807,8 +808,8 @@ auto nan_to_num(const Ndarray<T> &x, const T &nan_val = T{0},
  * @param x3  Addend.
  * @return    Ndarray<std::common_type_t<T, U, V>>.
  */
-template <typename T, typename U, typename V>
-auto fma(const Ndarray<T> &x1, const Ndarray<U> &x2, const Ndarray<V> &x3)
+NP_API template <typename T, typename U, typename V>
+NP_NODISCARD auto fma(const Ndarray<T> &x1, const Ndarray<U> &x2, const Ndarray<V> &x3)
     -> Ndarray<std::common_type_t<T, U, V>> {
   using R = std::common_type_t<T, U, V>;
   // Broadcast all three arrays

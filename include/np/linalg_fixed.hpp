@@ -55,6 +55,7 @@
 // The fixed (compile-time) path reuses NormOrd and SlogdetResult from the
 // dynamic path, so it must be self-contained rather than relying on np.hpp
 // including linalg.hpp first.
+#include "api_macros.hpp"
 #include "linalg.hpp"
 
 namespace np::linalg {
@@ -663,8 +664,8 @@ template <typename R, int N, int K> struct LstsqResult {
 
 // Trace of a square matrix: sum of the diagonal.
 // Reference: numpy-reference/reference/generated/numpy.trace.html
-template <typename T, int N>
-constexpr auto trace(const ndarray<T, N, N> &a) ->
+NP_API template <typename T, int N>
+NP_NODISCARD constexpr auto trace(const ndarray<T, N, N> &a) ->
     typename np::detail::fixed::float_t<T> {
   using R = typename np::detail::fixed::float_t<T>;
   R acc{};
@@ -677,9 +678,9 @@ constexpr auto trace(const ndarray<T, N, N> &a) ->
 // Determinant of a square matrix, accumulated in log space to avoid
 // overflow/underflow as numpy does; exactly singular input yields 0.
 // Reference: numpy-reference/reference/generated/numpy.linalg.det.html
-template <typename T, int N>
+NP_API template <typename T, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto det(const ndarray<T, N, N> &a) ->
+NP_NODISCARD constexpr auto det(const ndarray<T, N, N> &a) ->
     typename np::detail::fixed::float_t<T> {
   using R = typename np::detail::fixed::float_t<T>;
   const auto d = detail::fixed::lu_factor(a);
@@ -703,9 +704,9 @@ constexpr auto det(const ndarray<T, N, N> &a) ->
 // Sign and log-absolute-determinant, robust against overflow; a
 // singular matrix yields sign == 0 and logabsdet == -inf.
 // Reference: numpy-reference/reference/generated/numpy.linalg.slogdet.html
-template <typename T, int N>
+NP_API template <typename T, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto slogdet(const ndarray<T, N, N> &a)
+NP_NODISCARD constexpr auto slogdet(const ndarray<T, N, N> &a)
     -> SlogdetResult<typename np::detail::fixed::float_t<T>> {
   using R = typename np::detail::fixed::float_t<T>;
   const auto d = detail::fixed::lu_factor(a);
@@ -729,9 +730,9 @@ constexpr auto slogdet(const ndarray<T, N, N> &a)
 // LU factorization. Throws np::exceptions::LinAlgError when a is
 // exactly singular.
 // Reference: numpy-reference/reference/generated/numpy.linalg.inv.html
-template <typename T, int N>
+NP_API template <typename T, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto inv(const ndarray<T, N, N> &a)
+NP_NODISCARD constexpr auto inv(const ndarray<T, N, N> &a)
     -> ndarray<typename np::detail::fixed::float_t<T>, N, N> {
   const auto d = detail::fixed::lu_factor(a);
   if (d.singular) {
@@ -744,9 +745,9 @@ constexpr auto inv(const ndarray<T, N, N> &a)
 // right-hand side, numpy 2.0 semantics). Throws
 // np::exceptions::LinAlgError when a is exactly singular.
 // Reference: numpy-reference/reference/generated/numpy.linalg.solve.html
-template <typename T, typename U, int N>
+NP_API template <typename T, typename U, int N>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-constexpr auto solve(const ndarray<T, N, N> &a, const ndarray<U, N> &b)
+NP_NODISCARD constexpr auto solve(const ndarray<T, N, N> &a, const ndarray<U, N> &b)
     -> ndarray<std::common_type_t<typename np::detail::fixed::float_t<T>,
                                   typename np::detail::fixed::float_t<U>>,
                N> {
@@ -766,9 +767,9 @@ constexpr auto solve(const ndarray<T, N, N> &a, const ndarray<U, N> &b)
 // Solve a x = b with a 2-D b: a stack of right-hand sides along the
 // columns, one solve per column (numpy 2.0 semantics).
 // Reference: numpy-reference/reference/generated/numpy.linalg.solve.html
-template <typename T, typename U, int N, int M>
+NP_API template <typename T, typename U, int N, int M>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-constexpr auto solve(const ndarray<T, N, N> &a, const ndarray<U, N, M> &b)
+NP_NODISCARD constexpr auto solve(const ndarray<T, N, N> &a, const ndarray<U, N, M> &b)
     -> ndarray<std::common_type_t<typename np::detail::fixed::float_t<T>,
                                   typename np::detail::fixed::float_t<U>>,
                N, M> {
@@ -797,9 +798,9 @@ constexpr auto solve(const ndarray<T, N, N> &a, const ndarray<U, N, M> &b)
 // np::exceptions::LinAlgError when the matrix is not positive definite
 // (a zero or negative pivot). Symmetry is not validated, as in numpy.
 // Reference: numpy-reference/reference/generated/numpy.linalg.cholesky.html
-template <typename T, int N>
+NP_API template <typename T, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto cholesky(const ndarray<T, N, N> &a, bool upper = false)
+NP_NODISCARD constexpr auto cholesky(const ndarray<T, N, N> &a, bool upper = false)
     -> ndarray<typename np::detail::fixed::float_t<T>, N, N> {
   using R = typename np::detail::fixed::float_t<T>;
   ndarray<R, N, N> l{};
@@ -828,9 +829,9 @@ constexpr auto cholesky(const ndarray<T, N, N> &a, bool upper = false)
 // (throws np::exceptions::LinAlgError when singular). Integral input
 // promotes to double for every n, matching the dynamic path.
 // Reference: numpy-reference/reference/generated/numpy.linalg.matrix_power.html
-template <typename T, int N>
+NP_API template <typename T, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto matrix_power(const ndarray<T, N, N> &a, long long n)
+NP_NODISCARD constexpr auto matrix_power(const ndarray<T, N, N> &a, long long n)
     -> ndarray<typename np::detail::fixed::float_t<T>, N, N> {
   using R = typename np::detail::fixed::float_t<T>;
   ndarray<R, N, N> result{};
@@ -863,9 +864,9 @@ constexpr auto matrix_power(const ndarray<T, N, N> &a, long long n)
 
 // Singular values (descending) of a 2-D array.
 // Reference: numpy-reference/reference/generated/numpy.linalg.svdvals.html
-template <typename T, int M, int N>
+NP_API template <typename T, int M, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto svdvals(const ndarray<T, M, N> &a)
+NP_NODISCARD constexpr auto svdvals(const ndarray<T, M, N> &a)
     -> ndarray<typename np::detail::fixed::float_t<T>, (M < N ? M : N)> {
   using R = typename np::detail::fixed::float_t<T>;
   constexpr int K = M < N ? M : N;
@@ -903,9 +904,9 @@ constexpr auto svdvals(const ndarray<T, M, N> &a)
 // with K = min(M, N) columns. Throws np::exceptions::LinAlgError when
 // the Jacobi sweeps do not converge.
 // Reference: numpy-reference/reference/generated/numpy.linalg.svd.html
-template <bool Full = true, typename T, int M, int N>
+NP_API template <bool Full = true, typename T, int M, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto svd(const ndarray<T, M, N> &a) {
+NP_NODISCARD constexpr auto svd(const ndarray<T, M, N> &a) {
   using R = typename np::detail::fixed::float_t<T>;
   constexpr int K = M < N ? M : N;
   ndarray<R, M, N> dense{};
@@ -936,9 +937,9 @@ constexpr auto svd(const ndarray<T, M, N> &a) {
 // q (M, K) and r (K, N), K = min(M, N); Reduced = false returns the
 // complete q (M, M) and r (M, N) with zeros below the diagonal.
 // Reference: numpy-reference/reference/generated/numpy.linalg.qr.html
-template <bool Reduced = true, typename T, int M, int N>
+NP_API template <bool Reduced = true, typename T, int M, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto qr(const ndarray<T, M, N> &a) {
+NP_NODISCARD constexpr auto qr(const ndarray<T, M, N> &a) {
   using R = typename np::detail::fixed::float_t<T>;
   constexpr int K = M < N ? M : N;
   ndarray<R, M, N> dense{};
@@ -972,9 +973,9 @@ constexpr auto qr(const ndarray<T, M, N> &a) {
 // SVD), plus Nuc (sum of the singular values) for matrices.
 // Reference: numpy-reference/reference/generated/numpy.linalg.norm.html
 // Throws std::invalid_argument for 'fro'/'nuc' on 1-D input.
-template <typename T, int M>
+NP_API template <typename T, int M>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto norm(const ndarray<T, M> &x, NormOrd ord = NormOrd::None) ->
+NP_NODISCARD constexpr auto norm(const ndarray<T, M> &x, NormOrd ord = NormOrd::None) ->
     typename np::detail::fixed::float_t<T> {
   using R = typename np::detail::fixed::float_t<T>;
   if (ord == NormOrd::Fro || ord == NormOrd::Nuc) {
@@ -1039,9 +1040,9 @@ constexpr auto norm(const ndarray<T, M> &x, NormOrd ord = NormOrd::None) ->
 }
 
 /** @brief Matrix norm (numpy.linalg.norm, 2-D). */
-template <typename T, int M, int N>
+NP_API template <typename T, int M, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto norm(const ndarray<T, M, N> &x, NormOrd ord = NormOrd::None) ->
+NP_NODISCARD constexpr auto norm(const ndarray<T, M, N> &x, NormOrd ord = NormOrd::None) ->
     typename np::detail::fixed::float_t<T> {
   using R = typename np::detail::fixed::float_t<T>;
   constexpr int K = M < N ? M : N;
@@ -1105,9 +1106,9 @@ constexpr auto norm(const ndarray<T, M, N> &x, NormOrd ord = NormOrd::None) ->
 // tolerance. With the default tol = S.max() * max(M, N) * eps (the
 // Numerical-Recipes / MATLAB threshold), matching numpy.
 // Reference: numpy-reference/reference/generated/numpy.linalg.matrix_rank.html
-template <typename T, int M, int N>
+NP_API template <typename T, int M, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto matrix_rank(const ndarray<T, M, N> &a, double tol = -1.0)
+NP_NODISCARD constexpr auto matrix_rank(const ndarray<T, M, N> &a, double tol = -1.0)
     -> int {
   const auto s = svdvals(a);
   const double t = tol < 0.0 ? static_cast<double>(s[0]) *
@@ -1124,9 +1125,9 @@ constexpr auto matrix_rank(const ndarray<T, M, N> &a, double tol = -1.0)
 }
 
 /** @brief Rank of a 1-D array: 1 unless it is all zero. */
-template <typename T, int N>
+NP_API template <typename T, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto matrix_rank(const ndarray<T, N> &a) -> int {
+NP_NODISCARD constexpr auto matrix_rank(const ndarray<T, N> &a) -> int {
   for (int i = 0; i < N; ++i) {
     if (a[i] != T{0}) {
       return 1;
@@ -1139,9 +1140,9 @@ constexpr auto matrix_rank(const ndarray<T, N> &a) -> int {
 // above rcond * max(M, N) * S.max() are inverted, the rest are
 // dropped. Returns (N, M).
 // Reference: numpy-reference/reference/generated/numpy.linalg.pinv.html
-template <typename T, int M, int N>
+NP_API template <typename T, int M, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto pinv(const ndarray<T, M, N> &a, double rcond = 1e-15)
+NP_NODISCARD constexpr auto pinv(const ndarray<T, M, N> &a, double rcond = 1e-15)
     -> ndarray<typename np::detail::fixed::float_t<T>, N, M> {
   using R = typename np::detail::fixed::float_t<T>;
   constexpr int K = M < N ? M : N;
@@ -1168,9 +1169,9 @@ constexpr auto pinv(const ndarray<T, M, N> &a, double rcond = 1e-15)
 // norm(inv(a), ord), throwing np::exceptions::LinAlgError for
 // exactly singular a.
 // Reference: numpy-reference/reference/generated/numpy.linalg.cond.html
-template <typename T, int N>
+NP_API template <typename T, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto cond(const ndarray<T, N, N> &a) ->
+NP_NODISCARD constexpr auto cond(const ndarray<T, N, N> &a) ->
     typename np::detail::fixed::float_t<T> {
   using R = typename np::detail::fixed::float_t<T>;
   const auto s = svdvals(a);
@@ -1179,9 +1180,9 @@ constexpr auto cond(const ndarray<T, N, N> &a) ->
 }
 
 /** @brief Condition number for an explicit order (numpy.linalg.cond). */
-template <typename T, int N>
+NP_API template <typename T, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto cond(const ndarray<T, N, N> &a, NormOrd ord) ->
+NP_NODISCARD constexpr auto cond(const ndarray<T, N, N> &a, NormOrd ord) ->
     typename np::detail::fixed::float_t<T> {
   using R = typename np::detail::fixed::float_t<T>;
   if (ord == NormOrd::Two || ord == NormOrd::NegTwo) {
@@ -1198,9 +1199,9 @@ constexpr auto cond(const ndarray<T, N, N> &a, NormOrd ord) ->
 // Symmetric eigendecomposition (numpy.linalg.eigh): eigenvalues in
 // ascending order with orthonormal eigenvectors, via cyclic Jacobi.
 // Reference: numpy-reference/reference/generated/numpy.linalg.eigh.html
-template <typename T, int N>
+NP_API template <typename T, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto eigh(const ndarray<T, N, N> &a)
+NP_NODISCARD constexpr auto eigh(const ndarray<T, N, N> &a)
     -> fixed::EighResult<typename np::detail::fixed::float_t<T>, N> {
   using R = typename np::detail::fixed::float_t<T>;
   ndarray<R, N, N> dense{};
@@ -1214,18 +1215,18 @@ constexpr auto eigh(const ndarray<T, N, N> &a)
 }
 
 /** @brief Eigenvalues only (numpy.linalg.eigvalsh). */
-template <typename T, int N>
+NP_API template <typename T, int N>
   requires(!np::detail::is_complex_v<T>)
-constexpr auto eigvalsh(const ndarray<T, N, N> &a)
+NP_NODISCARD constexpr auto eigvalsh(const ndarray<T, N, N> &a)
     -> ndarray<typename np::detail::fixed::float_t<T>, N> {
   return eigh(a).w;
 }
 
 // Cross product of two 3-element vectors.
 // Reference: numpy-reference/reference/generated/numpy.linalg.cross.html
-template <typename T, typename U>
+NP_API template <typename T, typename U>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-constexpr auto cross(const ndarray<T, 3> &a, const ndarray<U, 3> &b)
+NP_NODISCARD constexpr auto cross(const ndarray<T, 3> &a, const ndarray<U, 3> &b)
     -> ndarray<std::common_type_t<T, U>, 3> {
   using R = std::common_type_t<T, U>;
   ndarray<R, 3> out{};
@@ -1241,9 +1242,9 @@ constexpr auto cross(const ndarray<T, 3> &a, const ndarray<U, 3> &b)
 // Cross product of M rows of 3-element vectors (axis = last, which is
 // numpy's default).
 // Reference: numpy-reference/reference/generated/numpy.linalg.cross.html
-template <typename T, typename U, int M>
+NP_API template <typename T, typename U, int M>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-constexpr auto cross(const ndarray<T, M, 3> &a, const ndarray<U, M, 3> &b)
+NP_NODISCARD constexpr auto cross(const ndarray<T, M, 3> &a, const ndarray<U, M, 3> &b)
     -> ndarray<std::common_type_t<T, U>, M, 3> {
   using R = std::common_type_t<T, U>;
   ndarray<R, M, 3> out{};
@@ -1264,9 +1265,9 @@ constexpr auto cross(const ndarray<T, M, 3> &a, const ndarray<U, M, 3> &b)
 
 // Outer product of two 1-D arrays (i, j) -> a[i] * b[j].
 // Reference: numpy-reference/reference/generated/numpy.outer.html
-template <typename T, typename U, int K, int L>
+NP_API template <typename T, typename U, int K, int L>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-constexpr auto outer(const ndarray<T, K> &a, const ndarray<U, L> &b)
+NP_NODISCARD constexpr auto outer(const ndarray<T, K> &a, const ndarray<U, L> &b)
     -> ndarray<std::common_type_t<T, U>, K, L> {
   using R = std::common_type_t<T, U>;
   ndarray<R, K, L> out{};
@@ -1280,18 +1281,18 @@ constexpr auto outer(const ndarray<T, K> &a, const ndarray<U, L> &b)
 
 // Inner product of two 1-D arrays -> scalar (numpy.linalg.inner).
 // Reference: numpy-reference/reference/generated/numpy.linalg.inner.html
-template <typename T, typename U, int N>
+NP_API template <typename T, typename U, int N>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-constexpr auto inner(const ndarray<T, N> &a, const ndarray<U, N> &b) {
+NP_NODISCARD constexpr auto inner(const ndarray<T, N> &a, const ndarray<U, N> &b) {
   return dot(a, b);
 }
 
 // Inner product of two 2-D arrays: contracts the last axis, the
 // output is (N, M) (numpy.linalg.inner).
 // Reference: numpy-reference/reference/generated/numpy.linalg.inner.html
-template <typename T, typename U, int N, int K, int M>
+NP_API template <typename T, typename U, int N, int K, int M>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-constexpr auto inner(const ndarray<T, N, K> &a, const ndarray<U, M, K> &b)
+NP_NODISCARD constexpr auto inner(const ndarray<T, N, K> &a, const ndarray<U, M, K> &b)
     -> ndarray<std::common_type_t<T, U>, N, M> {
   using R = std::common_type_t<T, U>;
   ndarray<R, N, M> out{};
@@ -1312,9 +1313,9 @@ constexpr auto inner(const ndarray<T, N, K> &a, const ndarray<U, M, K> &b)
 // singular values above the default cutoff; s holds them descending.
 // Reference: numpy-reference/reference/generated/numpy.linalg.lstsq.html
 // Fixed-path deviations: 1-D b only, no residuals array.
-template <typename T, typename U, int M, int N>
+NP_API template <typename T, typename U, int M, int N>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-constexpr auto lstsq(const ndarray<T, M, N> &a, const ndarray<U, M> &b)
+NP_NODISCARD constexpr auto lstsq(const ndarray<T, M, N> &a, const ndarray<U, M> &b)
     -> fixed::LstsqResult<
         std::common_type_t<typename np::detail::fixed::float_t<T>,
                            typename np::detail::fixed::float_t<U>>,

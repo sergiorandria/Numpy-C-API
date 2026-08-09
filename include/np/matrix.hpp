@@ -22,11 +22,12 @@
 #include <type_traits>
 #include <vector>
 
+#include "api_macros.hpp"
 #include "ndarray.hpp"
 
 namespace np {
 
-/* @brief 2D matrix: a Ndarray guaranteed to have ndim == 2.
+/** @brief 2D matrix: a Ndarray guaranteed to have ndim == 2.
  *
  * Inherits from Ndarray<T> and adds (i, j) element access and
  * matrix-specific factories. The base class handles all shape
@@ -38,7 +39,7 @@ template <typename T> class Matrix : public Ndarray<T> {
 public:
   using Base = Ndarray<T>;
 
-  /* @brief r x c matrix filled with `fill`.
+  /** @brief r x c matrix filled with `fill`.
    *
    * @param rows  Number of rows.
    * @param cols  Number of columns.
@@ -48,7 +49,7 @@ public:
       : Base(std::vector<int>{static_cast<int>(rows), static_cast<int>(cols)},
              dtype_of<T>, fill) {}
 
-  /* @brief Build from nested row initializer lists.
+  /** @brief Build from nested row initializer lists.
    *
    * All rows must have the same length; the first row's length
    * determines the column count. Missing elements are
@@ -77,7 +78,7 @@ public:
     }
   }
 
-  /* @brief Element access without bounds checks (read/write).
+  /** @brief Element access without bounds checks (read/write).
    *
    * @param i Row index (0-based).
    * @param j Column index (0-based).
@@ -88,7 +89,7 @@ public:
     return this->data()[i * this->cols() + j];
   }
 
-  /* @brief Element access without bounds checks (read-only).
+  /** @brief Element access without bounds checks (read-only).
    *
    * @param i Row index.
    * @param j Column index.
@@ -98,7 +99,7 @@ public:
     return this->data()[i * this->cols() + j];
   }
 
-  /* @brief Number of rows.
+  /** @brief Number of rows.
    *
    * @return Number of rows in the matrix.
    */
@@ -106,7 +107,7 @@ public:
     return static_cast<std::size_t>(this->shape[0]);
   }
 
-  /* @brief Number of columns.
+  /** @brief Number of columns.
    *
    * @return Number of columns in the matrix.
    */
@@ -114,13 +115,13 @@ public:
     return static_cast<std::size_t>(this->shape[1]);
   }
 
-  /* @brief True if rows == cols.
+  /** @brief True if rows == cols.
    *
    * @return True if the matrix is square.
    */
   auto is_square() const -> bool { return this->rows() == this->cols(); }
 
-  /* @brief Matrix transposition (returns a new matrix).
+  /** @brief Matrix transposition (returns a new matrix).
    *
    * The returned matrix shares no storage with this matrix.
    * Time complexity: O(rows * cols). Space complexity: O(rows * cols).
@@ -137,7 +138,7 @@ public:
     return out;
   }
 
-  /* @brief Matrix-matrix product.
+  /** @brief Matrix-matrix product.
    *
    * Promotes element type to the common type of T and U.
    * Throws std::invalid_argument if inner dimensions don't match.
@@ -170,7 +171,7 @@ public:
     return out;
   }
 
-  /* @brief Scalar multiplication.
+  /** @brief Scalar multiplication.
    *
    * @tparam U  Scalar type.
    * @param scalar  Scalar multiplier.
@@ -188,7 +189,7 @@ public:
 
   // Factories ------------------------------------------------------
 
-  /* @brief r x c matrix of zeros.
+  /** @brief r x c matrix of zeros.
    *
    * @param rows Number of rows.
    * @param cols Number of columns.
@@ -198,7 +199,7 @@ public:
     return Matrix<T>(rows, cols, T{0});
   }
 
-  /* @brief r x c matrix of ones.
+  /** @brief r x c matrix of ones.
    *
    * @param rows Number of rows.
    * @param cols Number of columns.
@@ -208,14 +209,14 @@ public:
     return Matrix<T>(rows, cols, T{1});
   }
 
-  /* @brief n x n identity matrix.
+  /** @brief n x n identity matrix.
    *
    * @param n Size of the square identity matrix.
    * @return  Matrix<T> with ones on the main diagonal.
    */
   static auto identity(std::size_t n) -> Matrix<T> { return eye(n); }
 
-  /* @brief n x n identity matrix.
+  /** @brief n x n identity matrix.
    *
    * @param n Size of the square identity matrix.
    * @return  Matrix<T> with ones on the main diagonal.
@@ -228,7 +229,7 @@ public:
     return out;
   }
 
-  /* @brief n x m matrix with ones on the k-th diagonal.
+  /** @brief n x m matrix with ones on the k-th diagonal.
    *
    * @param n  Number of rows.
    * @param m  Number of columns.
@@ -247,7 +248,7 @@ public:
   }
 };
 
-/* @brief Scalar * Matrix.
+/** @brief Scalar * Matrix.
  *
  * @tparam T  Matrix element type.
  * @tparam U  Scalar type.
@@ -256,12 +257,12 @@ public:
  * @return        Matrix of the common type.
  */
 template <typename T, typename U>
-auto operator*(U scalar, const Matrix<T> &m)
+NP_API NP_NODISCARD auto operator*(U scalar, const Matrix<T> &m)
     -> Matrix<std::common_type_t<T, U>> {
   return m * scalar;
 }
 
-/* @brief Determinant via Gaussian elimination with partial pivoting.
+/** @brief Determinant via Gaussian elimination with partial pivoting.
  *
  * Promotes all elements to double. Time complexity: O(n^3).
  *
@@ -270,7 +271,8 @@ auto operator*(U scalar, const Matrix<T> &m)
  * @return    Determinant as double.
  * @throws    std::invalid_argument if the matrix is not square.
  */
-template <typename T> auto det(const Matrix<T> &m) -> double {
+template <typename T> NP_API NP_NODISCARD auto det(const Matrix<T> &m)
+    -> double {
   if (!m.is_square()) {
     throw std::invalid_argument("det requires a square matrix");
   }
@@ -307,7 +309,7 @@ template <typename T> auto det(const Matrix<T> &m) -> double {
   return detv;
 }
 
-/* @brief Inverse via Gauss-Jordan elimination.
+/** @brief Inverse via Gauss-Jordan elimination.
  *
  * Promotes all elements to double. Time complexity: O(n^3).
  *
@@ -316,7 +318,8 @@ template <typename T> auto det(const Matrix<T> &m) -> double {
  * @return    Inverse matrix as Matrix<double>.
  * @throws    std::invalid_argument if the matrix is not square or singular.
  */
-template <typename T> auto inverse(const Matrix<T> &m) -> Matrix<double> {
+template <typename T>
+NP_API NP_NODISCARD auto inverse(const Matrix<T> &m) -> Matrix<double> {
   if (!m.is_square()) {
     throw std::invalid_argument("inverse requires a square matrix");
   }
@@ -370,7 +373,7 @@ template <typename T> auto inverse(const Matrix<T> &m) -> Matrix<double> {
   return out;
 }
 
-/* @brief Solve A x = b via Gaussian elimination with partial pivoting.
+/** @brief Solve A x = b via Gaussian elimination with partial pivoting.
  *
  * Promotes all elements to double. Time complexity: O(n^3) for an
  * n x n system.
@@ -384,7 +387,8 @@ template <typename T> auto inverse(const Matrix<T> &m) -> Matrix<double> {
  *            incompatible, or the matrix is singular.
  */
 template <typename T, typename U>
-auto solve(const Matrix<T> &a, const Ndarray<U> &b) -> Ndarray<double> {
+NP_API NP_NODISCARD auto solve(const Matrix<T> &a, const Ndarray<U> &b)
+    -> Ndarray<double> {
   if (b.ndim() != 1) {
     throw std::invalid_argument("solve: b must be a 1D array");
   }

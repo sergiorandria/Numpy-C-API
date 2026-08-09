@@ -19,16 +19,69 @@
 #include <stdexcept>
 #include <vector>
 
+#include "api_macros.hpp"
 #include "ndarray.hpp"
 
 namespace np {
+
+// =================================================================
+// Internal helpers
+// =================================================================
+
+namespace detail {
+
+/** @brief Advance an odometer-style multi-index through `shape`.
+ *
+ * Called after every element visit so a row-major traversal visits each
+ * index once. Returns false when the index wraps past the last element
+ * (all dimensions back to zero), signalling the end of the traversal.
+ *
+ * @param idx    Multi-index to advance (in place).
+ * @param shape  Extents of each dimension.
+ * @return       true while `idx` still addresses a valid element.
+ */
+inline bool advance_multi_index(std::vector<std::size_t> &idx,
+                                const std::vector<int> &shape) noexcept {
+  for (int d = static_cast<int>(shape.size()) - 1; d >= 0; --d) {
+    const std::size_t dim = static_cast<std::size_t>(d);
+    ++idx[dim];
+    if (idx[dim] < static_cast<std::size_t>(shape[dim])) {
+      return true;
+    }
+    idx[dim] = 0;
+  }
+  return false;
+}
+
+/** @brief Insert one axis value into a source multi-index.
+ *
+ * Builds the destination index produced by np::stack: the axes before
+ * `axis` are copied from `idx_in`, the new axis gets `pos`, and the
+ * remaining axes follow.
+ */
+inline std::vector<std::size_t>
+insert_axis_index(const std::vector<std::size_t> &idx_in, int ndim, int axis,
+                  std::size_t pos) {
+  std::vector<std::size_t> out;
+  out.reserve(static_cast<std::size_t>(ndim) + 1);
+  for (int d = 0; d < axis; ++d) {
+    out.push_back(idx_in[static_cast<std::size_t>(d)]);
+  }
+  out.push_back(pos);
+  for (int d = axis; d < ndim; ++d) {
+    out.push_back(idx_in[static_cast<std::size_t>(d)]);
+  }
+  return out;
+}
+
+} // namespace detail
 
 // =================================================================
 // Concatenate
 // Reference: numpy-reference/reference/generated/numpy.concatenate.html
 // =================================================================
 
-/* @brief Join a sequence of arrays along an existing axis.
+/** @brief Join a sequence of arrays along an existing axis.
  *
  * All arrays must have the same shape except in the
  * concatenation axis. The output shape matches the input
@@ -49,8 +102,8 @@ namespace np {
  * Reference: numpy-reference/reference/generated/numpy.concatenate.html
  */
 template <typename T>
-auto concatenate(const std::vector<Ndarray<T>> &arrays, int axis = 0)
-    -> Ndarray<T> {
+NP_NODISCARD auto concatenate(const std::vector<Ndarray<T>> &arrays,
+                              int axis = 0) -> Ndarray<T> {
   if (arrays.empty()) {
     throw std::invalid_argument("concatenate: need at least one array");
   }
@@ -100,21 +153,7 @@ auto concatenate(const std::vector<Ndarray<T>> &arrays, int axis = 0)
       auto dst_idx = src_idx;
       dst_idx[axis] += offset;
       result.set(dst_idx, arr.get(src_idx));
-
-      // Increment src_idx
-      bool carry = true;
-      for (int d = ndim - 1; d >= 0 && carry; --d) {
-        ++src_idx[d];
-        if (src_idx[d] < static_cast<std::size_t>(arr.shape[d])) {
-          carry = false;
-        } else {
-          src_idx[d] = 0;
-        }
-      }
-
-      if (carry)
-        break; // All elements processed
-    } while (true);
+    } while (detail::advance_multi_index(src_idx, arr.shape));
 
     offset += axis_size;
   }
@@ -127,7 +166,7 @@ auto concatenate(const std::vector<Ndarray<T>> &arrays, int axis = 0)
 // Reference: numpy-reference/reference/generated/numpy.stack.html
 // =================================================================
 
-/* @brief Join a sequence of arrays along a new axis.
+/** @brief Join a sequence of arrays along a new axis.
  *
  * All arrays must have the same shape. The output has one
  * additional dimension compared to the inputs.
@@ -146,7 +185,8 @@ auto concatenate(const std::vector<Ndarray<T>> &arrays, int axis = 0)
  * Reference: numpy-reference/reference/generated/numpy.stack.html
  */
 template <typename T>
-auto stack(const std::vector<Ndarray<T>> &arrays, int axis = 0) -> Ndarray<T> {
+NP_API NP_NODISCARD auto stack(const std::vector<Ndarray<T>> &arrays,
+                               int axis = 0) -> Ndarray<T> {
   if (arrays.empty()) {
     throw std::invalid_argument("stack: need at least one array");
   }
@@ -186,33 +226,11 @@ auto stack(const std::vector<Ndarray<T>> &arrays, int axis = 0) -> Ndarray<T> {
   // Copy data
   for (std::size_t i = 0; i < arrays.size(); ++i) {
     std::vector<std::size_t> idx_in(ndim, 0);
-    bool done = false;
 
-    while (!done) {
-      // Build output index
-      std::vector<std::size_t> idx_out;
-      idx_out.reserve(ndim + 1);
-      for (int d = 0; d < axis; ++d) {
-        idx_out.push_back(idx_in[d]);
-      }
-      idx_out.push_back(i);
-      for (int d = axis; d < ndim; ++d) {
-        idx_out.push_back(idx_in[d]);
-      }
-
-      result.set(idx_out, arrays[i].get(idx_in));
-
-      // Increment input index
-      for (int d = ndim - 1; d >= 0; --d) {
-        if (++idx_in[d] < static_cast<std::size_t>(first.shape[d])) {
-          break;
-        }
-        idx_in[d] = 0;
-        if (d == 0) {
-          done = true;
-        }
-      }
-    }
+    do {
+      result.set(detail::insert_axis_index(idx_in, ndim, axis, i),
+                 arrays[i].get(idx_in));
+    } while (detail::advance_multi_index(idx_in, first.shape));
   }
 
   return result;
@@ -223,7 +241,7 @@ auto stack(const std::vector<Ndarray<T>> &arrays, int axis = 0) -> Ndarray<T> {
 // Reference: numpy-reference/reference/generated/numpy.vstack.html (etc.)
 // =================================================================
 
-/* @brief Stack arrays vertically (row-wise).
+/** @brief Stack arrays vertically (row-wise).
  *
  * Equivalent to concatenate(arrays, axis=0) for 2D+ arrays.
  * For 1D arrays, stacks them as rows into a 2D array.
@@ -234,7 +252,8 @@ auto stack(const std::vector<Ndarray<T>> &arrays, int axis = 0) -> Ndarray<T> {
  * @throws       std::invalid_argument if arrays is empty.
  */
 template <typename T>
-auto vstack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
+NP_API NP_NODISCARD auto vstack(const std::vector<Ndarray<T>> &arrays)
+    -> Ndarray<T> {
   if (arrays.empty()) {
     throw std::invalid_argument("vstack: need at least one array");
   }
@@ -254,7 +273,7 @@ auto vstack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
   return concatenate(reshaped, 0);
 }
 
-/* @brief Stack arrays horizontally (column-wise).
+/** @brief Stack arrays horizontally (column-wise).
  *
  * Equivalent to concatenate(arrays, axis=1) for 2D+ arrays.
  * For 1D arrays, concatenates them into a single 1D array.
@@ -265,7 +284,8 @@ auto vstack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
  * @throws       std::invalid_argument if arrays is empty.
  */
 template <typename T>
-auto hstack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
+NP_API NP_NODISCARD auto hstack(const std::vector<Ndarray<T>> &arrays)
+    -> Ndarray<T> {
   if (arrays.empty()) {
     throw std::invalid_argument("hstack: need at least one array");
   }
@@ -277,7 +297,7 @@ auto hstack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
   return concatenate(arrays, 1);
 }
 
-/* @brief Stack arrays depth-wise (along third axis).
+/** @brief Stack arrays depth-wise (along third axis).
  *
  * Takes a sequence of arrays and stacks them along the
  * third axis. 1D or 2D arrays are first reshaped to
@@ -290,7 +310,8 @@ auto hstack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
  *               or contains arrays with ndim > 2.
  */
 template <typename T>
-auto dstack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
+NP_API NP_NODISCARD auto dstack(const std::vector<Ndarray<T>> &arrays)
+    -> Ndarray<T> {
   if (arrays.empty()) {
     throw std::invalid_argument("dstack: need at least one array");
   }
@@ -311,7 +332,7 @@ auto dstack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
   return concatenate(reshaped, 2);
 }
 
-/* @brief Stack 1D arrays as columns into a 2D array.
+/** @brief Stack 1D arrays as columns into a 2D array.
  *
  * Each 1D array becomes a column of the output 2D array.
  * 2D arrays are used as-is.
@@ -325,7 +346,8 @@ auto dstack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
  *               or contains arrays with ndim > 2.
  */
 template <typename T>
-auto column_stack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
+NP_API NP_NODISCARD auto column_stack(const std::vector<Ndarray<T>> &arrays)
+    -> Ndarray<T> {
   if (arrays.empty()) {
     throw std::invalid_argument("column_stack: need at least one array");
   }
@@ -347,7 +369,7 @@ auto column_stack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
   return concatenate(reshaped, 1);
 }
 
-/* @brief Stack 1D arrays as rows into a 2D array.
+/** @brief Stack 1D arrays as rows into a 2D array.
  *
  * Equivalent to vstack for 1D arrays.
  *
@@ -358,7 +380,8 @@ auto column_stack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
  *               of each array.
  */
 template <typename T>
-auto row_stack(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
+NP_API NP_NODISCARD auto row_stack(const std::vector<Ndarray<T>> &arrays)
+    -> Ndarray<T> {
   return vstack(arrays);
 }
 

@@ -204,7 +204,7 @@ int main() {
         Ndarray<int> v{1, 2, 3};
         bool threw = false;
         try {
-            linalg::svd(v);
+            (void)linalg::svd(v);
         } catch (const std::invalid_argument&) {
             threw = true;
         }
@@ -413,7 +413,7 @@ int main() {
         Ndarray<int> m{{1, 2, 3}, {4, 5, 6}};
         bool threw = false;
         try {
-            linalg::eig(m);
+            (void)linalg::eig(m);
         } catch (const std::invalid_argument&) {
             threw = true;
         }
@@ -421,7 +421,7 @@ int main() {
         Ndarray<int> v{1, 2};
         threw = false;
         try {
-            linalg::eig(v);
+            (void)linalg::eig(v);
         } catch (const std::invalid_argument&) {
             threw = true;
         }
@@ -481,7 +481,7 @@ int main() {
         Ndarray<int> a{{1, 2}, {2, 4}};
         bool threw = false;
         try {
-            linalg::inv(a);
+(void)linalg::inv(a);
         } catch (const np::exceptions::LinAlgError&) {
             threw = true;
         }
@@ -516,7 +516,7 @@ int main() {
         Ndarray<int> b{1, 1};
         bool threw = false;
         try {
-            linalg::solve(a, b);
+(void)linalg::solve(a, b);
         } catch (const np::exceptions::LinAlgError&) {
             threw = true;
         }
@@ -560,7 +560,7 @@ int main() {
         Ndarray<int> a{{1, 2}, {2, 1}};
         bool threw = false;
         try {
-            linalg::cholesky(a);
+(void)linalg::cholesky(a);
         } catch (const np::exceptions::LinAlgError&) {
             threw = true;
         }

@@ -887,9 +887,9 @@ template <typename R> struct LstsqResult {
  * @throws np::exceptions::LinAlgError if the Jacobi sweeps do not converge.
  * @complexity O(M * N * min(M, N) * sweeps).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto svd(const Ndarray<T> &a, bool full_matrices = true, bool compute_uv = true)
+NP_NODISCARD auto svd(const Ndarray<T> &a, bool full_matrices = true, bool compute_uv = true)
     -> SVDResult<real_t<T>> {
   using R = real_t<T>;
   if (a.ndim() != 2) {
@@ -942,7 +942,7 @@ auto svd(const Ndarray<T> &a, bool full_matrices = true, bool compute_uv = true)
  * @throws std::invalid_argument if a.ndim() != 2.
  * @complexity O(M * N * min(M, N) * sweeps).
  */
-template <typename T> auto svdvals(const Ndarray<T> &a) -> Ndarray<real_t<T>> {
+NP_API template <typename T> NP_NODISCARD auto svdvals(const Ndarray<T> &a) -> Ndarray<real_t<T>> {
   return svd(a, false, false).s;
 }
 
@@ -961,9 +961,9 @@ template <typename T> auto svdvals(const Ndarray<T> &a) -> Ndarray<real_t<T>> {
  * @throws std::invalid_argument if a.ndim() != 2.
  * @complexity O(M * N * K).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto qr(const Ndarray<T> &a, QrMode mode = QrMode::Reduced)
+NP_NODISCARD auto qr(const Ndarray<T> &a, QrMode mode = QrMode::Reduced)
     -> QRResult<real_t<T>> {
   using R = real_t<T>;
   if (a.ndim() != 2) {
@@ -1028,9 +1028,9 @@ auto qr(const Ndarray<T> &a, QrMode mode = QrMode::Reduced)
  * converge.
  * @complexity O(N^3) (Francis QR iteration).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto eig(const Ndarray<T> &a) -> EigenResult<real_t<T>> {
+NP_NODISCARD auto eig(const Ndarray<T> &a) -> EigenResult<real_t<T>> {
   using R = real_t<T>;
   if (a.ndim() != 2) {
     throw std::invalid_argument("eig requires a 2D array");
@@ -1081,8 +1081,8 @@ auto eig(const Ndarray<T> &a) -> EigenResult<real_t<T>> {
  * converge.
  * @complexity O(N^3).
  */
-template <typename T>
-auto eigvals(const Ndarray<T> &a) -> Ndarray<std::complex<real_t<T>>> {
+NP_API template <typename T>
+NP_NODISCARD auto eigvals(const Ndarray<T> &a) -> Ndarray<std::complex<real_t<T>>> {
   return eig(a).w;
 }
 
@@ -1102,9 +1102,9 @@ auto eigvals(const Ndarray<T> &a) -> Ndarray<std::complex<real_t<T>>> {
  * @throws np::exceptions::LinAlgError if a is not square.
  * @complexity O(N^3) (LU factorization).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto det(const Ndarray<T> &a) -> real_t<T> {
+NP_NODISCARD auto det(const Ndarray<T> &a) -> real_t<T> {
   using R = real_t<T>;
   if (a.ndim() != 2) {
     throw std::invalid_argument("det requires a 2D array");
@@ -1143,9 +1143,9 @@ auto det(const Ndarray<T> &a) -> real_t<T> {
  * @throws np::exceptions::LinAlgError if a is not square.
  * @complexity O(N^3) (LU factorization).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto slogdet(const Ndarray<T> &a) -> SlogdetResult<real_t<T>> {
+NP_NODISCARD auto slogdet(const Ndarray<T> &a) -> SlogdetResult<real_t<T>> {
   using R = real_t<T>;
   if (a.ndim() != 2) {
     throw std::invalid_argument("slogdet requires a 2D array");
@@ -1189,9 +1189,9 @@ auto slogdet(const Ndarray<T> &a) -> SlogdetResult<real_t<T>> {
  * @throws np::exceptions::LinAlgError if a is not square or is singular.
  * @complexity O(N^3).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto inv(const Ndarray<T> &a) -> Ndarray<real_t<T>> {
+NP_NODISCARD auto inv(const Ndarray<T> &a) -> Ndarray<real_t<T>> {
   using R = real_t<T>;
   if (a.ndim() != 2) {
     throw std::invalid_argument("inv requires a 2D array");
@@ -1229,9 +1229,9 @@ auto inv(const Ndarray<T> &a) -> Ndarray<real_t<T>> {
  * or a is singular.
  * @complexity O(M^3) (LU factorization).
  */
-template <typename T, typename U>
+NP_API template <typename T, typename U>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-auto solve(const Ndarray<T> &a, const Ndarray<U> &b)
+NP_NODISCARD auto solve(const Ndarray<T> &a, const Ndarray<U> &b)
     -> Ndarray<std::common_type_t<real_t<T>, real_t<U>>> {
   using R = std::common_type_t<real_t<T>, real_t<U>>;
   if (a.ndim() != 2) {
@@ -1295,9 +1295,9 @@ auto solve(const Ndarray<T> &a, const Ndarray<U> &b)
  * @throws np::exceptions::LinAlgError if a is not positive-definite.
  * @complexity O(N^3).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto cholesky(const Ndarray<T> &a, bool upper = false) -> Ndarray<real_t<T>> {
+NP_NODISCARD auto cholesky(const Ndarray<T> &a, bool upper = false) -> Ndarray<real_t<T>> {
   using R = real_t<T>;
   if (a.ndim() != 2) {
     throw std::invalid_argument("cholesky requires a 2D array");
@@ -1365,9 +1365,9 @@ auto cholesky(const Ndarray<T> &a, bool upper = false) -> Ndarray<real_t<T>> {
  * @complexity O(N) for 1-D; O(M*N) for 2-D (most norms);
  *         O(M*N*min(M,N)) for Two/NegTwo (via SVD).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto norm(const Ndarray<T> &x, NormOrd ord = NormOrd::None) -> real_t<T> {
+NP_NODISCARD auto norm(const Ndarray<T> &x, NormOrd ord = NormOrd::None) -> real_t<T> {
   using R = real_t<T>;
   const std::size_t nd = x.ndim();
   if (nd == 0 || nd > 2) {
@@ -1504,9 +1504,9 @@ auto norm(const Ndarray<T> &x, NormOrd ord = NormOrd::None) -> real_t<T> {
  * @throws std::invalid_argument if x.ndim() != 2.
  * @complexity O(M * N * min(M, N)) for Two/NegTwo (via SVD).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto matrix_norm(const Ndarray<T> &x, NormOrd ord = NormOrd::Fro) -> real_t<T> {
+NP_NODISCARD auto matrix_norm(const Ndarray<T> &x, NormOrd ord = NormOrd::Fro) -> real_t<T> {
   using R = real_t<T>;
   if (x.ndim() != 2) {
     throw std::invalid_argument("matrix_norm requires a 2D array");
@@ -1532,9 +1532,9 @@ auto matrix_norm(const Ndarray<T> &x, NormOrd ord = NormOrd::Fro) -> real_t<T> {
 // (sum |x|^p)^(1/p). The result is an Ndarray, 0-d for axis = None.
 // Reference: numpy-reference/reference/generated/numpy.linalg.vector_norm.html
 // Raises std::invalid_argument for invalid or repeated axes.
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto vector_norm(const Ndarray<T> &x, const std::vector<int> &axis = {},
+NP_NODISCARD auto vector_norm(const Ndarray<T> &x, const std::vector<int> &axis = {},
                  bool keepdims = false, double ord = 2.0)
     -> Ndarray<real_t<T>> {
   using R = real_t<T>;
@@ -1650,9 +1650,9 @@ auto vector_norm(const Ndarray<T> &x, const std::vector<int> &axis = {},
  * @throws std::invalid_argument if a.ndim() > 2.
  * @complexity O(M * N * min(M, N) * sweeps) for 2-D (dominated by SVD).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto matrix_rank(const Ndarray<T> &a) -> int {
+NP_NODISCARD auto matrix_rank(const Ndarray<T> &a) -> int {
   using R = real_t<T>;
   const std::size_t nd = a.ndim();
   if (nd > 2) {
@@ -1684,9 +1684,9 @@ auto matrix_rank(const Ndarray<T> &a) -> int {
 
 // Rank of a 1-D or 2-D array with an explicit tolerance.
 // Reference: numpy-reference/reference/generated/numpy.linalg.matrix_rank.html
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto matrix_rank(const Ndarray<T> &a, double tol) -> int {
+NP_NODISCARD auto matrix_rank(const Ndarray<T> &a, double tol) -> int {
   using R = real_t<T>;
   const std::size_t nd = a.ndim();
   if (nd > 2) {
@@ -1725,9 +1725,9 @@ auto matrix_rank(const Ndarray<T> &a, double tol) -> int {
  * @throws np::exceptions::LinAlgError if the SVD does not converge.
  * @complexity O(M * N * min(M, N) * sweeps).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto pinv(const Ndarray<T> &a, double rcond = 1e-15) -> Ndarray<real_t<T>> {
+NP_NODISCARD auto pinv(const Ndarray<T> &a, double rcond = 1e-15) -> Ndarray<real_t<T>> {
   using R = real_t<T>;
   if (a.ndim() != 2) {
     throw std::invalid_argument("pinv requires a 2D array");
@@ -1765,9 +1765,9 @@ auto pinv(const Ndarray<T> &a, double rcond = 1e-15) -> Ndarray<real_t<T>> {
  * @throws std::invalid_argument if x.ndim() != 2.
  * @complexity O(M * N * min(M, N) * sweeps) (dominated by SVD).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto cond(const Ndarray<T> &x) -> real_t<T> {
+NP_NODISCARD auto cond(const Ndarray<T> &x) -> real_t<T> {
   using R = real_t<T>;
   if (x.ndim() != 2) {
     throw std::invalid_argument("cond requires a 2D array");
@@ -1797,9 +1797,9 @@ auto cond(const Ndarray<T> &x) -> real_t<T> {
  * @complexity O(M * N * min(M, N) * sweeps) for Two/NegTwo;
  *         O(M * N * min(M, N)) for other orders (involves inv).
  */
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto cond(const Ndarray<T> &x, NormOrd p) -> real_t<T> {
+NP_NODISCARD auto cond(const Ndarray<T> &x, NormOrd p) -> real_t<T> {
   using R = real_t<T>;
   if (x.ndim() != 2) {
     throw std::invalid_argument("cond requires a 2D array");
@@ -1822,9 +1822,9 @@ auto cond(const Ndarray<T> &x, NormOrd p) -> real_t<T> {
 // is used (numpy reads only the lower triangle with UPLO = 'L'); the
 // results match numpy exactly for symmetric input.
 // Reference: numpy-reference/reference/generated/numpy.linalg.eigvalsh.html
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto eigvalsh(const Ndarray<T> &a) -> Ndarray<real_t<T>> {
+NP_NODISCARD auto eigvalsh(const Ndarray<T> &a) -> Ndarray<real_t<T>> {
   using R = real_t<T>;
   auto w = eigvals(a);
   const std::size_t n = w.size();
@@ -1842,9 +1842,9 @@ auto eigvalsh(const Ndarray<T> &a) -> Ndarray<real_t<T>> {
 // Reference: numpy-reference/reference/generated/numpy.linalg.eigh.html
 // As with eigvalsh the full matrix is used rather than numpy's lower
 // triangle; results match numpy for symmetric input.
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto eigh(const Ndarray<T> &a) -> EighResult<real_t<T>> {
+NP_NODISCARD auto eigh(const Ndarray<T> &a) -> EighResult<real_t<T>> {
   using R = real_t<T>;
   auto e = eig(a);
   const std::size_t n = e.w.size();
@@ -1900,8 +1900,8 @@ auto eigh(const Ndarray<T> &a) -> EighResult<real_t<T>> {
 // this returns a fresh (contiguous) copy, not a read-only view.
 // Reference: numpy-reference/reference/generated/numpy.linalg.diagonal.html
 // Raises std::invalid_argument unless x.ndim() >= 2.
-template <typename T>
-auto diagonal(const Ndarray<T> &x, int offset = 0) -> Ndarray<T> {
+NP_API template <typename T>
+NP_NODISCARD auto diagonal(const Ndarray<T> &x, int offset = 0) -> Ndarray<T> {
   const std::size_t nd = x.ndim();
   if (nd < 2) {
     throw std::invalid_argument("diagonal requires a 2D array or a stack");
@@ -1938,7 +1938,7 @@ auto diagonal(const Ndarray<T> &x, int offset = 0) -> Ndarray<T> {
 // Reference:
 // numpy-reference/reference/generated/numpy.linalg.matrix_transpose.html Raises
 // std::invalid_argument unless x.ndim() >= 2.
-template <typename T> auto matrix_transpose(const Ndarray<T> &x) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto matrix_transpose(const Ndarray<T> &x) -> Ndarray<T> {
   const std::size_t nd = x.ndim();
   if (nd < 2) {
     throw std::invalid_argument(
@@ -1968,9 +1968,9 @@ template <typename T> auto matrix_transpose(const Ndarray<T> &x) -> Ndarray<T> {
 // Reference: numpy-reference/reference/generated/numpy.linalg.tensorinv.html
 // Raises std::invalid_argument when ind is out of range and
 // np::exceptions::LinAlgError when the tensor is not square or singular.
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto tensorinv(const Ndarray<T> &a, int ind = 2) -> Ndarray<real_t<T>> {
+NP_NODISCARD auto tensorinv(const Ndarray<T> &a, int ind = 2) -> Ndarray<real_t<T>> {
   using R = real_t<T>;
   const std::size_t nd = a.ndim();
   if (ind <= 0 || static_cast<std::size_t>(ind) > nd) {
@@ -2022,9 +2022,9 @@ auto tensorinv(const Ndarray<T> &a, int ind = 2) -> Ndarray<real_t<T>> {
 // Reference: numpy-reference/reference/generated/numpy.linalg.tensorsolve.html
 // Raises std::invalid_argument on shape mismatches and
 // np::exceptions::LinAlgError when the tensor is not square or singular.
-template <typename T, typename U>
+NP_API template <typename T, typename U>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-auto tensorsolve(const Ndarray<T> &a, const Ndarray<U> &b,
+NP_NODISCARD auto tensorsolve(const Ndarray<T> &a, const Ndarray<U> &b,
                  const std::vector<int> &axes = {})
     -> Ndarray<std::common_type_t<real_t<T>, real_t<U>>> {
   using R = std::common_type_t<real_t<T>, real_t<U>>;
@@ -2119,8 +2119,8 @@ auto tensorsolve(const Ndarray<T> &a, const Ndarray<U> &b,
 // 1D . 1D -> scalar, 2D . 2D -> 2D, 2D . 1D and 1D . 2D -> 1D.
 // Reference: numpy-reference/reference/generated/numpy.linalg.numpy.dot.html
 // Raises std::invalid_argument on incompatible shapes or ndim > 2.
-template <typename T, typename U>
-auto dot(const Ndarray<T> &a, const Ndarray<U> &b)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto dot(const Ndarray<T> &a, const Ndarray<U> &b)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   const std::size_t na = a.ndim();
@@ -2209,8 +2209,8 @@ auto dot(const Ndarray<T> &a, const Ndarray<U> &b)
 
 // Matrix multiplication (same semantics as dot for ndim <= 2).
 // Reference: numpy-reference/reference/generated/numpy.matmul.html
-template <typename T, typename U>
-auto matmul(const Ndarray<T> &a, const Ndarray<U> &b)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto matmul(const Ndarray<T> &a, const Ndarray<U> &b)
     -> Ndarray<std::common_type_t<T, U>> {
   return dot(a, b);
 }
@@ -2222,9 +2222,9 @@ auto matmul(const Ndarray<T> &a, const Ndarray<U> &b)
 // np::exceptions::LinAlgError when a is not square or (n < 0) singular.
 // Integral input is promoted to double for every n (numpy keeps the
 // integer dtype for n >= 0); values stay exact while |a_ij| < 2^53.
-template <typename T>
+NP_API template <typename T>
   requires(!np::detail::is_complex_v<T>)
-auto matrix_power(const Ndarray<T> &a, long long n) -> Ndarray<real_t<T>> {
+NP_NODISCARD auto matrix_power(const Ndarray<T> &a, long long n) -> Ndarray<real_t<T>> {
   using R = real_t<T>;
   if (a.ndim() != 2) {
     throw std::invalid_argument("matrix_power requires a 2D array");
@@ -2275,9 +2275,9 @@ auto matrix_power(const Ndarray<T> &a, long long n) -> Ndarray<real_t<T>> {
 // empty when the rank is deficient or when M <= N. The default rcond
 // (nullopt) is eps * max(M, N); an explicit -1 selects plain eps (the
 // pre-2.0 default). Raises std::invalid_argument on bad shapes.
-template <typename T, typename U>
+NP_API template <typename T, typename U>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-auto lstsq(const Ndarray<T> &a, const Ndarray<U> &b,
+NP_NODISCARD auto lstsq(const Ndarray<T> &a, const Ndarray<U> &b,
            std::optional<double> rcond = std::nullopt)
     -> LstsqResult<std::common_type_t<real_t<T>, real_t<U>>> {
   using R = std::common_type_t<real_t<T>, real_t<U>>;
@@ -2352,8 +2352,8 @@ auto lstsq(const Ndarray<T> &a, const Ndarray<U> &b,
 // Reference: numpy-reference/reference/generated/numpy.linalg.multi_dot.html
 // Raises std::invalid_argument when fewer than two arrays are given,
 // a middle array is not 2-D, or the shapes do not chain.
-template <typename T>
-auto multi_dot(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
+NP_API template <typename T>
+NP_NODISCARD auto multi_dot(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
   const std::size_t n = arrays.size();
   if (n < 2) {
     throw std::invalid_argument("multi_dot needs at least two arrays");
@@ -2430,9 +2430,9 @@ auto multi_dot(const std::vector<Ndarray<T>> &arrays) -> Ndarray<T> {
 // two-int form contracts a single axis of each. The two-sequence form
 // pairs arbitrary (unique) axes of a and b. The output shape is the
 // uncontracted axes of a followed by those of b.
-template <typename T, typename U>
+NP_API template <typename T, typename U>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-auto tensordot(const Ndarray<T> &a, const Ndarray<U> &b,
+NP_NODISCARD auto tensordot(const Ndarray<T> &a, const Ndarray<U> &b,
                const std::vector<int> &a_axes, const std::vector<int> &b_axes)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
@@ -2526,9 +2526,9 @@ auto tensordot(const Ndarray<T> &a, const Ndarray<U> &b,
 
 // Contract the last `axes` axes of a with the first `axes` axes of b.
 // Reference: numpy-reference/reference/generated/numpy.linalg.tensordot.html
-template <typename T, typename U>
+NP_API template <typename T, typename U>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-auto tensordot(const Ndarray<T> &a, const Ndarray<U> &b, int axes = 2)
+NP_NODISCARD auto tensordot(const Ndarray<T> &a, const Ndarray<U> &b, int axes = 2)
     -> Ndarray<std::common_type_t<T, U>> {
   if (axes < 0) {
     throw std::invalid_argument("tensordot: axes must be non-negative");
@@ -2550,9 +2550,9 @@ auto tensordot(const Ndarray<T> &a, const Ndarray<U> &b, int axes = 2)
 
 // Contract one axis of a with one axis of b.
 // Reference: numpy-reference/reference/generated/numpy.linalg.tensordot.html
-template <typename T, typename U>
+NP_API template <typename T, typename U>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-auto tensordot(const Ndarray<T> &a, const Ndarray<U> &b, int a_axis, int b_axis)
+NP_NODISCARD auto tensordot(const Ndarray<T> &a, const Ndarray<U> &b, int a_axis, int b_axis)
     -> Ndarray<std::common_type_t<T, U>> {
   return tensordot(a, b, std::vector<int>{a_axis}, std::vector<int>{b_axis});
 }
@@ -2566,9 +2566,9 @@ auto tensordot(const Ndarray<T> &a, const Ndarray<U> &b, int a_axis, int b_axis)
 // Reference: numpy-reference/reference/generated/numpy.linalg.vecdot.html
 // Raises std::invalid_argument on axis errors, mismatched contracted
 // sizes, or non-broadcastable remainder shapes.
-template <typename T, typename U>
+NP_API template <typename T, typename U>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-auto vecdot(const Ndarray<T> &x1, const Ndarray<U> &x2, int axis = -1)
+NP_NODISCARD auto vecdot(const Ndarray<T> &x1, const Ndarray<U> &x2, int axis = -1)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   const std::size_t n1 = x1.ndim();
@@ -2650,9 +2650,9 @@ auto vecdot(const Ndarray<T> &x1, const Ndarray<U> &x2, int axis = -1)
 // Reference: numpy-reference/reference/generated/numpy.linalg.cross.html
 // Raises std::invalid_argument when the vector axes do not have 3
 // elements, the shapes are not broadcastable, or the axis is invalid.
-template <typename T, typename U>
+NP_API template <typename T, typename U>
   requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
-auto cross(const Ndarray<T> &x1, const Ndarray<U> &x2, int axis = -1)
+NP_NODISCARD auto cross(const Ndarray<T> &x1, const Ndarray<U> &x2, int axis = -1)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   const std::size_t nd1 = x1.ndim();
@@ -2742,8 +2742,8 @@ auto cross(const Ndarray<T> &x1, const Ndarray<U> &x2, int axis = -1)
 
 // Inner product: contracts the last axes; 1D . 1D gives a scalar.
 // Reference: numpy-reference/reference/generated/numpy.linalg.inner.html
-template <typename T, typename U>
-auto inner(const Ndarray<T> &a, const Ndarray<U> &b)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto inner(const Ndarray<T> &a, const Ndarray<U> &b)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   const std::size_t na = a.ndim();
@@ -2797,8 +2797,8 @@ auto inner(const Ndarray<T> &a, const Ndarray<U> &b)
 
 // Outer product of two 1D arrays (i, j) -> a[i] * b[j].
 // Reference: numpy-reference/reference/generated/numpy.outer.html
-template <typename T, typename U>
-auto outer(const Ndarray<T> &a, const Ndarray<U> &b)
+NP_API template <typename T, typename U>
+NP_NODISCARD auto outer(const Ndarray<T> &a, const Ndarray<U> &b)
     -> Ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
   if (a.ndim() != 1 || b.ndim() != 1) {
@@ -2817,13 +2817,13 @@ auto outer(const Ndarray<T> &a, const Ndarray<U> &b)
 
 // Transpose of a 2D array (convenience).
 // Reference: numpy-reference/reference/generated/numpy.transpose.html
-template <typename T> auto transpose(const Ndarray<T> &a) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto transpose(const Ndarray<T> &a) -> Ndarray<T> {
   return a.transpose();
 }
 
 // Trace of a 2D array.
 // Reference: numpy-reference/reference/generated/numpy.trace.html
-template <typename T> auto trace(const Ndarray<T> &a) -> T { return a.trace(); }
+NP_API template <typename T> NP_NODISCARD auto trace(const Ndarray<T> &a) -> T { return a.trace(); }
 
 } // namespace np::linalg
 
