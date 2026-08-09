@@ -94,14 +94,14 @@ int main() {
     // solve
     {
         Matrix<double> a{{2.0, 0.0}, {0.0, 4.0}};
-        Ndarray<double> b{4.0, 8.0};
+        ndarray<double> b{4.0, 8.0};
         auto x = solve(a, b);
         test::check(x.size() == 2, "solve shape");
         test::check(test::approx(x(0), 2.0) && test::approx(x(1), 2.0),
                     "solve values");
     }
 
-    // Matrix inherits Ndarray API
+    // Matrix inherits ndarray API
     {
         Matrix<int> m{{1, 2}, {3, 4}};
         test::check(m.sum() == 10, "inherited sum");

@@ -95,15 +95,15 @@ insert_axis_index(const std::vector<std::size_t> &idx_in, int ndim, int axis,
  * @tparam T  Element type.
  * @param arrays Sequence of arrays to concatenate.
  * @param axis   Axis along which to concatenate (default: 0).
- * @return       Ndarray<T> with concatenated data.
+ * @return       ndarray<T> with concatenated data.
  * @throws       std::invalid_argument if arrays is empty,
  *               shapes are incompatible, or axis is out of bounds.
  *
  * Reference: numpy-reference/reference/generated/numpy.concatenate.html
  */
 template <typename T>
-NP_NODISCARD auto concatenate(const std::vector<Ndarray<T>> &arrays,
-                              int axis = 0) -> Ndarray<T> {
+NP_NODISCARD auto concatenate(const std::vector<ndarray<T>> &arrays,
+                              int axis = 0) -> ndarray<T> {
   if (arrays.empty()) {
     throw std::invalid_argument("concatenate: need at least one array");
   }
@@ -139,7 +139,7 @@ NP_NODISCARD auto concatenate(const std::vector<Ndarray<T>> &arrays,
   }
 
   // Allocate output
-  Ndarray<T> result(out_shape, first.type);
+  ndarray<T> result(out_shape, first.type);
 
   // Copy data
   std::size_t offset = 0;
@@ -178,15 +178,15 @@ NP_NODISCARD auto concatenate(const std::vector<Ndarray<T>> &arrays,
  * @tparam T  Element type.
  * @param arrays Sequence of arrays to stack.
  * @param axis   Position where new axis is inserted (default: 0).
- * @return       Ndarray<T> with stacked data.
+ * @return       ndarray<T> with stacked data.
  * @throws       std::invalid_argument if arrays is empty,
  *               shapes are incompatible, or axis is out of bounds.
  *
  * Reference: numpy-reference/reference/generated/numpy.stack.html
  */
 template <typename T>
-NP_API NP_NODISCARD auto stack(const std::vector<Ndarray<T>> &arrays,
-                               int axis = 0) -> Ndarray<T> {
+NP_API NP_NODISCARD auto stack(const std::vector<ndarray<T>> &arrays,
+                               int axis = 0) -> ndarray<T> {
   if (arrays.empty()) {
     throw std::invalid_argument("stack: need at least one array");
   }
@@ -221,7 +221,7 @@ NP_API NP_NODISCARD auto stack(const std::vector<Ndarray<T>> &arrays,
   }
 
   // Allocate output
-  Ndarray<T> result(out_shape, first.type);
+  ndarray<T> result(out_shape, first.type);
 
   // Copy data
   for (std::size_t i = 0; i < arrays.size(); ++i) {
@@ -248,18 +248,18 @@ NP_API NP_NODISCARD auto stack(const std::vector<Ndarray<T>> &arrays,
  *
  * @tparam T  Element type.
  * @param arrays Sequence of arrays to stack.
- * @return       Ndarray<T> with stacked data.
+ * @return       ndarray<T> with stacked data.
  * @throws       std::invalid_argument if arrays is empty.
  */
 template <typename T>
-NP_API NP_NODISCARD auto vstack(const std::vector<Ndarray<T>> &arrays)
-    -> Ndarray<T> {
+NP_API NP_NODISCARD auto vstack(const std::vector<ndarray<T>> &arrays)
+    -> ndarray<T> {
   if (arrays.empty()) {
     throw std::invalid_argument("vstack: need at least one array");
   }
 
   // If 1D, reshape to (1, N) first
-  std::vector<Ndarray<T>> reshaped;
+  std::vector<ndarray<T>> reshaped;
   reshaped.reserve(arrays.size());
 
   for (const auto &arr : arrays) {
@@ -280,12 +280,12 @@ NP_API NP_NODISCARD auto vstack(const std::vector<Ndarray<T>> &arrays)
  *
  * @tparam T  Element type.
  * @param arrays Sequence of arrays to stack.
- * @return       Ndarray<T> with stacked data.
+ * @return       ndarray<T> with stacked data.
  * @throws       std::invalid_argument if arrays is empty.
  */
 template <typename T>
-NP_API NP_NODISCARD auto hstack(const std::vector<Ndarray<T>> &arrays)
-    -> Ndarray<T> {
+NP_API NP_NODISCARD auto hstack(const std::vector<ndarray<T>> &arrays)
+    -> ndarray<T> {
   if (arrays.empty()) {
     throw std::invalid_argument("hstack: need at least one array");
   }
@@ -305,18 +305,18 @@ NP_API NP_NODISCARD auto hstack(const std::vector<Ndarray<T>> &arrays)
  *
  * @tparam T  Element type.
  * @param arrays Sequence of arrays to stack.
- * @return       Ndarray<T> with stacked data.
+ * @return       ndarray<T> with stacked data.
  * @throws       std::invalid_argument if arrays is empty
  *               or contains arrays with ndim > 2.
  */
 template <typename T>
-NP_API NP_NODISCARD auto dstack(const std::vector<Ndarray<T>> &arrays)
-    -> Ndarray<T> {
+NP_API NP_NODISCARD auto dstack(const std::vector<ndarray<T>> &arrays)
+    -> ndarray<T> {
   if (arrays.empty()) {
     throw std::invalid_argument("dstack: need at least one array");
   }
 
-  std::vector<Ndarray<T>> reshaped;
+  std::vector<ndarray<T>> reshaped;
   reshaped.reserve(arrays.size());
 
   for (const auto &arr : arrays) {
@@ -339,21 +339,21 @@ NP_API NP_NODISCARD auto dstack(const std::vector<Ndarray<T>> &arrays)
  *
  * @tparam T  Element type.
  * @param arrays Sequence of 1D or 2D arrays.
- * @return       Ndarray<T> with shape (N, K) where K is
+ * @return       ndarray<T> with shape (N, K) where K is
  *               the number of arrays and N is the length
  *               of each 1D array (or the row count of 2D arrays).
  * @throws       std::invalid_argument if arrays is empty
  *               or contains arrays with ndim > 2.
  */
 template <typename T>
-NP_API NP_NODISCARD auto column_stack(const std::vector<Ndarray<T>> &arrays)
-    -> Ndarray<T> {
+NP_API NP_NODISCARD auto column_stack(const std::vector<ndarray<T>> &arrays)
+    -> ndarray<T> {
   if (arrays.empty()) {
     throw std::invalid_argument("column_stack: need at least one array");
   }
 
   // Reshape 1D arrays to (N, 1)
-  std::vector<Ndarray<T>> reshaped;
+  std::vector<ndarray<T>> reshaped;
   reshaped.reserve(arrays.size());
 
   for (const auto &arr : arrays) {
@@ -375,13 +375,13 @@ NP_API NP_NODISCARD auto column_stack(const std::vector<Ndarray<T>> &arrays)
  *
  * @tparam T  Element type.
  * @param arrays Sequence of 1D arrays.
- * @return       Ndarray<T> with shape (K, N) where K is
+ * @return       ndarray<T> with shape (K, N) where K is
  *               the number of arrays and N is the length
  *               of each array.
  */
 template <typename T>
-NP_API NP_NODISCARD auto row_stack(const std::vector<Ndarray<T>> &arrays)
-    -> Ndarray<T> {
+NP_API NP_NODISCARD auto row_stack(const std::vector<ndarray<T>> &arrays)
+    -> ndarray<T> {
   return vstack(arrays);
 }
 

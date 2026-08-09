@@ -22,7 +22,7 @@
  * Example:
  * @code
  * NP_API template <typename T>
- * auto sum(const Ndarray<T>& arr) -> T;
+ * auto sum(const ndarray<T>& arr) -> T;
  * @endcode
  */
 #define NP_API
@@ -96,7 +96,7 @@
  *
  * Example:
  * @code
- * NP_NODISCARD auto copy() const -> Ndarray<T>;
+ * NP_NODISCARD auto copy() const -> ndarray<T>;
  * @endcode
  */
 #if __cplusplus >= 201703L

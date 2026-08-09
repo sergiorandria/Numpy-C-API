@@ -44,9 +44,9 @@ namespace np {
  * @return Flipped array (view with reversed strides)
  */
 NP_API template <typename T>
-NP_NODISCARD auto flip(const Ndarray<T> &arr, std::optional<int> axis = std::nullopt)
-    -> Ndarray<T> {
-  Ndarray<T> result = arr;
+NP_NODISCARD auto flip(const ndarray<T> &arr, std::optional<int> axis = std::nullopt)
+    -> ndarray<T> {
+  ndarray<T> result = arr;
 
   if (!axis.has_value()) {
     // Flip all axes
@@ -85,7 +85,7 @@ NP_NODISCARD auto flip(const Ndarray<T> &arr, std::optional<int> axis = std::nul
  * @param arr Input array (must be at least 2D)
  * @return Array with columns reversed
  */
-NP_API template <typename T> NP_NODISCARD auto fliplr(const Ndarray<T> &arr) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto fliplr(const ndarray<T> &arr) -> ndarray<T> {
   if (arr.ndim() < 2) {
     throw std::invalid_argument("fliplr requires at least 2 dimensions");
   }
@@ -101,7 +101,7 @@ NP_API template <typename T> NP_NODISCARD auto fliplr(const Ndarray<T> &arr) -> 
  * @param arr Input array (must be at least 1D)
  * @return Array with rows reversed
  */
-NP_API template <typename T> NP_NODISCARD auto flipud(const Ndarray<T> &arr) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto flipud(const ndarray<T> &arr) -> ndarray<T> {
   if (arr.ndim() < 1) {
     throw std::invalid_argument("flipud requires at least 1 dimension");
   }
@@ -120,8 +120,8 @@ NP_API template <typename T> NP_NODISCARD auto flipud(const Ndarray<T> &arr) -> 
  * @return Rolled array
  */
 NP_API template <typename T>
-NP_NODISCARD auto roll(const Ndarray<T> &arr, int shift,
-          std::optional<int> axis = std::nullopt) -> Ndarray<T> {
+NP_NODISCARD auto roll(const ndarray<T> &arr, int shift,
+          std::optional<int> axis = std::nullopt) -> ndarray<T> {
   if (!axis.has_value()) {
     // Flatten, roll, reshape
     auto flat = arr.ravel();
@@ -129,7 +129,7 @@ NP_NODISCARD auto roll(const Ndarray<T> &arr, int shift,
     shift = ((shift % n) + n) % n; // Normalize shift
 
     // Create result array with original shape
-    Ndarray<T> result(arr.shape);
+    ndarray<T> result(arr.shape);
     for (int i = 0; i < n; ++i) {
       result.data()[i] = flat((i - shift + n) % n);
     }
@@ -145,7 +145,7 @@ NP_NODISCARD auto roll(const Ndarray<T> &arr, int shift,
     throw AxisError("axis " + std::to_string(*axis) + " is out of bounds");
   }
 
-  Ndarray<T> result = arr.copy();
+  ndarray<T> result = arr.copy();
   int n = result.shape[ax];
   shift = ((shift % n) + n) % n; // Normalize shift
 
@@ -207,8 +207,8 @@ NP_NODISCARD auto roll(const Ndarray<T> &arr, int shift,
  * @return Rotated array
  */
 NP_API template <typename T>
-NP_NODISCARD auto rot90(const Ndarray<T> &arr, int k = 1,
-           const std::vector<int> &axes = {0, 1}) -> Ndarray<T> {
+NP_NODISCARD auto rot90(const ndarray<T> &arr, int k = 1,
+           const std::vector<int> &axes = {0, 1}) -> ndarray<T> {
   if (arr.ndim() < 2) {
     throw std::invalid_argument("rot90 requires at least 2 dimensions");
   }
@@ -239,7 +239,7 @@ NP_NODISCARD auto rot90(const Ndarray<T> &arr, int k = 1,
     throw std::invalid_argument("axes must be different");
   }
 
-  Ndarray<T> result = arr.copy();
+  ndarray<T> result = arr.copy();
 
   for (int i = 0; i < k; ++i) {
     // Transpose the two axes
@@ -266,7 +266,7 @@ NP_NODISCARD auto rot90(const Ndarray<T> &arr, int k = 1,
  * @return Tiled array
  */
 NP_API template <typename T>
-NP_NODISCARD auto tile(const Ndarray<T> &arr, const std::vector<int> &reps) -> Ndarray<T> {
+NP_NODISCARD auto tile(const ndarray<T> &arr, const std::vector<int> &reps) -> ndarray<T> {
   if (reps.empty()) {
     throw std::invalid_argument("reps cannot be empty");
   }
@@ -288,10 +288,10 @@ NP_NODISCARD auto tile(const Ndarray<T> &arr, const std::vector<int> &reps) -> N
     result_shape[i] = arr_shape[i] * tile_reps[i];
   }
 
-  Ndarray<T> result(result_shape);
+  ndarray<T> result(result_shape);
 
   // Reshape input if dimensions were expanded
-  Ndarray<T> arr_expanded = arr.reshape(arr_shape);
+  ndarray<T> arr_expanded = arr.reshape(arr_shape);
 
   // Fill result with tiles
   std::vector<std::size_t> idx(result_shape.size(), 0);
@@ -329,7 +329,7 @@ NP_NODISCARD auto tile(const Ndarray<T> &arr, const std::vector<int> &reps) -> N
  * @param k Diagonal offset (0=main diagonal, >0 above, <0 below)
  * @return Diagonal array
  */
-NP_API template <typename T> NP_NODISCARD auto diag(const Ndarray<T> &v, int k = 0) -> Ndarray<T> {
+NP_API template <typename T> NP_NODISCARD auto diag(const ndarray<T> &v, int k = 0) -> ndarray<T> {
   if (v.ndim() == 1) {
     // Construct 2D array with v on diagonal
     int n = static_cast<int>(v.size());
@@ -337,7 +337,7 @@ NP_API template <typename T> NP_NODISCARD auto diag(const Ndarray<T> &v, int k =
 
     // Create 2D array with correct shape [size, size]
     std::vector<int> shape_vec = {size, size};
-    Ndarray<T> result(shape_vec);
+    ndarray<T> result(shape_vec);
     // Fill with zeros
     for (std::size_t idx = 0; idx < result.size(); ++idx) {
       result.data()[idx] = T{0};
@@ -372,11 +372,11 @@ NP_API template <typename T> NP_NODISCARD auto diag(const Ndarray<T> &v, int k =
 
     if (diag_size == 0) {
       std::vector<int> empty_shape = {0};
-      return Ndarray<T>(empty_shape);
+      return ndarray<T>(empty_shape);
     }
 
     std::vector<int> result_shape = {diag_size};
-    Ndarray<T> result(result_shape);
+    ndarray<T> result(result_shape);
 
     for (int i = 0; i < diag_size; ++i) {
       if (k >= 0) {
@@ -403,7 +403,7 @@ NP_API template <typename T> NP_NODISCARD auto diag(const Ndarray<T> &v, int k =
  * @return 2D array with v on diagonal
  */
 NP_API template <typename T>
-NP_NODISCARD auto diagflat(const Ndarray<T> &v, int k = 0) -> Ndarray<T> {
+NP_NODISCARD auto diagflat(const ndarray<T> &v, int k = 0) -> ndarray<T> {
   auto flat = v.ravel();
   return diag(flat, k);
 }
@@ -420,12 +420,12 @@ NP_NODISCARD auto diagflat(const Ndarray<T> &v, int k = 0) -> Ndarray<T> {
  * @return Lower triangular array
  */
 NP_API template <typename T = double>
-NP_NODISCARD auto tri(int n, int m = -1, int k = 0) -> Ndarray<T> {
+NP_NODISCARD auto tri(int n, int m = -1, int k = 0) -> ndarray<T> {
   if (m < 0) {
     m = n;
   }
 
-  Ndarray<T> result = zeros<T>({n, m});
+  ndarray<T> result = zeros<T>({n, m});
 
   for (int i = 0; i < n; ++i) {
     for (int j = 0; j < m; ++j) {
@@ -449,12 +449,12 @@ NP_NODISCARD auto tri(int n, int m = -1, int k = 0) -> Ndarray<T> {
  * @return Array with elements above kth diagonal zeroed
  */
 NP_API template <typename T>
-NP_NODISCARD auto tril(const Ndarray<T> &arr, int k = 0) -> Ndarray<T> {
+NP_NODISCARD auto tril(const ndarray<T> &arr, int k = 0) -> ndarray<T> {
   if (arr.ndim() < 2) {
     throw std::invalid_argument("tril requires at least 2 dimensions");
   }
 
-  Ndarray<T> result = arr.copy();
+  ndarray<T> result = arr.copy();
   int rows = result.shape[result.ndim() - 2];
   int cols = result.shape[result.ndim() - 1];
 
@@ -503,12 +503,12 @@ NP_NODISCARD auto tril(const Ndarray<T> &arr, int k = 0) -> Ndarray<T> {
  * @return Array with elements below kth diagonal zeroed
  */
 NP_API template <typename T>
-NP_NODISCARD auto triu(const Ndarray<T> &arr, int k = 0) -> Ndarray<T> {
+NP_NODISCARD auto triu(const ndarray<T> &arr, int k = 0) -> ndarray<T> {
   if (arr.ndim() < 2) {
     throw std::invalid_argument("triu requires at least 2 dimensions");
   }
 
-  Ndarray<T> result = arr.copy();
+  ndarray<T> result = arr.copy();
   int rows = result.shape[result.ndim() - 2];
   int cols = result.shape[result.ndim() - 1];
 
@@ -556,8 +556,8 @@ NP_NODISCARD auto triu(const Ndarray<T> &arr, int k = 0) -> Ndarray<T> {
  * @return Vandermonde matrix
  */
 NP_API template <typename T>
-NP_NODISCARD auto vander(const Ndarray<T> &x, int n = -1, bool increasing = false)
-    -> Ndarray<T> {
+NP_NODISCARD auto vander(const ndarray<T> &x, int n = -1, bool increasing = false)
+    -> ndarray<T> {
   if (x.ndim() != 1) {
     throw std::invalid_argument("vander requires 1D array");
   }
@@ -567,7 +567,7 @@ NP_NODISCARD auto vander(const Ndarray<T> &x, int n = -1, bool increasing = fals
     n = rows;
   }
 
-  Ndarray<T> result(std::vector<int>{rows, n});
+  ndarray<T> result(std::vector<int>{rows, n});
 
   for (int i = 0; i < rows; ++i) {
     T val = x(i);
@@ -601,8 +601,8 @@ NP_NODISCARD auto vander(const Ndarray<T> &x, int n = -1, bool increasing = fals
  * @return Vector of sub-arrays
  */
 NP_API template <typename T>
-NP_NODISCARD auto split(const Ndarray<T> &arr, const std::vector<int> &indices_or_sections,
-           int axis = 0) -> std::vector<Ndarray<T>> {
+NP_NODISCARD auto split(const ndarray<T> &arr, const std::vector<int> &indices_or_sections,
+           int axis = 0) -> std::vector<ndarray<T>> {
   // Normalize axis
   if (axis < 0) {
     axis += static_cast<int>(arr.ndim());
@@ -612,7 +612,7 @@ NP_NODISCARD auto split(const Ndarray<T> &arr, const std::vector<int> &indices_o
   }
 
   int n = arr.shape[axis];
-  std::vector<Ndarray<T>> result;
+  std::vector<ndarray<T>> result;
 
   if (indices_or_sections.size() == 1 && indices_or_sections[0] > 0) {
     // Split into equal sections
@@ -626,7 +626,7 @@ NP_NODISCARD auto split(const Ndarray<T> &arr, const std::vector<int> &indices_o
     for (int i = 0; i < sections; ++i) {
       std::vector<int> new_shape = arr.shape;
       new_shape[axis] = section_size;
-      Ndarray<T> sub(new_shape);
+      ndarray<T> sub(new_shape);
 
       // Copy data
       std::vector<std::size_t> src_idx(arr.ndim(), 0);
@@ -674,7 +674,7 @@ NP_NODISCARD auto split(const Ndarray<T> &arr, const std::vector<int> &indices_o
 
       std::vector<int> new_shape = arr.shape;
       new_shape[axis] = end - start;
-      Ndarray<T> sub(new_shape);
+      ndarray<T> sub(new_shape);
 
       std::vector<std::size_t> src_idx(arr.ndim(), 0);
       std::vector<std::size_t> dst_idx(arr.ndim(), 0);
@@ -715,8 +715,8 @@ NP_NODISCARD auto split(const Ndarray<T> &arr, const std::vector<int> &indices_o
  * Reference: numpy-reference/reference/generated/numpy.array_split.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto array_split(const Ndarray<T> &arr, int sections, int axis = 0)
-    -> std::vector<Ndarray<T>> {
+NP_NODISCARD auto array_split(const ndarray<T> &arr, int sections, int axis = 0)
+    -> std::vector<ndarray<T>> {
   if (axis < 0) {
     axis += static_cast<int>(arr.ndim());
   }
@@ -745,8 +745,8 @@ NP_NODISCARD auto array_split(const Ndarray<T> &arr, int sections, int axis = 0)
  * @brief Split array into multiple sub-arrays horizontally.
  */
 NP_API template <typename T>
-NP_NODISCARD auto hsplit(const Ndarray<T> &arr, const std::vector<int> &indices_or_sections)
-    -> std::vector<Ndarray<T>> {
+NP_NODISCARD auto hsplit(const ndarray<T> &arr, const std::vector<int> &indices_or_sections)
+    -> std::vector<ndarray<T>> {
   if (arr.ndim() == 0) {
     throw std::invalid_argument("hsplit requires at least 1D array");
   }
@@ -758,8 +758,8 @@ NP_NODISCARD auto hsplit(const Ndarray<T> &arr, const std::vector<int> &indices_
  * @brief Split array into multiple sub-arrays vertically.
  */
 NP_API template <typename T>
-NP_NODISCARD auto vsplit(const Ndarray<T> &arr, const std::vector<int> &indices_or_sections)
-    -> std::vector<Ndarray<T>> {
+NP_NODISCARD auto vsplit(const ndarray<T> &arr, const std::vector<int> &indices_or_sections)
+    -> std::vector<ndarray<T>> {
   if (arr.ndim() < 2) {
     throw std::invalid_argument("vsplit requires at least 2D array");
   }
@@ -770,8 +770,8 @@ NP_NODISCARD auto vsplit(const Ndarray<T> &arr, const std::vector<int> &indices_
  * @brief Split array into multiple sub-arrays along 3rd axis.
  */
 NP_API template <typename T>
-NP_NODISCARD auto dsplit(const Ndarray<T> &arr, const std::vector<int> &indices_or_sections)
-    -> std::vector<Ndarray<T>> {
+NP_NODISCARD auto dsplit(const ndarray<T> &arr, const std::vector<int> &indices_or_sections)
+    -> std::vector<ndarray<T>> {
   if (arr.ndim() < 3) {
     throw std::invalid_argument("dsplit requires at least 3D array");
   }
@@ -794,8 +794,8 @@ NP_NODISCARD auto dsplit(const Ndarray<T> &arr, const std::vector<int> &indices_
  * @return Array with deleted elements
  */
 NP_API template <typename T>
-NP_NODISCARD auto delete_arr(const Ndarray<T> &arr, const std::vector<int> &indices,
-                std::optional<int> axis = std::nullopt) -> Ndarray<T> {
+NP_NODISCARD auto delete_arr(const ndarray<T> &arr, const std::vector<int> &indices,
+                std::optional<int> axis = std::nullopt) -> ndarray<T> {
   if (indices.empty()) {
     return arr.copy();
   }
@@ -814,7 +814,7 @@ NP_NODISCARD auto delete_arr(const Ndarray<T> &arr, const std::vector<int> &indi
       }
     }
 
-    Ndarray<T> result(std::vector<int>{n - static_cast<int>(to_delete.size())});
+    ndarray<T> result(std::vector<int>{n - static_cast<int>(to_delete.size())});
     int j = 0;
     for (int i = 0; i < n; ++i) {
       if (to_delete.find(i) == to_delete.end()) {
@@ -848,7 +848,7 @@ NP_NODISCARD auto delete_arr(const Ndarray<T> &arr, const std::vector<int> &indi
   std::vector<int> new_shape = arr.shape;
   new_shape[ax] = n - static_cast<int>(to_delete.size());
 
-  Ndarray<T> result(new_shape);
+  ndarray<T> result(new_shape);
 
   std::vector<std::size_t> src_idx(arr.ndim(), 0);
   std::vector<std::size_t> dst_idx(arr.ndim(), 0);
@@ -896,9 +896,9 @@ NP_NODISCARD auto delete_arr(const Ndarray<T> &arr, const std::vector<int> &indi
  * @return Array with inserted values
  */
 NP_API template <typename T>
-NP_NODISCARD auto insert(const Ndarray<T> &arr, const std::vector<int> &indices,
-            const Ndarray<T> &values, std::optional<int> axis = std::nullopt)
-    -> Ndarray<T> {
+NP_NODISCARD auto insert(const ndarray<T> &arr, const std::vector<int> &indices,
+            const ndarray<T> &values, std::optional<int> axis = std::nullopt)
+    -> ndarray<T> {
   if (indices.empty()) {
     return arr.copy();
   }
@@ -925,7 +925,7 @@ NP_NODISCARD auto insert(const Ndarray<T> &arr, const std::vector<int> &indices,
                 return std::get<2>(x) < std::get<2>(y);
               });
 
-    Ndarray<T> result(std::vector<int>{n + static_cast<int>(val_flat.size())});
+    ndarray<T> result(std::vector<int>{n + static_cast<int>(val_flat.size())});
     int k = 0;
     std::size_t v = 0;
     for (int i = 0; i <= n; ++i) {
@@ -956,14 +956,14 @@ NP_NODISCARD auto insert(const Ndarray<T> &arr, const std::vector<int> &indices,
  * @return Array with appended values
  */
 NP_API template <typename T>
-NP_NODISCARD auto append(const Ndarray<T> &arr, const Ndarray<T> &values,
-            std::optional<int> axis = std::nullopt) -> Ndarray<T> {
+NP_NODISCARD auto append(const ndarray<T> &arr, const ndarray<T> &values,
+            std::optional<int> axis = std::nullopt) -> ndarray<T> {
   if (!axis.has_value()) {
     // Flatten both and concatenate
     auto arr_flat = arr.ravel();
     auto val_flat = values.ravel();
 
-    Ndarray<T> result(std::vector<int>{static_cast<int>(arr_flat.size() + val_flat.size())});
+    ndarray<T> result(std::vector<int>{static_cast<int>(arr_flat.size() + val_flat.size())});
 
     for (std::size_t i = 0; i < arr_flat.size(); ++i) {
       result(i) = arr_flat(i);
@@ -991,8 +991,8 @@ NP_NODISCARD auto append(const Ndarray<T> &arr, const Ndarray<T> &values,
  * @return Trimmed array
  */
 NP_API template <typename T>
-NP_NODISCARD auto trim_zeros(const Ndarray<T> &arr, const std::string &trim = "fb")
-    -> Ndarray<T> {
+NP_NODISCARD auto trim_zeros(const ndarray<T> &arr, const std::string &trim = "fb")
+    -> ndarray<T> {
   if (arr.ndim() != 1) {
     throw std::invalid_argument("trim_zeros requires 1D array");
   }
@@ -1014,10 +1014,10 @@ NP_NODISCARD auto trim_zeros(const Ndarray<T> &arr, const std::string &trim = "f
   }
 
   if (start >= end) {
-    return Ndarray<T>(std::vector<int>{0});
+    return ndarray<T>(std::vector<int>{0});
   }
 
-  Ndarray<T> result(std::vector<int>{end - start});
+  ndarray<T> result(std::vector<int>{end - start});
   for (int i = start; i < end; ++i) {
     result(i - start) = arr(i);
   }
@@ -1038,10 +1038,10 @@ NP_NODISCARD auto trim_zeros(const Ndarray<T> &arr, const std::string &trim = "f
  * @return Unique sorted elements (and optionally indices, inverse, counts)
  */
 NP_API template <typename T>
-NP_NODISCARD auto unique(const Ndarray<T> &arr, bool return_index = false,
+NP_NODISCARD auto unique(const ndarray<T> &arr, bool return_index = false,
             bool return_inverse = false, bool return_counts = false)
-    -> std::tuple<Ndarray<T>, Ndarray<std::size_t>, Ndarray<std::size_t>,
-                  Ndarray<std::size_t>> {
+    -> std::tuple<ndarray<T>, ndarray<std::size_t>, ndarray<std::size_t>,
+                  ndarray<std::size_t>> {
 
   auto flat = arr.ravel();
   std::size_t n = flat.size();
@@ -1090,7 +1090,7 @@ NP_NODISCARD auto unique(const Ndarray<T> &arr, bool return_index = false,
   }
 
   // Build result arrays
-  Ndarray<T> result_vals(std::vector<int>{static_cast<int>(unique_vals.size())});
+  ndarray<T> result_vals(std::vector<int>{static_cast<int>(unique_vals.size())});
   for (std::size_t i = 0; i < unique_vals.size(); ++i) {
     result_vals(static_cast<int>(i)) = unique_vals[i];
   }
@@ -1099,21 +1099,21 @@ NP_NODISCARD auto unique(const Ndarray<T> &arr, bool return_index = false,
   int inv_size = return_inverse ? static_cast<int>(inverse_indices.size()) : 0;
   int cnt_size = return_counts ? static_cast<int>(counts.size()) : 0;
 
-  Ndarray<std::size_t> result_index(std::vector<int>{idx_size});
+  ndarray<std::size_t> result_index(std::vector<int>{idx_size});
   if (return_index) {
     for (std::size_t i = 0; i < unique_indices.size(); ++i) {
       result_index(static_cast<int>(i)) = unique_indices[i];
     }
   }
 
-  Ndarray<std::size_t> result_inverse(std::vector<int>{inv_size});
+  ndarray<std::size_t> result_inverse(std::vector<int>{inv_size});
   if (return_inverse) {
     for (std::size_t i = 0; i < inverse_indices.size(); ++i) {
       result_inverse(static_cast<int>(i)) = inverse_indices[i];
     }
   }
 
-  Ndarray<std::size_t> result_counts(std::vector<int>{cnt_size});
+  ndarray<std::size_t> result_counts(std::vector<int>{cnt_size});
   if (return_counts) {
     for (std::size_t i = 0; i < counts.size(); ++i) {
       result_counts(static_cast<int>(i)) = counts[i];
@@ -1139,14 +1139,14 @@ NP_NODISCARD auto unique(const Ndarray<T> &arr, bool return_index = false,
  * @return Array with elements from x where condition, y elsewhere
  */
 NP_API template <typename T>
-NP_NODISCARD auto where(const Ndarray<bool> &condition, const Ndarray<T> &x,
-           const Ndarray<T> &y) -> Ndarray<T> {
+NP_NODISCARD auto where(const ndarray<bool> &condition, const ndarray<T> &x,
+           const ndarray<T> &y) -> ndarray<T> {
   // Broadcasting check (simplified)
   if (condition.shape != x.shape || condition.shape != y.shape) {
     throw std::invalid_argument("where: arrays must have compatible shapes");
   }
 
-  Ndarray<T> result(x.shape);
+  ndarray<T> result(x.shape);
 
   for (std::size_t i = 0; i < x.size(); ++i) {
     result.data()[i] = condition.data()[i] ? x.data()[i] : y.data()[i];
@@ -1164,8 +1164,8 @@ NP_NODISCARD auto where(const Ndarray<bool> &condition, const Ndarray<T> &x,
  * @param condition Boolean array
  * @return Tuple of arrays, one for each dimension
  */
-inline auto where(const Ndarray<bool> &condition)
-    -> std::vector<Ndarray<std::size_t>> {
+inline auto where(const ndarray<bool> &condition)
+    -> std::vector<ndarray<std::size_t>> {
   auto indices = condition.nonzero();
   return indices;
 }

@@ -13,7 +13,7 @@ using namespace np;
 
 // Verify eig output against A v = w v, unit columns, and the numpy pairing
 // of w[j] with v[:, j]; returns the result for further invariant checks.
-static np::linalg::EigenResult<double> check_eig(const Ndarray<int>& a) {
+static np::linalg::EigenResult<double> check_eig(const ndarray<int>& a) {
     auto e = linalg::eig(a);
     const int n = a.shape[0];
     for (int j = 0; j < n; ++j) {
@@ -40,8 +40,8 @@ static np::linalg::EigenResult<double> check_eig(const Ndarray<int>& a) {
 int main() {
     // dot 1D . 1D -> scalar
     {
-        Ndarray<int> a{1, 2, 3};
-        Ndarray<int> b{4, 5, 6};
+        ndarray<int> a{1, 2, 3};
+        ndarray<int> b{4, 5, 6};
         auto d = linalg::dot(a, b);
         test::check(d.ndim() == 0, "dot scalar ndim");
         test::check(d.item() == 32, "dot 1D value");
@@ -49,8 +49,8 @@ int main() {
 
     // dot 2D . 2D
     {
-        Ndarray<int> a{{1, 2}, {3, 4}};
-        Ndarray<int> b{{5, 6}, {7, 8}};
+        ndarray<int> a{{1, 2}, {3, 4}};
+        ndarray<int> b{{5, 6}, {7, 8}};
         auto d = linalg::dot(a, b);
         test::check(d.shape[0] == 2 && d.shape[1] == 2, "dot 2D shape");
         test::check(d(0, 0) == 19 && d(0, 1) == 22, "dot 2D values");
@@ -59,8 +59,8 @@ int main() {
 
     // dot mixed 1D/2D
     {
-        Ndarray<int> m{{1, 2}, {3, 4}};
-        Ndarray<int> v{1, 1};
+        ndarray<int> m{{1, 2}, {3, 4}};
+        ndarray<int> v{1, 1};
         auto mv = linalg::dot(m, v);
         test::check(mv.ndim() == 1 && mv.size() == 2, "dot 2D.1D shape");
         test::check(mv(0) == 3 && mv(1) == 7, "dot 2D.1D values");
@@ -70,24 +70,24 @@ int main() {
 
     // matmul
     {
-        Ndarray<int> a{{1, 0}, {0, 1}};
-        Ndarray<int> b{{2, 3}, {4, 5}};
+        ndarray<int> a{{1, 0}, {0, 1}};
+        ndarray<int> b{{2, 3}, {4, 5}};
         auto mm = linalg::matmul(a, b);
         test::check(mm(1, 1) == 5, "matmul identity");
     }
 
     // inner
     {
-        Ndarray<int> a{1, 2, 3};
-        Ndarray<int> b{4, 5, 6};
+        ndarray<int> a{1, 2, 3};
+        ndarray<int> b{4, 5, 6};
         auto in = linalg::inner(a, b);
         test::check(in.ndim() == 0 && in.item() == 32, "inner 1D");
     }
 
     // outer
     {
-        Ndarray<int> a{1, 2};
-        Ndarray<int> b{3, 4};
+        ndarray<int> a{1, 2};
+        ndarray<int> b{3, 4};
         auto o = linalg::outer(a, b);
         test::check(o.shape[0] == 2 && o.shape[1] == 2, "outer shape");
         test::check(o(1, 0) == 6 && o(0, 1) == 4, "outer values");
@@ -95,8 +95,8 @@ int main() {
 
     // mixed types promote to common type
     {
-        Ndarray<int> a{1, 2};
-        Ndarray<double> b{0.5, 0.5};
+        ndarray<int> a{1, 2};
+        ndarray<double> b{0.5, 0.5};
         auto d = linalg::dot(a, b);
         test::check(test::approx(d.item(), 1.5), "dot mixed type");
     }
@@ -105,7 +105,7 @@ int main() {
 
     // 2x3, full matrices: shapes, ordering, orthonormality, reconstruction
     {
-        Ndarray<int> a{{1, 2, 3}, {4, 5, 6}};
+        ndarray<int> a{{1, 2, 3}, {4, 5, 6}};
         auto r = linalg::svd(a);
         test::check(r.u.shape[0] == 2 && r.u.shape[1] == 2, "svd 2x3 u shape");
         test::check(r.s.shape[0] == 2, "svd 2x3 s shape");
@@ -126,7 +126,7 @@ int main() {
                         test::approx(vvt(0, 1), 0.0) &&
                         test::approx(vvt(1, 1), 1.0),
                     "svd vh orthonormal");
-        Ndarray<double> s_mat{{r.s(0), 0.0, 0.0}, {0.0, r.s(1), 0.0}};
+        ndarray<double> s_mat{{r.s(0), 0.0, 0.0}, {0.0, r.s(1), 0.0}};
         auto rec = linalg::dot(linalg::dot(r.u, s_mat), r.vh);
         for (int i = 0; i < 2; ++i) {
             for (int j = 0; j < 3; ++j) {
@@ -139,11 +139,11 @@ int main() {
 
     // rank-deficient: A = [[1,2],[2,4]] has sigma = {5, 0}
     {
-        Ndarray<int> a{{1, 2}, {2, 4}};
+        ndarray<int> a{{1, 2}, {2, 4}};
         auto r = linalg::svd(a);
         test::check(test::approx(r.s(0), 5.0), "svd rank-deficient sigma 1");
         test::check(std::abs(r.s(1)) < 1e-12, "svd rank-deficient sigma 2");
-        auto rec = linalg::dot(linalg::dot(r.u, Ndarray<double>{{r.s(0), 0.0},
+        auto rec = linalg::dot(linalg::dot(r.u, ndarray<double>{{r.s(0), 0.0},
                                                                 {0.0, r.s(1)}}),
                                r.vh);
         for (int i = 0; i < 2; ++i) {
@@ -157,7 +157,7 @@ int main() {
 
     // 3x2 (m > n) and the m < n transpose path
     {
-        Ndarray<int> a{{1, 2}, {3, 4}, {5, 6}};
+        ndarray<int> a{{1, 2}, {3, 4}, {5, 6}};
         auto full = linalg::svd(a, true, true);
         test::check(full.u.shape[0] == 3 && full.u.shape[1] == 3,
                     "svd 3x2 u full shape");
@@ -171,7 +171,7 @@ int main() {
         test::check(test::approx(full.s(0), red.s(0)) &&
                         test::approx(full.s(1), red.s(1)),
                     "svd full/reduced same sigma");
-        Ndarray<double> s_mat{{full.s(0), 0.0}, {0.0, full.s(1)}};
+        ndarray<double> s_mat{{full.s(0), 0.0}, {0.0, full.s(1)}};
         auto rec = linalg::dot(linalg::dot(red.u, s_mat), red.vh);
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 2; ++j) {
@@ -184,7 +184,7 @@ int main() {
 
     // singular values of a diagonal matrix; svdvals
     {
-        Ndarray<int> a{{3, 0}, {0, 4}};
+        ndarray<int> a{{3, 0}, {0, 4}};
         auto s = linalg::svdvals(a);
         test::check(s.shape[0] == 2, "svdvals shape");
         test::check(test::approx(s(0), 4.0) && test::approx(s(1), 3.0),
@@ -193,7 +193,7 @@ int main() {
 
     // compute_uv = false leaves u and vh empty
     {
-        Ndarray<int> a{{1, 2}, {3, 4}};
+        ndarray<int> a{{1, 2}, {3, 4}};
         auto r = linalg::svd(a, true, false);
         test::check(r.s.shape[0] == 2, "svd no-uv s");
         test::check(r.u.size() == 0 && r.vh.size() == 0, "svd no-uv empties");
@@ -201,7 +201,7 @@ int main() {
 
     // error paths
     {
-        Ndarray<int> v{1, 2, 3};
+        ndarray<int> v{1, 2, 3};
         bool threw = false;
         try {
             (void)linalg::svd(v);
@@ -215,7 +215,7 @@ int main() {
 
     // reduced mode on 3x2: reconstruction, orthonormality, triangularity
     {
-        Ndarray<int> a{{1, 2}, {3, 4}, {5, 6}};
+        ndarray<int> a{{1, 2}, {3, 4}, {5, 6}};
         auto r = linalg::qr(a);
         test::check(r.q.shape[0] == 3 && r.q.shape[1] == 2, "qr reduced q shape");
         test::check(r.r.shape[0] == 2 && r.r.shape[1] == 2, "qr reduced r shape");
@@ -239,7 +239,7 @@ int main() {
 
     // complete mode: q (M, M), r (M, N)
     {
-        Ndarray<int> a{{1, 2}, {3, 4}, {5, 6}};
+        ndarray<int> a{{1, 2}, {3, 4}, {5, 6}};
         auto r = linalg::qr(a, linalg::QrMode::Complete);
         test::check(r.q.shape[0] == 3 && r.q.shape[1] == 3, "qr complete q shape");
         test::check(r.r.shape[0] == 3 && r.r.shape[1] == 2, "qr complete r shape");
@@ -257,7 +257,7 @@ int main() {
 
     // r mode and raw mode
     {
-        Ndarray<int> a{{1, 2}, {3, 4}, {5, 6}};
+        ndarray<int> a{{1, 2}, {3, 4}, {5, 6}};
         auto r = linalg::qr(a, linalg::QrMode::R);
         test::check(r.r.shape[0] == 2 && r.r.shape[1] == 2, "qr r mode shape");
         test::check(r.q.size() == 0, "qr r mode no q");
@@ -308,7 +308,7 @@ int main() {
 
     // empty 0x3 input
     {
-        Ndarray<double> a(std::vector<int>{0, 3});
+        ndarray<double> a(std::vector<int>{0, 3});
         auto r = linalg::qr(a);
         test::check(r.q.shape[0] == 0 && r.q.shape[1] == 0, "qr empty q shape");
         test::check(r.r.shape[0] == 0 && r.r.shape[1] == 3, "qr empty r shape");
@@ -318,7 +318,7 @@ int main() {
 
     // symmetric 2x2: eigenvalues {3, 1}
     {
-        Ndarray<int> a{{2, 1}, {1, 2}};
+        ndarray<int> a{{2, 1}, {1, 2}};
         auto e = linalg::eig(a);
         test::check(e.w.shape[0] == 2, "eig w shape");
         test::check(e.v.shape[0] == 2 && e.v.shape[1] == 2, "eig v shape");
@@ -331,7 +331,7 @@ int main() {
 
     // complex pair from a rotation block
     {
-        Ndarray<int> a{{0, -1, 0}, {1, 0, 0}, {0, 0, 3}};
+        ndarray<int> a{{0, -1, 0}, {1, 0, 0}, {0, 0, 3}};
         auto e = linalg::eig(a);
         int complex_count = 0;
         for (int j = 0; j < 3; ++j) {
@@ -353,7 +353,7 @@ int main() {
     // A v = w v residual cannot hold for a full basis (numpy behaves the
     // same); here we only verify the double eigenvalue.
     {
-        Ndarray<int> a{{1, 1}, {0, 1}};
+        ndarray<int> a{{1, 1}, {0, 1}};
         auto e = linalg::eig(a);
         test::check(test::approx(e.w(0).real(), 1.0) &&
                         test::approx(e.w(0).imag(), 0.0) &&
@@ -364,7 +364,7 @@ int main() {
 
     // 4x4 block diagonal with two complex pairs: trace and det invariants
     {
-        Ndarray<int> a{{0, -1, 0, 0}, {1, 0, 0, 0}, {0, 0, 0, -2}, {0, 0, 2, 0}};
+        ndarray<int> a{{0, -1, 0, 0}, {1, 0, 0, 0}, {0, 0, 0, -2}, {0, 0, 2, 0}};
         auto e = check_eig(a);
         std::complex<double> sum{}, prod{1.0};
         for (int j = 0; j < 4; ++j) {
@@ -379,14 +379,14 @@ int main() {
 
     // eigvals and the 1x1 / empty / triangular edge cases
     {
-        Ndarray<int> a{{3, 0}, {0, 3}};
+        ndarray<int> a{{3, 0}, {0, 3}};
         auto w = linalg::eigvals(a);
         test::check(w.shape[0] == 2, "eigvals shape");
         test::check(test::approx(w(0).real(), 3.0) && test::approx(w(1).real(), 3.0),
                     "eigvals values");
     }
     {
-        Ndarray<int> a = Ndarray<int>::from_data(std::vector<int>{1, 1},
+        ndarray<int> a = ndarray<int>::from_data(std::vector<int>{1, 1},
                                                   std::vector<int>{7});
         auto e = linalg::eig(a);
         test::check(test::approx(e.w(0).real(), 7.0) &&
@@ -395,7 +395,7 @@ int main() {
                     "eig 1x1");
     }
     {
-        Ndarray<int> a{{1, 2, 3}, {0, 4, 5}, {0, 0, 6}};
+        ndarray<int> a{{1, 2, 3}, {0, 4, 5}, {0, 0, 6}};
         auto e = check_eig(a);
         test::check(test::approx(e.w(0).real(), 1.0) &&
                         test::approx(e.w(1).real(), 4.0) &&
@@ -403,14 +403,14 @@ int main() {
                     "eig triangular values");
     }
     {
-        Ndarray<double> a(std::vector<int>{0, 0});
+        ndarray<double> a(std::vector<int>{0, 0});
         auto e = linalg::eig(a);
         test::check(e.w.size() == 0 && e.v.size() == 0, "eig empty");
     }
 
     // error paths
     {
-        Ndarray<int> m{{1, 2, 3}, {4, 5, 6}};
+        ndarray<int> m{{1, 2, 3}, {4, 5, 6}};
         bool threw = false;
         try {
             (void)linalg::eig(m);
@@ -418,7 +418,7 @@ int main() {
             threw = true;
         }
         test::check(threw, "eig rejects non-square");
-        Ndarray<int> v{1, 2};
+        ndarray<int> v{1, 2};
         threw = false;
         try {
             (void)linalg::eig(v);
@@ -431,7 +431,7 @@ int main() {
     // --- det / slogdet ------------------------------------------------------
 
     {
-        Ndarray<int> a{{1, 2}, {3, 4}};
+        ndarray<int> a{{1, 2}, {3, 4}};
         test::check(test::approx(linalg::det(a), -2.0), "det 2x2");
         auto sl = linalg::slogdet(a);
         test::check(test::approx(sl.sign, -1.0) &&
@@ -439,7 +439,7 @@ int main() {
                     "slogdet 2x2");
     }
     {
-        Ndarray<int> a{{1, 1, 2}, {3, 5, 8}, {13, 21, 34}};
+        ndarray<int> a{{1, 1, 2}, {3, 5, 8}, {13, 21, 34}};
         // 1*(5*34-8*21) - 1*(3*34-8*13) + 2*(3*21-5*13) = 2 - (-2) + 2*(-2) = 0
         test::check(test::approx(linalg::det(a), 0.0), "det singular 3x3");
         auto sl = linalg::slogdet(a);
@@ -448,26 +448,26 @@ int main() {
                     "slogdet singular");
     }
     {
-        Ndarray<double> a(std::vector<int>{0, 0});
+        ndarray<double> a(std::vector<int>{0, 0});
         test::check(test::approx(linalg::det(a), 1.0), "det 0x0");
         auto sl = linalg::slogdet(a);
         test::check(test::approx(sl.sign, 1.0) && test::approx(sl.logabsdet, 0.0),
                     "slogdet 0x0");
     }
     {
-        Ndarray<int> a = Ndarray<int>::from_data(std::vector<int>{1, 1},
+        ndarray<int> a = ndarray<int>::from_data(std::vector<int>{1, 1},
                                                   std::vector<int>{7});
         test::check(test::approx(linalg::det(a), 7.0), "det 1x1");
     }
     {
-        Ndarray<int> a{{0, 0}, {0, 0}};
+        ndarray<int> a{{0, 0}, {0, 0}};
         test::check(test::approx(linalg::det(a), 0.0), "det zero matrix");
     }
 
     // --- inv ----------------------------------------------------------------
 
     {
-        Ndarray<int> a{{4, 7}, {2, 6}};
+        ndarray<int> a{{4, 7}, {2, 6}};
         auto i = linalg::inv(a);
         test::check(test::approx(i(0, 0), 0.6) && test::approx(i(0, 1), -0.7) &&
                         test::approx(i(1, 0), -0.2) && test::approx(i(1, 1), 0.4),
@@ -478,7 +478,7 @@ int main() {
                     "inv round trip");
     }
     {
-        Ndarray<int> a{{1, 2}, {2, 4}};
+        ndarray<int> a{{1, 2}, {2, 4}};
         bool threw = false;
         try {
 (void)linalg::inv(a);
@@ -488,20 +488,20 @@ int main() {
         test::check(threw, "inv rejects singular");
     }
     {
-        Ndarray<double> a(std::vector<int>{0, 0});
+        ndarray<double> a(std::vector<int>{0, 0});
         test::check(linalg::inv(a).size() == 0, "inv 0x0 empty");
     }
 
     // --- solve --------------------------------------------------------------
 
     {
-        Ndarray<int> a{{3, 1}, {1, 2}};
-        Ndarray<int> b{9, 8};
+        ndarray<int> a{{3, 1}, {1, 2}};
+        ndarray<int> b{9, 8};
         auto x = linalg::solve(a, b);
         test::check(x.ndim() == 1 && test::approx(x(0), 2.0) &&
                         test::approx(x(1), 3.0),
                     "solve 1D rhs");
-        Ndarray<int> b2{{9, 9}, {8, 8}};
+        ndarray<int> b2{{9, 9}, {8, 8}};
         auto x2 = linalg::solve(a, b2);
         test::check(x2.ndim() == 2 && test::approx(x2(0, 0), 2.0) &&
                         test::approx(x2(0, 1), 2.0) && test::approx(x2(1, 0), 3.0) &&
@@ -512,8 +512,8 @@ int main() {
                     "solve round trip");
     }
     {
-        Ndarray<int> a{{1, 2}, {2, 4}};
-        Ndarray<int> b{1, 1};
+        ndarray<int> a{{1, 2}, {2, 4}};
+        ndarray<int> b{1, 1};
         bool threw = false;
         try {
 (void)linalg::solve(a, b);
@@ -526,7 +526,7 @@ int main() {
     // --- matrix_power -------------------------------------------------------
 
     {
-        Ndarray<int> a{{1, 1}, {1, 0}};
+        ndarray<int> a{{1, 1}, {1, 0}};
         auto p = linalg::matrix_power(a, 10);
         test::check(test::approx(p(0, 0), 89.0) && test::approx(p(1, 0), 55.0),
                     "matrix_power fibonacci");
@@ -542,7 +542,7 @@ int main() {
     // --- cholesky -----------------------------------------------------------
 
     {
-        Ndarray<int> a{{4, 2}, {2, 3}};
+        ndarray<int> a{{4, 2}, {2, 3}};
         auto l = linalg::cholesky(a);
         test::check(test::approx(l(0, 0), 2.0) && test::approx(l(1, 0), 1.0) &&
                         test::approx(l(0, 1), 0.0) &&
@@ -557,7 +557,7 @@ int main() {
                     "cholesky upper");
     }
     {
-        Ndarray<int> a{{1, 2}, {2, 1}};
+        ndarray<int> a{{1, 2}, {2, 1}};
         bool threw = false;
         try {
 (void)linalg::cholesky(a);
@@ -570,7 +570,7 @@ int main() {
     // --- norm ---------------------------------------------------------------
 
     {
-        Ndarray<int> v{3, 4};
+        ndarray<int> v{3, 4};
         test::check(test::approx(linalg::norm(v), 5.0), "norm vector 2");
         test::check(test::approx(linalg::norm(v, linalg::NormOrd::One), 7.0),
                     "norm vector 1");
@@ -583,7 +583,7 @@ int main() {
                     "norm vector -1");
     }
     {
-        Ndarray<int> m{{1, 2}, {3, 4}};
+        ndarray<int> m{{1, 2}, {3, 4}};
         test::check(test::approx(linalg::norm(m), std::sqrt(30.0)), "norm matrix fro");
         test::check(test::approx(linalg::norm(m, linalg::NormOrd::One), 6.0),
                     "norm matrix 1");
@@ -604,17 +604,17 @@ int main() {
     // --- matrix_rank --------------------------------------------------------
 
     {
-        Ndarray<int> a{{1, 2, 3}, {2, 4, 6}};
+        ndarray<int> a{{1, 2, 3}, {2, 4, 6}};
         test::check(linalg::matrix_rank(a) == 1, "rank dependent rows");
-        Ndarray<int> b{{1, 2}, {3, 4}};
+        ndarray<int> b{{1, 2}, {3, 4}};
         test::check(linalg::matrix_rank(b) == 2, "rank full");
-        Ndarray<int> z{{0, 0}, {0, 0}};
+        ndarray<int> z{{0, 0}, {0, 0}};
         test::check(linalg::matrix_rank(z) == 0, "rank zero");
-        Ndarray<int> v{1, 0, 0};
+        ndarray<int> v{1, 0, 0};
         test::check(linalg::matrix_rank(v) == 1, "rank 1D nonzero");
-        Ndarray<int> w{0, 0};
+        ndarray<int> w{0, 0};
         test::check(linalg::matrix_rank(w) == 0, "rank 1D zero");
-        Ndarray<double> s{{1e-10, 0.0}, {0.0, 1.0}};
+        ndarray<double> s{{1e-10, 0.0}, {0.0, 1.0}};
         test::check(linalg::matrix_rank(s, 1e-15) == 2, "rank tol loose");
         test::check(linalg::matrix_rank(s, 1e-5) == 1, "rank tol strict");
     }
@@ -622,18 +622,18 @@ int main() {
     // --- pinv ---------------------------------------------------------------
 
     {
-        Ndarray<int> a{{1, 2}, {3, 4}};
+        ndarray<int> a{{1, 2}, {3, 4}};
         auto p = linalg::pinv(a);
         test::check(test::approx(p(0, 0), -2.0) && test::approx(p(0, 1), 1.0) &&
                         test::approx(p(1, 0), 1.5) && test::approx(p(1, 1), -0.5),
                     "pinv 2x2");
-        Ndarray<int> t{{1, 0}, {0, 1}, {0, 0}};
+        ndarray<int> t{{1, 0}, {0, 1}, {0, 0}};
         auto pt = linalg::pinv(t);
         test::check(pt.shape[0] == 2 && pt.shape[1] == 3 &&
                         test::approx(pt(0, 0), 1.0) && test::approx(pt(1, 1), 1.0) &&
                         test::approx(pt(0, 2), 0.0),
                     "pinv 3x2");
-        Ndarray<double> s{{1e-10, 0.0}, {0.0, 1.0}};
+        ndarray<double> s{{1e-10, 0.0}, {0.0, 1.0}};
         auto ps = linalg::pinv(s, 1e-5);
         test::check(test::approx(ps(0, 0), 0.0) && test::approx(ps(1, 1), 1.0),
                     "pinv rcond cutoff");
@@ -646,23 +646,23 @@ int main() {
     // --- cond ---------------------------------------------------------------
 
     {
-        Ndarray<int> i2{{1, 0}, {0, 1}};
+        ndarray<int> i2{{1, 0}, {0, 1}};
         test::check(test::approx(linalg::cond(i2), 1.0), "cond identity");
-        Ndarray<int> d{{1, 0}, {0, 2}};
+        ndarray<int> d{{1, 0}, {0, 2}};
         test::check(test::approx(linalg::cond(d), 2.0), "cond diagonal");
-        Ndarray<int> m{{1, 2}, {3, 4}};
+        ndarray<int> m{{1, 2}, {3, 4}};
         test::check(test::approx(linalg::cond(m, linalg::NormOrd::One), 21.0),
                     "cond p=1");
         test::check(test::approx(linalg::cond(m, linalg::NormOrd::Inf), 21.0),
                     "cond p=inf");
-        Ndarray<int> s{{1, 2}, {2, 4}};
+        ndarray<int> s{{1, 2}, {2, 4}};
         test::check(std::isinf(linalg::cond(s)), "cond singular inf");
     }
 
     // --- eigh / eigvalsh ----------------------------------------------------
 
     {
-        Ndarray<int> a{{2, 1}, {1, 2}};
+        ndarray<int> a{{2, 1}, {1, 2}};
         auto e = linalg::eigh(a);
         test::check(test::approx(e.w(0), 1.0) && test::approx(e.w(1), 3.0),
                     "eigh values ascending");
@@ -683,8 +683,8 @@ int main() {
     // --- tensordot ----------------------------------------------------------
 
     {
-        Ndarray<int> a{{1, 2}, {3, 4}};
-        Ndarray<int> b{{5, 6}, {7, 8}};
+        ndarray<int> a{{1, 2}, {3, 4}};
+        ndarray<int> b{{5, 6}, {7, 8}};
         // axes = 1: matrix product
         auto t1 = linalg::tensordot(a, b, 1);
         test::check(t1.ndim() == 2 && t1(0, 0) == 19 && t1(1, 1) == 50,
@@ -700,7 +700,7 @@ int main() {
         auto t2 = linalg::tensordot(a, b, 2);
         test::check(t2.ndim() == 0 && t2.item() == 70, "tensordot axes 2");
         // explicit axis pair (contract middle axes of a 3-D with a 2-D)
-        Ndarray<int> c(std::vector<int>{2, 2, 2});
+        ndarray<int> c(std::vector<int>{2, 2, 2});
         c.data()[0] = 1;
         c.data()[1] = 2;
         c.data()[2] = 3;
@@ -718,20 +718,20 @@ int main() {
     // --- cross --------------------------------------------------------------
 
     {
-        Ndarray<int> a{1, 2, 3};
-        Ndarray<int> b{4, 5, 6};
+        ndarray<int> a{1, 2, 3};
+        ndarray<int> b{4, 5, 6};
         auto c = linalg::cross(a, b);
         test::check(c.ndim() == 1 && c(0) == -3 && c(1) == 6 && c(2) == -3,
                     "cross 1D");
         // axis along 0
-        Ndarray<int> m{{1, 4}, {2, 5}, {3, 6}};
+        ndarray<int> m{{1, 4}, {2, 5}, {3, 6}};
         auto cm = linalg::cross(m, m, 0);
         test::check(cm.ndim() == 2 && cm(0, 0) == 0 && cm(1, 0) == 0 &&
                         cm(2, 0) == 0,
                     "cross axis 0 self");
         // 1-D x 2-D broadcast
-        Ndarray<int> row{1, 0, 0};
-        Ndarray<int> mat{{0, 1, 0}, {0, 0, 1}};
+        ndarray<int> row{1, 0, 0};
+        ndarray<int> mat{{0, 1, 0}, {0, 0, 1}};
         auto cb = linalg::cross(row, mat);
         test::check(cb.shape[0] == 2 && cb(0, 2) == 1 && cb(1, 1) == -1,
                     "cross broadcast");
@@ -740,29 +740,29 @@ int main() {
     // --- multi_dot ----------------------------------------------------------
 
     {
-        Ndarray<int> a{{1, 0}, {0, 1}};
-        Ndarray<int> b{{2, 3}, {4, 5}};
-        Ndarray<int> c{{1, 1}, {1, 1}};
-        auto md = linalg::multi_dot(std::vector<Ndarray<int>>{a, b, c});
+        ndarray<int> a{{1, 0}, {0, 1}};
+        ndarray<int> b{{2, 3}, {4, 5}};
+        ndarray<int> c{{1, 1}, {1, 1}};
+        auto md = linalg::multi_dot(std::vector<ndarray<int>>{a, b, c});
         test::check(md.shape[0] == 2 && md(0, 0) == 5 && md(1, 1) == 9,
                     "multi_dot 3 matrices");
-        auto md2 = linalg::multi_dot(std::vector<Ndarray<int>>{a, b});
+        auto md2 = linalg::multi_dot(std::vector<ndarray<int>>{a, b});
         test::check(md2(1, 0) == 4, "multi_dot 2 matrices");
         // 1-D ends follow dot semantics: (K,) (K, M) (M,)
-        Ndarray<int> v{1, 1};
-        auto md3 = linalg::multi_dot(std::vector<Ndarray<int>>{v, b, v});
+        ndarray<int> v{1, 1};
+        auto md3 = linalg::multi_dot(std::vector<ndarray<int>>{v, b, v});
         test::check(md3.ndim() == 0 && md3.item() == 14,
                     "multi_dot 1D ends");
         // optimal ordering picks the cheap parenthesization: (AB)C vs A(BC)
         // 10x100, 100x5, 5x50 -> result (10, 50), value 10 at (0, 0)
-        Ndarray<int> big(std::vector<int>{10, 100});
-        Ndarray<int> mid(std::vector<int>{100, 5});
-        Ndarray<int> sml(std::vector<int>{5, 50});
+        ndarray<int> big(std::vector<int>{10, 100});
+        ndarray<int> mid(std::vector<int>{100, 5});
+        ndarray<int> sml(std::vector<int>{5, 50});
         big.data()[0] = 1;
         mid.data()[0] = 1;
         sml.data()[0] = 1;
         auto mo = linalg::multi_dot(
-            std::vector<Ndarray<int>>{big, mid, sml});
+            std::vector<ndarray<int>>{big, mid, sml});
         test::check(mo.shape[0] == 10 && mo.shape[1] == 50 && mo(0, 0) == 1,
                     "multi_dot optimal order");
     }
@@ -771,8 +771,8 @@ int main() {
 
     {
         // exact 2x2 system -> x = [2, 3], full rank, M == N so no residuals
-        Ndarray<int> a{{3, 1}, {1, 2}};
-        Ndarray<int> b{9, 8};
+        ndarray<int> a{{3, 1}, {1, 2}};
+        ndarray<int> b{9, 8};
         auto r = linalg::lstsq(a, b);
         test::check(test::approx(r.x(0), 2.0) && test::approx(r.x(1), 3.0),
                     "lstsq exact");
@@ -781,8 +781,8 @@ int main() {
     }
     {
         // overdetermined consistent: y = 2x + 1 through (0, 1), (1, 3), (2, 5)
-        Ndarray<int> a{{0, 1}, {1, 1}, {2, 1}};
-        Ndarray<int> b{1, 3, 5};
+        ndarray<int> a{{0, 1}, {1, 1}, {2, 1}};
+        ndarray<int> b{1, 3, 5};
         auto r = linalg::lstsq(a, b);
         test::check(test::approx(r.x(0), 2.0) && test::approx(r.x(1), 1.0),
                     "lstsq overdetermined solution");
@@ -791,7 +791,7 @@ int main() {
                         test::approx(r.residuals(0), 0.0, 1e-10),
                     "lstsq consistent residuals");
         // 2-D b: two systems sharing the same a
-        Ndarray<int> b2{{1, 3}, {3, 7}, {5, 11}};
+        ndarray<int> b2{{1, 3}, {3, 7}, {5, 11}};
         auto r2 = linalg::lstsq(a, b2);
         test::check(r2.x.ndim() == 2 && test::approx(r2.x(0, 1), 4.0) &&
                         test::approx(r2.x(1, 1), 3.0) &&
@@ -800,8 +800,8 @@ int main() {
     }
     {
         // rank-deficient: singular values below the cutoff are dropped
-        Ndarray<double> a{{1.0, 2.0}, {2.0, 4.0}, {3.0, 6.0}};
-        Ndarray<double> b{1.0, 2.0, 3.0};
+        ndarray<double> a{{1.0, 2.0}, {2.0, 4.0}, {3.0, 6.0}};
+        ndarray<double> b{1.0, 2.0, 3.0};
         auto r = linalg::lstsq(a, b);
         test::check(r.rank == 1, "lstsq rank deficient");
         test::check(r.residuals.size() == 0, "lstsq residuals empty rank");
@@ -814,11 +814,11 @@ int main() {
     // --- diagonal -----------------------------------------------------------
 
     {
-        Ndarray<int> a{{0, 1}, {2, 3}};
+        ndarray<int> a{{0, 1}, {2, 3}};
         auto d0 = linalg::diagonal(a);
         test::check(d0.ndim() == 1 && d0(0) == 0 && d0(1) == 3,
                     "diagonal main");
-        Ndarray<int> m{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+        ndarray<int> m{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
         auto d1 = linalg::diagonal(m, 1);
         test::check(d1.ndim() == 1 && d1(0) == 2 && d1(1) == 6,
                     "diagonal offset +1");
@@ -829,7 +829,7 @@ int main() {
         auto dm3 = linalg::diagonal(m, -3);
         test::check(dm3.size() == 0, "diagonal offset -3 out of range");
         // 3-D stack: leading dims are preserved
-        Ndarray<int> s(std::vector<int>{2, 2, 2});
+        ndarray<int> s(std::vector<int>{2, 2, 2});
         for (std::size_t i = 0; i < 8; ++i) {
             s.data()[i] = static_cast<int>(i);
         }
@@ -842,12 +842,12 @@ int main() {
     // --- matrix_transpose ---------------------------------------------------
 
     {
-        Ndarray<int> m{{1, 2, 3}, {4, 5, 6}};
+        ndarray<int> m{{1, 2, 3}, {4, 5, 6}};
         auto t = linalg::matrix_transpose(m);
         test::check(t.shape[0] == 3 && t.shape[1] == 2 && t(0, 1) == 4 &&
                         t(2, 0) == 3,
                     "matrix_transpose 2D");
-        Ndarray<int> s(std::vector<int>{2, 2, 2});
+        ndarray<int> s(std::vector<int>{2, 2, 2});
         for (std::size_t i = 0; i < 8; ++i) {
             s.data()[i] = static_cast<int>(i);
         }
@@ -864,7 +864,7 @@ int main() {
     // --- matrix_norm --------------------------------------------------------
 
     {
-        Ndarray<int> m{{1, 2}, {3, 4}};
+        ndarray<int> m{{1, 2}, {3, 4}};
         test::check(test::approx(linalg::matrix_norm(m), 5.477225575051661),
                     "matrix_norm default fro");
         test::check(
@@ -881,7 +881,7 @@ int main() {
             test::approx(linalg::matrix_norm(m, linalg::NormOrd::Two),
                          linalg::norm(m, linalg::NormOrd::Two)),
             "matrix_norm two");
-        Ndarray<int> v{1, 2};
+        ndarray<int> v{1, 2};
         bool threw = false;
         try {
             (void)linalg::matrix_norm(v);
@@ -895,7 +895,7 @@ int main() {
 
     {
         // eye(24) reshaped to (4, 6, 8, 3): a(i, j, k, l) = 1 iff i*6+j == k*3+l
-        Ndarray<int> a(std::vector<int>{4, 6, 8, 3});
+        ndarray<int> a(std::vector<int>{4, 6, 8, 3});
         for (std::size_t i = 0; i < 4; ++i) {
             for (std::size_t j = 0; j < 6; ++j) {
                 for (std::size_t k = 0; k < 8; ++k) {
@@ -920,7 +920,7 @@ int main() {
                 ai.get(std::vector<std::size_t>{2, 1, 3, 1}) == 0.0,
             "tensorinv identity structure");
         // ind = 1 on (24, 8, 3): out(j, k, i) = 1 iff 3*j + k == i
-        Ndarray<int> a24(std::vector<int>{24, 8, 3});
+        ndarray<int> a24(std::vector<int>{24, 8, 3});
         for (std::size_t f = 0; f < 24 * 8 * 3; ++f) {
             a24.data()[f] = f / 24 == f % 24 ? 1 : 0;
         }
@@ -935,7 +935,7 @@ int main() {
                 ai1.get(std::vector<std::size_t>{1, 0, 1}) == 0.0,
             "tensorinv ind 1 structure");
         // errors: not square, singular, bad ind
-        Ndarray<int> ns{{1, 2, 3}, {4, 5, 6}};
+        ndarray<int> ns{{1, 2, 3}, {4, 5, 6}};
         bool threw = false;
         try {
             (void)linalg::tensorinv(ns);
@@ -943,7 +943,7 @@ int main() {
             threw = true;
         }
         test::check(threw, "tensorinv non-square");
-        Ndarray<int> z{{0, 0}, {0, 0}};
+        ndarray<int> z{{0, 0}, {0, 0}};
         threw = false;
         try {
             (void)linalg::tensorinv(z);
@@ -965,7 +965,7 @@ int main() {
     {
         // a = eye(24) reshaped to (6, 4, 2, 3, 4), b = ones((6, 4)):
         // the system matrix is the identity, so x = ones((2, 3, 4))
-        Ndarray<int> a(std::vector<int>{6, 4, 2, 3, 4});
+        ndarray<int> a(std::vector<int>{6, 4, 2, 3, 4});
         for (std::size_t i = 0; i < 6; ++i) {
             for (std::size_t j = 0; j < 4; ++j) {
                 for (std::size_t k = 0; k < 2; ++k) {
@@ -978,7 +978,7 @@ int main() {
                 }
             }
         }
-        Ndarray<int> b(std::vector<int>{6, 4});
+        ndarray<int> b(std::vector<int>{6, 4});
         for (std::size_t i = 0; i < 24; ++i) {
             b.data()[i] = 1;
         }
@@ -990,7 +990,7 @@ int main() {
         // axes = {0, 1} moves those dims last: (4, 6, 8, 3) -> (8, 3, 4, 6);
         // the reordered system matrix is again the identity, so x is b
         // reshaped to (4, 6)
-        Ndarray<int> a2(std::vector<int>{4, 6, 8, 3});
+        ndarray<int> a2(std::vector<int>{4, 6, 8, 3});
         for (std::size_t i = 0; i < 4; ++i) {
             for (std::size_t j = 0; j < 6; ++j) {
                 for (std::size_t k = 0; k < 8; ++k) {
@@ -1001,7 +1001,7 @@ int main() {
                 }
             }
         }
-        Ndarray<int> b2(std::vector<int>{8, 3});
+        ndarray<int> b2(std::vector<int>{8, 3});
         for (std::size_t i = 0; i < 24; ++i) {
             b2.data()[i] = static_cast<int>(i);
         }
@@ -1010,8 +1010,8 @@ int main() {
                         x2(1, 2) == 8 && x2(2, 0) == 12 && x2(3, 3) == 21,
                     "tensorsolve with axes");
         // errors: not square, singular, shape mismatch
-        Ndarray<int> ns(std::vector<int>{4, 6, 8, 1});
-        Ndarray<int> bs(std::vector<int>{4, 6, 8});
+        ndarray<int> ns(std::vector<int>{4, 6, 8, 1});
+        ndarray<int> bs(std::vector<int>{4, 6, 8});
         bool threw = false;
         try {
             (void)linalg::tensorsolve(ns, bs);
@@ -1019,8 +1019,8 @@ int main() {
             threw = true;
         }
         test::check(threw, "tensorsolve not square");
-        Ndarray<int> z(std::vector<int>{4, 6, 8, 3});
-        Ndarray<int> bz(std::vector<int>{4, 6});
+        ndarray<int> z(std::vector<int>{4, 6, 8, 3});
+        ndarray<int> bz(std::vector<int>{4, 6});
         threw = false;
         try {
             (void)linalg::tensorsolve(z, bz);
@@ -1028,8 +1028,8 @@ int main() {
             threw = true;
         }
         test::check(threw, "tensorsolve singular");
-        Ndarray<int> m4(std::vector<int>{4, 6, 8, 3});
-        Ndarray<int> wb(std::vector<int>{6, 8});
+        ndarray<int> m4(std::vector<int>{4, 6, 8, 3});
+        ndarray<int> wb(std::vector<int>{6, 8});
         threw = false;
         try {
             (void)linalg::tensorsolve(m4, wb);
@@ -1043,24 +1043,24 @@ int main() {
 
     {
         // doc example: projected size along a normal for an array of vectors
-        Ndarray<int> v{{0, 5, 0}, {0, 0, 10}, {0, 6, 8}};
-        Ndarray<double> n{0.0, 0.6, 0.8};
+        ndarray<int> v{{0, 5, 0}, {0, 0, 10}, {0, 6, 8}};
+        ndarray<double> n{0.0, 0.6, 0.8};
         auto p = linalg::vecdot(v, n);
         test::check(p.ndim() == 1 && test::approx(p(0), 3.0) &&
                         test::approx(p(1), 8.0) && test::approx(p(2), 10.0),
                     "vecdot doc example");
         // axis = 0 contracts the first axis
-        Ndarray<int> a{{1, 2, 3}, {4, 5, 6}};
-        Ndarray<int> one{1, 1};
+        ndarray<int> a{{1, 2, 3}, {4, 5, 6}};
+        ndarray<int> one{1, 1};
         auto c0 = linalg::vecdot(a, one, 0);
         test::check(c0.ndim() == 1 && c0(0) == 5 && c0(1) == 7 && c0(2) == 9,
                     "vecdot axis 0");
         // broadcasting of the remainder: (2, 3, 4) . (4,) -> (2, 3)
-        Ndarray<int> t(std::vector<int>{2, 3, 4});
+        ndarray<int> t(std::vector<int>{2, 3, 4});
         for (std::size_t i = 0; i < 24; ++i) {
             t.data()[i] = static_cast<int>(i);
         }
-        Ndarray<int> ones(std::vector<int>{4});
+        ndarray<int> ones(std::vector<int>{4});
         for (std::size_t i = 0; i < 4; ++i) {
             ones.data()[i] = 1;
         }
@@ -1077,8 +1077,8 @@ int main() {
         test::check(threw, "vecdot mismatched sizes");
         threw = false;
         try {
-            Ndarray<int> w(std::vector<int>{2, 3, 4});
-            Ndarray<int> u(std::vector<int>{2, 5});
+            ndarray<int> w(std::vector<int>{2, 3, 4});
+            ndarray<int> u(std::vector<int>{2, 5});
             (void)linalg::vecdot(w, u);
         } catch (const std::invalid_argument&) {
             threw = true;
@@ -1090,7 +1090,7 @@ int main() {
 
     {
         // doc example: arange(1..10).reshape(3, 3)
-        Ndarray<int> b(std::vector<int>{3, 3});
+        ndarray<int> b(std::vector<int>{3, 3});
         for (std::size_t i = 0; i < 9; ++i) {
             b.data()[i] = static_cast<int>(i) + 1;
         }

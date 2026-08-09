@@ -17,7 +17,7 @@ int main() {
         auto a = asarray(std::vector<int>{1, 2, 3});
         auto b = asarray(std::vector<int>{4, 5, 6});
         
-        std::vector<Ndarray<int>> arrays = {a, b};
+        std::vector<ndarray<int>> arrays = {a, b};
         auto c = concatenate(arrays, 0);
         test::check(c.shape[0] == 6, "concatenate axis 0: shape");
         test::check(c.at(0) == 1, "first element");
@@ -27,10 +27,10 @@ int main() {
     
     // --- concatenate 2D along axis 0 ---
     {
-        Ndarray<int> a{{1, 2}, {3, 4}};
-        Ndarray<int> b{{5, 6}, {7, 8}};
+        ndarray<int> a{{1, 2}, {3, 4}};
+        ndarray<int> b{{5, 6}, {7, 8}};
         
-        std::vector<Ndarray<int>> arrays = {a, b};
+        std::vector<ndarray<int>> arrays = {a, b};
         auto c = concatenate(arrays, 0);
         test::check(c.shape[0] == 4 && c.shape[1] == 2, "concat 2D axis 0: shape");
         test::check(c.at(0, 0) == 1, "element [0,0]");
@@ -40,10 +40,10 @@ int main() {
     
     // --- concatenate 2D along axis 1 ---
     {
-        Ndarray<int> a{{1, 2}, {3, 4}};
-        Ndarray<int> b{{5, 6}, {7, 8}};
+        ndarray<int> a{{1, 2}, {3, 4}};
+        ndarray<int> b{{5, 6}, {7, 8}};
         
-        std::vector<Ndarray<int>> arrays = {a, b};
+        std::vector<ndarray<int>> arrays = {a, b};
         auto c = concatenate(arrays, 1);
         test::check(c.shape[0] == 2 && c.shape[1] == 4, "concat 2D axis 1: shape");
         test::check(c.at(0, 0) == 1, "element [0,0]");
@@ -56,7 +56,7 @@ int main() {
         auto a = asarray(std::vector<int>{1, 2, 3});
         auto b = asarray(std::vector<int>{4, 5, 6});
         
-        std::vector<Ndarray<int>> arrays = {a, b};
+        std::vector<ndarray<int>> arrays = {a, b};
         auto c = stack(arrays, 0);
         test::check(c.shape[0] == 2 && c.shape[1] == 3, "stack axis 0: shape");
         test::check(c.at(0, 0) == 1, "element [0,0]");
@@ -75,15 +75,15 @@ int main() {
         auto a = asarray(std::vector<int>{1, 2, 3});
         auto b = asarray(std::vector<int>{4, 5, 6});
         
-        std::vector<Ndarray<int>> arrays = {a, b};
+        std::vector<ndarray<int>> arrays = {a, b};
         auto c = vstack(arrays);
         test::check(c.shape[0] == 2 && c.shape[1] == 3, "vstack 1D: shape");
         test::check(c.at(0, 0) == 1, "element [0,0]");
         test::check(c.at(1, 0) == 4, "element [1,0]");
         
-        Ndarray<int> d{{1, 2}};
-        Ndarray<int> e{{3, 4}};
-        std::vector<Ndarray<int>> arrays2 = {d, e};
+        ndarray<int> d{{1, 2}};
+        ndarray<int> e{{3, 4}};
+        std::vector<ndarray<int>> arrays2 = {d, e};
         auto f = vstack(arrays2);
         test::check(f.shape[0] == 2 && f.shape[1] == 2, "vstack 2D: shape");
         test::check(f.at(0, 0) == 1, "element [0,0]");
@@ -95,15 +95,15 @@ int main() {
         auto a = asarray(std::vector<int>{1, 2, 3});
         auto b = asarray(std::vector<int>{4, 5, 6});
         
-        std::vector<Ndarray<int>> arrays = {a, b};
+        std::vector<ndarray<int>> arrays = {a, b};
         auto c = hstack(arrays);
         test::check(c.shape[0] == 6, "hstack 1D: shape");
         test::check(c.at(0) == 1, "first element");
         test::check(c.at(3) == 4, "fourth element");
         
-        Ndarray<int> d = Ndarray<int>::from_data({2, 1}, {1, 2});
-        Ndarray<int> e = Ndarray<int>::from_data({2, 1}, {3, 4});
-        std::vector<Ndarray<int>> arrays2 = {d, e};
+        ndarray<int> d = ndarray<int>::from_data({2, 1}, {1, 2});
+        ndarray<int> e = ndarray<int>::from_data({2, 1}, {3, 4});
+        std::vector<ndarray<int>> arrays2 = {d, e};
         auto f = hstack(arrays2);
         test::check(f.shape[0] == 2 && f.shape[1] == 2, "hstack 2D: shape");
         test::check(f.at(0, 0) == 1, "element [0,0]");
@@ -114,10 +114,10 @@ int main() {
     
     // --- dstack (depth) ---
     {
-        Ndarray<int> a{{1, 2}, {3, 4}};
-        Ndarray<int> b{{5, 6}, {7, 8}};
+        ndarray<int> a{{1, 2}, {3, 4}};
+        ndarray<int> b{{5, 6}, {7, 8}};
         
-        std::vector<Ndarray<int>> arrays = {a, b};
+        std::vector<ndarray<int>> arrays = {a, b};
         auto c = dstack(arrays);
         test::check(c.ndim() == 3, "dstack: 3D");
         test::check(c.shape[0] == 2 && c.shape[1] == 2 && c.shape[2] == 2,
@@ -133,7 +133,7 @@ int main() {
         auto a = asarray(std::vector<int>{1, 2, 3});
         auto b = asarray(std::vector<int>{4, 5, 6});
         
-        std::vector<Ndarray<int>> arrays = {a, b};
+        std::vector<ndarray<int>> arrays = {a, b};
         auto c = column_stack(arrays);
         test::check(c.shape[0] == 3 && c.shape[1] == 2, "column_stack: shape");
         test::check(c.at(0, 0) == 1, "element [0,0]");
@@ -146,7 +146,7 @@ int main() {
         auto a = asarray(std::vector<int>{1, 2, 3});
         auto b = asarray(std::vector<int>{4, 5, 6});
         
-        std::vector<Ndarray<int>> arrays = {a, b};
+        std::vector<ndarray<int>> arrays = {a, b};
         auto c = row_stack(arrays);
         test::check(c.shape[0] == 2 && c.shape[1] == 3, "row_stack: shape");
         test::check(c.at(0, 0) == 1, "element [0,0]");

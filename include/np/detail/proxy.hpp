@@ -21,7 +21,7 @@
 
 namespace np {
 
-template <typename T> class Ndarray;
+template <typename T> class ndarray;
 
 namespace detail {
 
@@ -132,7 +132,7 @@ flat_index(const std::vector<std::size_t> &idx,
  * @tparam IsConst Whether this proxy provides read-only access
  */
 template <typename T, bool IsConst, std::size_t MaxDims = 8> class ProxyBase {
-  using Array = std::conditional_t<IsConst, const Ndarray<T>, Ndarray<T>>;
+  using Array = std::conditional_t<IsConst, const ndarray<T>, ndarray<T>>;
   using Stack = detail::IndexStack<MaxDims>;
   using Self = ProxyBase<T, IsConst, MaxDims>;
 

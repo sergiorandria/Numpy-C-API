@@ -16,6 +16,7 @@
 namespace {
 
 using np::ndarray;
+using np::ndarrayf;
 
 template <typename L, typename R>
 concept addable = requires(const L& l, const R& r) { l + r; };
@@ -64,66 +65,66 @@ concept matmulable = requires(const A& a, const B& b) {
 };
 
 // --- the detector itself is sound: valid uses are accepted -----------------
-static_assert(addable<ndarray<int, 2, 3>, ndarray<int, 2, 3>>);
-static_assert(addable<ndarray<int, 2, 3>, ndarray<int, 3>>);
-static_assert(addable<ndarray<int, 2, 3>, ndarray<int, 2, 1>>);
-static_assert(addable<ndarray<int, 2, 3>, ndarray<int, 1, 3>>);
-static_assert(addable<ndarray<int, 2, 3>, int>);
-static_assert(addable<int, ndarray<int, 2, 3>>);
-static_assert(reshapable<ndarray<int, 2, 3>, 3, 2>);
-static_assert(reshapable<ndarray<int, 2, 3>, 1, 6>);
-static_assert(reshapable<ndarray<int, 2, 3>, 2, 3>);
-static_assert(concatable<ndarray<int, 3>, ndarray<int, 2>>);
-static_assert(concatable<ndarray<int, 2, 3>, ndarray<int, 4, 3>>);
-static_assert(stackable<ndarray<int, 2, 2>, ndarray<int, 2, 2>>);
-static_assert(squeezable<ndarray<int, 1, 3, 1>, 0>);
-static_assert(expandable<ndarray<int, 2, 3>, 0>);
-static_assert(expandable<ndarray<int, 2, 3>, 2>);
-static_assert(summable<ndarray<int, 2, 3>, 1>);
-static_assert(three_index<ndarray<int, 2, 3, 4>>);
-static_assert(dottable<ndarray<int, 3>, ndarray<int, 3>>);
-static_assert(dottable<ndarray<int, 2, 3>, ndarray<int, 3>>);
-static_assert(dottable<ndarray<int, 3>, ndarray<int, 3, 2>>);
-static_assert(dottable<ndarray<int, 2, 3>, ndarray<int, 3, 2>>);
-static_assert(matmulable<ndarray<int, 2, 3>, ndarray<int, 3, 2>>);
+static_assert(addable<ndarrayf<int, 2, 3>, ndarrayf<int, 2, 3>>);
+static_assert(addable<ndarrayf<int, 2, 3>, ndarrayf<int, 3>>);
+static_assert(addable<ndarrayf<int, 2, 3>, ndarrayf<int, 2, 1>>);
+static_assert(addable<ndarrayf<int, 2, 3>, ndarrayf<int, 1, 3>>);
+static_assert(addable<ndarrayf<int, 2, 3>, int>);
+static_assert(addable<int, ndarrayf<int, 2, 3>>);
+static_assert(reshapable<ndarrayf<int, 2, 3>, 3, 2>);
+static_assert(reshapable<ndarrayf<int, 2, 3>, 1, 6>);
+static_assert(reshapable<ndarrayf<int, 2, 3>, 2, 3>);
+static_assert(concatable<ndarrayf<int, 3>, ndarrayf<int, 2>>);
+static_assert(concatable<ndarrayf<int, 2, 3>, ndarrayf<int, 4, 3>>);
+static_assert(stackable<ndarrayf<int, 2, 2>, ndarrayf<int, 2, 2>>);
+static_assert(squeezable<ndarrayf<int, 1, 3, 1>, 0>);
+static_assert(expandable<ndarrayf<int, 2, 3>, 0>);
+static_assert(expandable<ndarrayf<int, 2, 3>, 2>);
+static_assert(summable<ndarrayf<int, 2, 3>, 1>);
+static_assert(three_index<ndarrayf<int, 2, 3, 4>>);
+static_assert(dottable<ndarrayf<int, 3>, ndarrayf<int, 3>>);
+static_assert(dottable<ndarrayf<int, 2, 3>, ndarrayf<int, 3>>);
+static_assert(dottable<ndarrayf<int, 3>, ndarrayf<int, 3, 2>>);
+static_assert(dottable<ndarrayf<int, 2, 3>, ndarrayf<int, 3, 2>>);
+static_assert(matmulable<ndarrayf<int, 2, 3>, ndarrayf<int, 3, 2>>);
 
 // --- shape mismatches are rejected at compile time -------------------------
-static_assert(!addable<ndarray<int, 2, 3>, ndarray<int, 2, 2>>);
-static_assert(!addable<ndarray<int, 2, 3>, ndarray<int, 4>>);
-static_assert(!addable<ndarray<int, 2, 3>, ndarray<int, 3, 2>>);
-static_assert(!addable<ndarray<int, 2, 3>, ndarray<int, 5, 4, 3>>);
+static_assert(!addable<ndarrayf<int, 2, 3>, ndarrayf<int, 2, 2>>);
+static_assert(!addable<ndarrayf<int, 2, 3>, ndarrayf<int, 4>>);
+static_assert(!addable<ndarrayf<int, 2, 3>, ndarrayf<int, 3, 2>>);
+static_assert(!addable<ndarrayf<int, 2, 3>, ndarrayf<int, 5, 4, 3>>);
 
 // --- reshape must preserve the element count -------------------------------
-static_assert(!reshapable<ndarray<int, 2, 3>, 2, 2>);
-static_assert(!reshapable<ndarray<int, 2, 3>, 7>);
-static_assert(!reshapable<ndarray<int, 2, 3>, 0, 5>);
-static_assert(!reshapable<ndarray<int, 2, 3>, 2, 2, 1>);
+static_assert(!reshapable<ndarrayf<int, 2, 3>, 2, 2>);
+static_assert(!reshapable<ndarrayf<int, 2, 3>, 7>);
+static_assert(!reshapable<ndarrayf<int, 2, 3>, 0, 5>);
+static_assert(!reshapable<ndarrayf<int, 2, 3>, 2, 2, 1>);
 
 // --- joins must be shape-consistent ----------------------------------------
-static_assert(!concatable<ndarray<int, 2, 3>, ndarray<int, 4>>);
-static_assert(!concatable<ndarray<int, 3>, ndarray<int, 2, 2>>);
-static_assert(!stackable<ndarray<int, 2, 3>, ndarray<int, 3>>);
-static_assert(!stackable<ndarray<int, 2, 2>, ndarray<int, 3, 2>>);
+static_assert(!concatable<ndarrayf<int, 2, 3>, ndarrayf<int, 4>>);
+static_assert(!concatable<ndarrayf<int, 3>, ndarrayf<int, 2, 2>>);
+static_assert(!stackable<ndarrayf<int, 2, 3>, ndarrayf<int, 3>>);
+static_assert(!stackable<ndarrayf<int, 2, 2>, ndarrayf<int, 3, 2>>);
 
 // --- axes must be in range --------------------------------------------------
-static_assert(!squeezable<ndarray<int, 2, 3>, 5>);
-static_assert(!expandable<ndarray<int, 2, 3>, 7>);
-static_assert(!summable<ndarray<int, 2, 3>, 5>);
-static_assert(!summable<ndarray<int, 2, 3>, -2>);
+static_assert(!squeezable<ndarrayf<int, 2, 3>, 5>);
+static_assert(!expandable<ndarrayf<int, 2, 3>, 7>);
+static_assert(!summable<ndarrayf<int, 2, 3>, 5>);
+static_assert(!summable<ndarrayf<int, 2, 3>, -2>);
 
 // --- indexing arity must match the rank ------------------------------------
-static_assert(!three_index<ndarray<int, 2, 3>>);
-static_assert(!three_index<ndarray<int, 4>>);
+static_assert(!three_index<ndarrayf<int, 2, 3>>);
+static_assert(!three_index<ndarrayf<int, 4>>);
 
 // --- linalg contraction dimension is checked at compile time ---------------
-static_assert(!dottable<ndarray<int, 2, 3>, ndarray<int, 2, 3>>);
-static_assert(!dottable<ndarray<int, 3, 2>, ndarray<int, 3>>);
-static_assert(!matmulable<ndarray<int, 2, 3>, ndarray<int, 2, 4>>);
-static_assert(!matmulable<ndarray<int, 2, 2>, ndarray<int, 3, 2>>);
+static_assert(!dottable<ndarrayf<int, 2, 3>, ndarrayf<int, 2, 3>>);
+static_assert(!dottable<ndarrayf<int, 3, 2>, ndarrayf<int, 3>>);
+static_assert(!matmulable<ndarrayf<int, 2, 3>, ndarrayf<int, 2, 4>>);
+static_assert(!matmulable<ndarrayf<int, 2, 2>, ndarrayf<int, 3, 2>>);
 
 // --- decompositions reject complex element types at compile time ------------
-using CplxArr = np::Ndarray<std::complex<double>>;
-using RealArr = np::Ndarray<double>;
+using CplxArr = np::ndarray<std::complex<double>>;
+using RealArr = np::ndarray<double>;
 
 template <typename A>
 concept svdable = requires(const A& a) { np::linalg::svd(a); };
@@ -248,12 +249,12 @@ static_assert(!tensordotable<CplxArr>);
 static_assert(!crossable<CplxArr>);
 
 // --- fixed path: shapes are part of the type and complex is rejected --------
-using FRealArr = np::ndarray<double, 2, 2>;
-using FRealVec2 = np::ndarray<double, 2>;
-using FVec3 = np::ndarray<double, 3>;
-using FVec4 = np::ndarray<double, 4>;
-using FNonSquare = np::ndarray<double, 2, 3>;
-using FCplxArr = np::ndarray<std::complex<double>, 2, 2>;
+using FRealArr = np::ndarrayf<double, 2, 2>;
+using FRealVec2 = np::ndarrayf<double, 2>;
+using FVec3 = np::ndarrayf<double, 3>;
+using FVec4 = np::ndarrayf<double, 4>;
+using FNonSquare = np::ndarrayf<double, 2, 3>;
+using FCplxArr = np::ndarrayf<std::complex<double>, 2, 2>;
 
 template <typename A, typename B>
 concept fixed_solvable = requires(const A& a, const B& b) {

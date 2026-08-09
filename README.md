@@ -9,8 +9,8 @@ This library provides a comprehensive C++ implementation of NumPy's array manipu
 - **Header-only design** - No separate compilation or linking required
 - **C++20 features** - Modern C++ with `constexpr`, concepts, and compile-time optimizations
 - **Dual API paths**:
-  - **Dynamic runtime**: `np::Ndarray<T>` - heap-allocated, runtime shape validation
-  - **Compile-time fixed**: `np::ndarray<T, Extents...>` - stack storage, compile-time shape checks
+  - **Dynamic runtime**: `np::ndarray<T>` - heap-allocated, runtime shape validation
+  - **Compile-time fixed**: `np::ndarrayf<T, Extents...>` - stack storage, compile-time shape checks
 - **NumPy 2.x semantics** - API mirrors Python NumPy for easy migration
 - **SIMD optimizations** - Automatic vectorization for SSE2/AVX/AVX2/AVX-512/NEON
 - **Zero external dependencies** - Pure C++ standard library
@@ -67,7 +67,7 @@ int main() {
     // Create arrays
     auto a = np::arange<double>(0.0, 10.0, 0.5);  // [0, 0.5, 1.0, ..., 9.5]
     auto b = np::zeros<double>({3, 4});           // 3x4 array of zeros
-    auto c = np::Ndarray<int>{{1, 2}, {3, 4}};    // 2x2 from initializer list
+    auto c = np::ndarray<int>{{1, 2}, {3, 4}};    // 2x2 from initializer list
     
     // Mathematical operations
     auto x = np::linspace<double>(0.0, 2.0 * M_PI, 100);
@@ -279,7 +279,7 @@ float sum = np::simd::sum_vectorized(result.data(), 1000);
 Numpy-C-API/
 ├── include/np/           # Header files
 │   ├── np.hpp           # Main umbrella header
-│   ├── ndarray.hpp      # Dynamic Ndarray class
+│   ├── ndarray.hpp      # Dynamic ndarray class
 │   ├── ndarray_fixed.hpp # Fixed-size compile-time arrays
 │   ├── creation.hpp     # Array creation (dynamic)
 │   ├── creation_fixed.hpp # Array creation (compile-time)

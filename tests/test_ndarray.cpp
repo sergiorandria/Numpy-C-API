@@ -1,6 +1,6 @@
 /**
  * @file test_ndarray.cpp
- * @brief Core tests for np::Ndarray.
+ * @brief Core tests for np::ndarray.
  */
 #include <cstdint>
 #include <sstream>
@@ -11,7 +11,7 @@
 int main() {
     // Construction
     {
-        np::Ndarray<int> a(std::vector<int>{2, 3});
+        np::ndarray<int> a(std::vector<int>{2, 3});
         test::check(a.ndim() == 2, "ndim");
         test::check(a.size() == 6, "size");
         test::check(a.shape[0] == 2 && a.shape[1] == 3, "shape");
@@ -20,7 +20,7 @@ int main() {
 
     // Fill + copy semantics (deep copy)
     {
-        np::Ndarray<double> a(std::vector<int>{3});
+        np::ndarray<double> a(std::vector<int>{3});
         a.fill(1.0);
         auto b = a; // copy
         b[0] = 99.0;
@@ -30,17 +30,17 @@ int main() {
 
     // Nested initializer-list construction
     {
-        np::Ndarray<int> a{{1, 2, 3}, {4, 5, 6}};
+        np::ndarray<int> a{{1, 2, 3}, {4, 5, 6}};
         test::check(a.ndim() == 2 && a.shape[0] == 2 && a.shape[1] == 3,
                     "nested init list shape");
         test::check(a(1, 2) == 6, "nested init list value");
-        np::Ndarray<int> b{1, 2, 3};
+        np::ndarray<int> b{1, 2, 3};
         test::check(b.ndim() == 1 && b.size() == 3, "flat init list");
     }
 
     // Reductions
     {
-        np::Ndarray<int> a(std::vector<int>{4});
+        np::ndarray<int> a(std::vector<int>{4});
         a[0] = 1;
         a[1] = 2;
         a[2] = 3;
@@ -57,7 +57,7 @@ int main() {
         test::check(a.argmax() == 3, "argmax");
         test::check(a.argmin() == 0, "argmin");
 
-        auto c = np::Ndarray<int>{{1, 2, 3}, {4, 5, 6}};
+        auto c = np::ndarray<int>{{1, 2, 3}, {4, 5, 6}};
         test::check(c.sum(0).size() == 3, "sum(0) shape");
         test::check(c.sum(0)[0] == 5, "sum(0) value");
         test::check(c.sum(1)[1] == 15, "sum(1) value");
@@ -71,14 +71,14 @@ int main() {
 
     // Elementwise arithmetic with broadcasting
     {
-        np::Ndarray<double> a(std::vector<int>{2, 3});
+        np::ndarray<double> a(std::vector<int>{2, 3});
         a.fill(2.0);
         auto b = a * 3.0;
         test::check(b(1, 2) == 6.0, "scalar multiply");
         auto d = a + b;
         test::check(d(0, 0) == 8.0, "elementwise add");
 
-        np::Ndarray<double> row(std::vector<int>{3});
+        np::ndarray<double> row(std::vector<int>{3});
         row.fill(10.0);
         auto e = a + row; // broadcast (2,3) + (3,)
         test::check(e.shape[0] == 2 && e.shape[1] == 3, "broadcast shape");
@@ -88,18 +88,18 @@ int main() {
 
     // Comparisons
     {
-        np::Ndarray<int> a{{1, 2}, {3, 4}};
+        np::ndarray<int> a{{1, 2}, {3, 4}};
         auto gt = a > 2;
         test::check(gt.type == np::dtype::bool_, "comparison dtype");
         test::check(gt(1, 0) == true && gt(0, 0) == false, "comparison values");
         test::check(a.all_equal(5) == false, "all_equal false");
-        np::Ndarray<int> b{{1, 2}, {3, 4}};
+        np::ndarray<int> b{{1, 2}, {3, 4}};
         test::check(a.all_equal(b) == true, "all_equal true");
     }
 
     // Views: transpose, swapaxes, squeeze, ravel, reshape
     {
-        np::Ndarray<int> a{{1, 2, 3}, {4, 5, 6}};
+        np::ndarray<int> a{{1, 2, 3}, {4, 5, 6}};
         auto t = a.transpose();
         test::check(t.shape[0] == 3 && t.shape[1] == 2, "transpose shape");
         test::check(t(2, 1) == 6, "transpose value");
@@ -111,7 +111,7 @@ int main() {
         r(0) = 7;
         test::check(a(0, 0) == 7, "reshape writes through (contiguous)");
 
-        auto s = np::Ndarray<int>(std::vector<int>{1, 3, 1});
+        auto s = np::ndarray<int>(std::vector<int>{1, 3, 1});
         s.fill(1);
         auto sq = s.squeeze();
         test::check(sq.shape[0] == 3 && sq.ndim() == 1, "squeeze");
@@ -127,29 +127,29 @@ int main() {
 
     // Sorting
     {
-        np::Ndarray<int> a{3, 1, 2};
+        np::ndarray<int> a{3, 1, 2};
         auto s = a.sorted();
         test::check(s(0) == 1 && s(1) == 2 && s(2) == 3, "sort");
         auto o = a.argsort();
         test::check(o(0) == 1 && o(1) == 2 && o(2) == 0, "argsort");
         auto p = a.argpartition(1);
         test::check(p(1) == 2, "argpartition pivot at index 1");
-        np::Ndarray<int> sorted{1, 3, 5};
+        np::ndarray<int> sorted{1, 3, 5};
         test::check(sorted.searchsorted(4) == 2, "searchsorted value");
-        test::check(sorted.searchsorted(np::Ndarray<int>{0, 4, 9})[1] == 2,
+        test::check(sorted.searchsorted(np::ndarray<int>{0, 4, 9})[1] == 2,
                     "searchsorted vector");
     }
 
     // take / put / repeat / clip / round
     {
-        np::Ndarray<int> a{10, 20, 30};
+        np::ndarray<int> a{10, 20, 30};
         auto t = a.take(std::vector<std::size_t>{2, 0});
         test::check(t(0) == 30 && t(1) == 10, "take");
         auto r = a.repeat(2);
         test::check(r.size() == 6 && r(2) == 20 && r(3) == 20, "repeat");
         auto c = a.clip(15, 25);
         test::check(c(0) == 15 && c(1) == 20 && c(2) == 25, "clip");
-        np::Ndarray<double> d{1.6, -2.4};
+        np::ndarray<double> d{1.6, -2.4};
         auto rd = d.round();
         test::check(rd(0) == 2.0 && rd(1) == -2.0, "round");
         a.put(std::vector<std::size_t>{1}, std::vector<int>{55});
@@ -158,11 +158,11 @@ int main() {
 
     // diagonal / trace / nonzero
     {
-        np::Ndarray<int> a{{1, 2}, {3, 4}};
+        np::ndarray<int> a{{1, 2}, {3, 4}};
         auto d = a.diagonal();
         test::check(d.size() == 2 && d(0) == 1 && d(1) == 4, "diagonal");
         test::check(a.trace() == 5, "trace");
-        np::Ndarray<int> z{{0, 1}, {0, 2}};
+        np::ndarray<int> z{{0, 1}, {0, 2}};
         auto nz = z.nonzero();
         test::check(nz.size() == 2 && nz[0](0) == 0 && nz[1](0) == 1 &&
                         nz[0](1) == 1 && nz[1](1) == 1,
@@ -171,7 +171,7 @@ int main() {
 
     // tolist / tobytes / tofile
     {
-        np::Ndarray<int> a{{1, 2}, {3, 4}};
+        np::ndarray<int> a{{1, 2}, {3, 4}};
         auto lst = a.tolist();
         test::check(lst.size() == 4 && lst[3] == 4, "tolist");
         auto bytes = a.tobytes();
@@ -183,7 +183,7 @@ int main() {
 
     // Printing
     {
-        np::Ndarray<int> a{{1, 2}, {3, 4}};
+        np::ndarray<int> a{{1, 2}, {3, 4}};
         std::ostringstream os;
         os << a;
         test::check(os.str().find("1") != std::string::npos, "operator<<");
@@ -191,7 +191,7 @@ int main() {
 
     // Iterator
     {
-        np::Ndarray<int> a{{1, 2}, {3, 4}};
+        np::ndarray<int> a{{1, 2}, {3, 4}};
         long total = 0;
         for (int v : a) {
             total += v;
@@ -201,7 +201,7 @@ int main() {
 
     // Bool arrays
     {
-        np::Ndarray<bool> a(std::vector<int>{3});
+        np::ndarray<bool> a(std::vector<int>{3});
         a.fill(true);
         test::check(a.sum() == 3, "bool sum");
         test::check(a.all() == true, "bool all");

@@ -2,11 +2,11 @@
  * @file matrix.hpp
  * @brief 2D matrix type with linear algebra helpers.
  *
- * np::Matrix<T> is a 2D Ndarray<T> with (i, j) access and factories
+ * np::Matrix<T> is a 2D ndarray<T> with (i, j) access and factories
  * (zeros, ones, eye, identity). Free functions det/inverse/solve use
  * Gaussian elimination with partial pivoting and promote to double.
  *
- * Memory: Matrix shares the same storage model as Ndarray (shared_ptr
+ * Memory: Matrix shares the same storage model as ndarray (shared_ptr
  * with copy-on-write semantics for views). All operations return
  * C-contiguous row-major arrays.
  *
@@ -27,17 +27,17 @@
 
 namespace np {
 
-/** @brief 2D matrix: a Ndarray guaranteed to have ndim == 2.
+/** @brief 2D matrix: a ndarray guaranteed to have ndim == 2.
  *
- * Inherits from Ndarray<T> and adds (i, j) element access and
+ * Inherits from ndarray<T> and adds (i, j) element access and
  * matrix-specific factories. The base class handles all shape
  * manipulation, reductions, and element-wise operations.
  *
  * @tparam T Element type.
  */
-template <typename T> class Matrix : public Ndarray<T> {
+template <typename T> class Matrix : public ndarray<T> {
 public:
-  using Base = Ndarray<T>;
+  using Base = ndarray<T>;
 
   /** @brief r x c matrix filled with `fill`.
    *
@@ -382,13 +382,13 @@ NP_API NP_NODISCARD auto inverse(const Matrix<T> &m) -> Matrix<double> {
  * @tparam U  Element type of vector b.
  * @param a   Square coefficient matrix (n x n).
  * @param b   Right-hand side vector (length n).
- * @return    Solution vector x as Ndarray<double>.
+ * @return    Solution vector x as ndarray<double>.
  * @throws    std::invalid_argument if b is not 1-D, shapes are
  *            incompatible, or the matrix is singular.
  */
 template <typename T, typename U>
-NP_API NP_NODISCARD auto solve(const Matrix<T> &a, const Ndarray<U> &b)
-    -> Ndarray<double> {
+NP_API NP_NODISCARD auto solve(const Matrix<T> &a, const ndarray<U> &b)
+    -> ndarray<double> {
   if (b.ndim() != 1) {
     throw std::invalid_argument("solve: b must be a 1D array");
   }
@@ -436,7 +436,7 @@ NP_API NP_NODISCARD auto solve(const Matrix<T> &a, const Ndarray<U> &b)
       rhs[r] -= f * rhs[col];
     }
   }
-  return Ndarray<double>::from_data(std::vector<int>{static_cast<int>(n)},
+  return ndarray<double>::from_data(std::vector<int>{static_cast<int>(n)},
                                     std::move(rhs));
 }
 

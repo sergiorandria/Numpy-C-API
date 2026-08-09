@@ -89,9 +89,9 @@ ifft(const std::vector<Cplx> &x) -> std::vector<Cplx> {
  * Reference: numpy-reference/reference/generated/numpy.fft.fft.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto fft(const Ndarray<T> &x,
+NP_NODISCARD auto fft(const ndarray<T> &x,
                       std::optional<std::size_t> n = std::nullopt,
-                      int axis = -1, Norm norm = Norm::Backward) -> Ndarray<Cplx> {
+                      int axis = -1, Norm norm = Norm::Backward) -> ndarray<Cplx> {
   static_assert(is_transform_element_v<T>,
                 "np::fft requires arithmetic or std::complex element types");
   if (x.ndim() == 0) {
@@ -100,7 +100,7 @@ NP_NODISCARD auto fft(const Ndarray<T> &x,
   const int ax = detail::normalize_axis(axis, x.ndim());
   const std::size_t len = detail::deduced_len(
       n.has_value(), n.value_or(0), static_cast<std::size_t>(x.shape[ax]));
-  Ndarray<Cplx> out(detail::with_axis_len(x.shape, ax, len));
+  ndarray<Cplx> out(detail::with_axis_len(x.shape, ax, len));
   detail::transform_lines(x, ax, len, out, false,
                           detail::scale_factor(norm, len, false),
                           detail::twiddle_cache());
@@ -113,9 +113,9 @@ NP_NODISCARD auto fft(const Ndarray<T> &x,
  * Reference: numpy-reference/reference/generated/numpy.fft.ifft.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto ifft(const Ndarray<T> &x,
+NP_NODISCARD auto ifft(const ndarray<T> &x,
                        std::optional<std::size_t> n = std::nullopt,
-                       int axis = -1, Norm norm = Norm::Backward) -> Ndarray<Cplx> {
+                       int axis = -1, Norm norm = Norm::Backward) -> ndarray<Cplx> {
   static_assert(is_transform_element_v<T>,
                 "np::fft requires arithmetic or std::complex element types");
   if (x.ndim() == 0) {
@@ -124,7 +124,7 @@ NP_NODISCARD auto ifft(const Ndarray<T> &x,
   const int ax = detail::normalize_axis(axis, x.ndim());
   const std::size_t len = detail::deduced_len(
       n.has_value(), n.value_or(0), static_cast<std::size_t>(x.shape[ax]));
-  Ndarray<Cplx> out(detail::with_axis_len(x.shape, ax, len));
+  ndarray<Cplx> out(detail::with_axis_len(x.shape, ax, len));
   detail::transform_lines(x, ax, len, out, true,
                           detail::scale_factor(norm, len, true),
                           detail::twiddle_cache());
@@ -140,9 +140,9 @@ NP_NODISCARD auto ifft(const Ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto rfft(const Ndarray<T> &x,
+NP_NODISCARD auto rfft(const ndarray<T> &x,
                        std::optional<std::size_t> n = std::nullopt,
-                       int axis = -1, Norm norm = Norm::Backward) -> Ndarray<Cplx> {
+                       int axis = -1, Norm norm = Norm::Backward) -> ndarray<Cplx> {
   static_assert(is_transform_element_v<T>,
                 "np::fft requires arithmetic or std::complex element types");
   if (x.ndim() == 0) {
@@ -151,7 +151,7 @@ NP_NODISCARD auto rfft(const Ndarray<T> &x,
   const int ax = detail::normalize_axis(axis, x.ndim());
   const std::size_t len = detail::deduced_len(
       n.has_value(), n.value_or(0), static_cast<std::size_t>(x.shape[ax]));
-  Ndarray<Cplx> out(detail::with_axis_len(x.shape, ax, len / 2 + 1));
+  ndarray<Cplx> out(detail::with_axis_len(x.shape, ax, len / 2 + 1));
   detail::rfft_lines(x, ax, len, out, detail::scale_factor(norm, len, false),
                      detail::twiddle_cache());
   return out;
@@ -167,9 +167,9 @@ NP_NODISCARD auto rfft(const Ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.irfft.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto irfft(const Ndarray<T> &x,
+NP_NODISCARD auto irfft(const ndarray<T> &x,
                         std::optional<std::size_t> n = std::nullopt,
-                        int axis = -1, Norm norm = Norm::Backward) -> Ndarray<double> {
+                        int axis = -1, Norm norm = Norm::Backward) -> ndarray<double> {
   static_assert(is_transform_element_v<T>,
                 "np::fft requires arithmetic or std::complex element types");
   if (x.ndim() == 0) {
@@ -179,8 +179,8 @@ NP_NODISCARD auto irfft(const Ndarray<T> &x,
   const std::size_t m = static_cast<std::size_t>(x.shape[ax]);
   const std::size_t len =
       n.has_value() ? detail::check_len(*n) : detail::inverse_real_len(m);
-  Ndarray<double> out(detail::with_axis_len(x.shape, ax, len));
-  Ndarray<Cplx> cx = detail::to_complex(x);
+  ndarray<double> out(detail::with_axis_len(x.shape, ax, len));
+  ndarray<Cplx> cx = detail::to_complex(x);
   detail::irfft_lines(cx, ax, len, out, detail::scale_factor(norm, len, true),
                       detail::twiddle_cache());
   return out;
@@ -196,12 +196,12 @@ NP_NODISCARD auto irfft(const Ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.hfft.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto hfft(const Ndarray<T> &x,
+NP_NODISCARD auto hfft(const ndarray<T> &x,
                        std::optional<std::size_t> n = std::nullopt,
-                       int axis = -1, Norm norm = Norm::Backward) -> Ndarray<double> {
+                       int axis = -1, Norm norm = Norm::Backward) -> ndarray<double> {
   static_assert(is_transform_element_v<T>,
                 "np::fft requires arithmetic or std::complex element types");
-  Ndarray<Cplx> cx = detail::conjugate_copy(x);
+  ndarray<Cplx> cx = detail::conjugate_copy(x);
   return irfft(cx, n, axis, detail::swapped(norm));
 }
 
@@ -216,12 +216,12 @@ NP_NODISCARD auto hfft(const Ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.ihfft.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto ihfft(const Ndarray<T> &x,
+NP_NODISCARD auto ihfft(const ndarray<T> &x,
                         std::optional<std::size_t> n = std::nullopt,
-                        int axis = -1, Norm norm = Norm::Backward) -> Ndarray<Cplx> {
+                        int axis = -1, Norm norm = Norm::Backward) -> ndarray<Cplx> {
   static_assert(is_transform_element_v<T>,
                 "np::fft requires arithmetic or std::complex element types");
-  Ndarray<Cplx> out = rfft(x, n, axis, detail::swapped(norm));
+  ndarray<Cplx> out = rfft(x, n, axis, detail::swapped(norm));
   detail::conjugate_inplace(out);
   return out;
 }

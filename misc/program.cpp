@@ -4,7 +4,7 @@ int main() {
     // Create arrays
     auto a = np::arange<double>(0.0, 10.0, 0.5);  // [0, 0.5, 1.0, ..., 9.5]
     auto b = np::zeros<double>({3, 4});           // 3x4 array of zeros
-    auto c = np::Ndarray<int>{{1, 2}, {3, 4}};    // 2x2 from initializer list
+    auto c = np::ndarray<int>{{1, 2}, {3, 4}};    // 2x2 from initializer list
     a.print();
     b.print();
     c.print();

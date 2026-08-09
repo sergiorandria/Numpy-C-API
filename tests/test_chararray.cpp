@@ -102,8 +102,8 @@ int main()
         auto arr = array(std::vector<std::string>{"test"});
         chararray ca(arr);
         
-        /* Implicit conversion to Ndarray<std::string> */
-        Ndarray<std::string> arr2 = ca;
+        /* Implicit conversion to ndarray<std::string> */
+        ndarray<std::string> arr2 = ca;
         test::check(arr2.data()[0] == "test", "chararray: implicit conversion");
     }
 
@@ -205,7 +205,7 @@ int main()
 
     std::cout << "All chararray tests completed.\n";
     std::cout << "NOTE: chararray is deprecated in NumPy 2.5\n";
-    std::cout << "      Use Ndarray<std::string> with np::ch functions instead.\n";
+    std::cout << "      Use ndarray<std::string> with np::ch functions instead.\n";
     
     return test::failures() ? 1 : 0;
 }

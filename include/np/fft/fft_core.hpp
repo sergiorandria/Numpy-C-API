@@ -307,8 +307,8 @@ inline void transform(std::vector<Cplx> &a, bool inverse, double scale,
 
 /** @brief Copy any numeric array into a fresh complex array. */
 template <typename T>
-[[nodiscard]] Ndarray<Cplx> to_complex(const Ndarray<T> &x) {
-  Ndarray<Cplx> out(x.shape);
+[[nodiscard]] ndarray<Cplx> to_complex(const ndarray<T> &x) {
+  ndarray<Cplx> out(x.shape);
   for (std::size_t i = 0; i < x._numel(); ++i) {
     out.data()[i] = static_cast<Cplx>(x.data()[x._flat_logical(i)]);
   }
@@ -317,8 +317,8 @@ template <typename T>
 
 /** @brief Copy any numeric array, conjugating each element. */
 template <typename T>
-[[nodiscard]] Ndarray<Cplx> conjugate_copy(const Ndarray<T> &x) {
-  Ndarray<Cplx> out(x.shape);
+[[nodiscard]] ndarray<Cplx> conjugate_copy(const ndarray<T> &x) {
+  ndarray<Cplx> out(x.shape);
   for (std::size_t i = 0; i < x._numel(); ++i) {
     const Cplx v = static_cast<Cplx>(x.data()[x._flat_logical(i)]);
     out.data()[i] = {v.real(), -v.imag()};
@@ -348,8 +348,8 @@ inline std::vector<int> with_axis_len(const std::vector<int> &shape, int axis,
  * @tparam T  Element type of the source array.
  */
 template <typename T>
-inline void transform_lines(const Ndarray<T> &src, int axis, std::size_t n,
-                            Ndarray<Cplx> &dst, bool inverse, double scale,
+inline void transform_lines(const ndarray<T> &src, int axis, std::size_t n,
+                            ndarray<Cplx> &dst, bool inverse, double scale,
                             const TwiddleCache &cache) {
   const std::size_t ax = static_cast<std::size_t>(axis);
   const std::size_t src_len =
@@ -407,8 +407,8 @@ inline void transform_lines(const Ndarray<T> &src, int axis, std::size_t n,
  * the work, but for clarity the redundant half-spectrum is computed here.
  */
 template <typename T>
-inline void rfft_lines(const Ndarray<T> &src, int axis, std::size_t n,
-                       Ndarray<Cplx> &dst, double scale,
+inline void rfft_lines(const ndarray<T> &src, int axis, std::size_t n,
+                       ndarray<Cplx> &dst, double scale,
                        const TwiddleCache &cache) {
   const std::size_t half = n / 2 + 1;
   const std::size_t ax = static_cast<std::size_t>(axis);
@@ -467,8 +467,8 @@ inline void rfft_lines(const Ndarray<T> &src, int axis, std::size_t n,
  * reconstructed by conjugation before an inverse transform of length `n`
  * produces the real output line.
  */
-inline void irfft_lines(const Ndarray<Cplx> &src, int axis, std::size_t n,
-                        Ndarray<double> &dst, double scale,
+inline void irfft_lines(const ndarray<Cplx> &src, int axis, std::size_t n,
+                        ndarray<double> &dst, double scale,
                         const TwiddleCache &cache) {
   const std::size_t hp = n / 2 + 1;
   const std::size_t ax = static_cast<std::size_t>(axis);
@@ -532,7 +532,7 @@ inline void irfft_lines(const Ndarray<Cplx> &src, int axis, std::size_t n,
 }
 
 /** @brief Conjugate every element of a complex array in place. */
-inline void conjugate_inplace(Ndarray<Cplx> &a) {
+inline void conjugate_inplace(ndarray<Cplx> &a) {
   for (std::size_t i = 0; i < a._numel(); ++i) {
     a.data()[i] = std::conj(a.data()[i]);
   }

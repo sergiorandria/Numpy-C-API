@@ -1,6 +1,6 @@
 /**
  * @file test_scalar_custom.cpp
- * @brief Runtime tests proving the fixed-shape np::ndarray<T, Extents...>
+ * @brief Runtime tests proving the fixed-shape np::ndarrayf<T, Extents...>
  *        works with custom element types via the internal
  *        np::detail::fixed::scalar_traits<T> backend.
  *
@@ -50,13 +50,13 @@ int main() {
 
   // Construction and access (rank-1 and rank-2).
   {
-    np::ndarray<i64, 4> a{1, 2, 3, 4};
+    np::ndarrayf<i64, 4> a{1, 2, 3, 4};
     test::check(a.size() == 4, "custom 1-D size");
     test::check(a[0].value() == 1 && a[3].value() == 4, "custom flat access");
     test::check(a[0] == a[0] && a[1].value() == 2, "custom flat access");
     test::check(a.data()[2].value() == 3, "custom data()");
 
-    np::ndarray<i64, 2, 3> b{{1, 2, 3}, {4, 5, 6}};
+    np::ndarrayf<i64, 2, 3> b{{1, 2, 3}, {4, 5, 6}};
     test::check(b(1, 2).value() == 6, "custom operator() 2-D");
     const auto &cb = b;
     test::check(cb(0, 1).value() == 2, "custom const access");
@@ -65,7 +65,7 @@ int main() {
   // Reductions: computations run on the unwrapped core, results are
   // re-wrapped into the classifier (dtype preserved).
   {
-    np::ndarray<i64, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
+    np::ndarrayf<i64, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
     test::check(a.sum().value() == 21, "custom sum all");
     test::check(a.prod().value() == 720, "custom prod all");
     test::check(a.min().value() == 1 && a.max().value() == 6,
@@ -82,10 +82,10 @@ int main() {
                 "custom max axis");
 
     test::check(a.all(), "custom all");
-    np::ndarray<i64, 3> zero{0, 0, 0};
+    np::ndarrayf<i64, 3> zero{0, 0, 0};
     test::check(!zero.any(), "custom any false");
 
-    np::ndarray<f64, 3> f{1.5, 2.5, 3.5};
+    np::ndarrayf<f64, 3> f{1.5, 2.5, 3.5};
     test::check(test::approx(f.sum().value(), 7.5), "custom float sum");
     test::check(test::approx(f.mean(), 2.5), "custom float mean");
   }
@@ -93,7 +93,7 @@ int main() {
   // Elementwise expressions (lazy nodes route through binary_apply /
   // unary_apply and re-wrap into the classifier).
   {
-    np::ndarray<i64, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
+    np::ndarrayf<i64, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
 
     const auto sum2 = a + a;
     test::check(sum2.rank == 2 && sum2(1, 2).value() == 12, "custom a + a");
@@ -114,7 +114,7 @@ int main() {
 
     // Comparisons/logical kernels yield bool (NumPy semantics).
     const auto eq = a == a;
-    static_assert(std::is_same_v<decltype(eq.eval()), np::ndarray<bool, 2, 3>>,
+    static_assert(std::is_same_v<decltype(eq.eval()), np::ndarrayf<bool, 2, 3>>,
                   "custom == materializes a bool array");
     test::check(eq[0] == true && eq[5] == true, "custom a == a");
     const auto lt = a < 3;
@@ -123,12 +123,12 @@ int main() {
 
   // Broadcasting against custom classifiers mirrors the builtin rules.
   {
-    np::ndarray<i64, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
-    np::ndarray<i64, 3> row{10, 20, 30};
+    np::ndarrayf<i64, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
+    np::ndarrayf<i64, 3> row{10, 20, 30};
     const auto out = a + row;
     test::check(out(0, 2).value() == 33 && out(1, 2).value() == 36,
                 "custom broadcast row");
-    np::ndarray<i64, 2, 1> mx{{1}, {100}};
+    np::ndarrayf<i64, 2, 1> mx{{1}, {100}};
     const auto col = a * mx;
     test::check(col(0, 1).value() == 2 && col(1, 2).value() == 600,
                 "custom broadcast col");
@@ -136,9 +136,9 @@ int main() {
 
   // Manipulation retains the custom element type.
   {
-    np::ndarray<i64, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
+    np::ndarrayf<i64, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
     auto t = a.transpose();
-    static_assert(std::is_same_v<decltype(t), np::ndarray<i64, 3, 2>>,
+    static_assert(std::is_same_v<decltype(t), np::ndarrayf<i64, 3, 2>>,
                   "custom transpose keeps the dtype");
     test::check(t(1, 0).value() == 2, "custom transpose value");
     const auto fl = a.flatten();
@@ -147,20 +147,20 @@ int main() {
 
   // A fully user-defined scalar type works through the same code path.
   {
-    np::ndarray<::temperature, 3> temps{::temperature{1.0},
+    np::ndarrayf<::temperature, 3> temps{::temperature{1.0},
                                         ::temperature{2.5},
                                         ::temperature{-0.5}};
     test::check(test::approx(temps.sum().value, 3.0), "user scalar sum");
     test::check(test::approx(temps.mean(), 1.0), "user scalar mean");
     const auto d = temps * 2;
     test::check(test::approx(d[1].value, 5.0), "user scalar * scalar");
-    np::ndarray<::temperature, 2> t2{::temperature{1.0}, ::temperature{0.0}};
+    np::ndarrayf<::temperature, 2> t2{::temperature{1.0}, ::temperature{0.0}};
     test::check(t2.all() == false, "user scalar truthiness");
   }
 
   // String-branch classifiers: get/make/truthy operate on the text core.
   {
-    np::ndarray<np::_Np_dtype::_Np_string, 2> s{std::string{"ab"},
+    np::ndarrayf<np::_Np_dtype::_Np_string, 2> s{std::string{"ab"},
                                                  std::string{"cd"}};
     test::check(s[0].value() == "ab", "string element");
     test::check(s.all(), "string all");

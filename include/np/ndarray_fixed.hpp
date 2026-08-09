@@ -1,6 +1,6 @@
 /**
  * @file ndarray_fixed.hpp
- * @brief Compile-time fixed-shape arrays: ndarray<T, Extents...>.
+ * @brief Compile-time fixed-shape arrays: ndarrayf<T, Extents...>.
  *
  * This is the compile-time-first axis of the library:
  *  - every operation validates shape compatibility and broadcast legality
@@ -47,9 +47,9 @@ namespace np {
  * @brief Fixed-shape array with compile-time extents.
  *
  * Nested-brace construction matches NumPy nested-list literals:
- *     np::ndarray<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
+ *     np::ndarrayf<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
  *
- * Documented deviations from the dynamic Ndarray<T>:
+ * Documented deviations from the dynamic ndarray<T>:
  *  - indexing `a[i]` is the flat index; `a[i, j]` is multi-dimensional;
  *  - views do not exist here: transpose/squeeze/expand_dims return new
  *    arrays (value semantics) because the result shape must be static;
@@ -61,9 +61,9 @@ namespace np {
  * @tparam T       element type
  * @tparam Extents compile-time extents (row-major)
  */
-template <typename T, int... Extents> class ndarray {
+template <typename T, int... Extents> class ndarrayf {
   static_assert(std::conjunction_v<std::bool_constant<(Extents > 0)>...>,
-                "np: ndarray extents must be positive");
+                "np: ndarrayf extents must be positive");
 
 public:
   using value_type = T;
@@ -75,16 +75,16 @@ public:
   /** @brief Row-major flat storage (public, std::array-style). */
   std::array<T, size_v> m_data{};
 
-  constexpr ndarray() = default;
+constexpr ndarrayf() = default;
 
   /** @brief From a flat buffer (numpy.asarray semantics). */
-  constexpr explicit ndarray(const std::array<T, size_v> &flat)
+  constexpr explicit ndarrayf(const std::array<T, size_v> &flat)
       : m_data(flat) {}
 
-  /** @brief Rank-1 flat list: ndarray<int, 3>{1, 2, 3}. */
+  /** @brief Rank-1 flat list: ndarrayf<int, 3>{1, 2, 3}. */
   template <typename U>
     requires(rank == 1 && std::convertible_to<U, T>)
-  constexpr explicit ndarray(std::initializer_list<U> flat) : m_data() {
+  constexpr explicit ndarrayf(std::initializer_list<U> flat) : m_data() {
     if (flat.size() != size_v) {
       throw std::invalid_argument(
           "np: initializer list size does not match the fixed extent");
@@ -96,14 +96,14 @@ public:
   }
 
   /**
-   * @brief Rank-2 nested rows: ndarray<int, 2, 3>{{1, 2, 3}, {4, 5, 6}}.
+   * @brief Rank-2 nested rows: ndarrayf<int, 2, 3>{{1, 2, 3}, {4, 5, 6}}.
    *        Ragged rows throw at runtime (init-list sizes are not
    *        compile-time constants); in constant evaluation a mismatch
    *        is a compile error.
    */
   template <typename U>
     requires(rank == 2 && std::convertible_to<U, T>)
-  constexpr explicit ndarray(
+  constexpr explicit ndarrayf(
       std::initializer_list<std::initializer_list<U>> rows)
       : m_data() {
     const std::size_t cols = static_cast<std::size_t>(static_shape[1]);
@@ -125,10 +125,10 @@ public:
     }
   }
 
-  /** @brief Rank-0 scalar: ndarray<int>{5}. */
+  /** @brief Rank-0 scalar: ndarrayf<int>{5}. */
   template <typename U>
     requires(rank == 0 && std::convertible_to<U, T>)
-  constexpr explicit ndarray(U value) : m_data{static_cast<T>(value)} {}
+  constexpr explicit ndarrayf(U value) : m_data{static_cast<T>(value)} {}
 
   // -----------------------------------------------------------------
   // Factories
@@ -138,8 +138,8 @@ public:
    * @brief Array from a flat std::array (C++ analog of numpy.asarray).
    * Reference: numpy-reference/reference/generated/numpy.asarray.html
    */
-  static constexpr ndarray from_data(const std::array<T, size_v> &flat) {
-    return ndarray{flat};
+  static constexpr ndarrayf from_data(const std::array<T, size_v> &flat) {
+    return ndarrayf{flat};
   }
 
   // -----------------------------------------------------------------
@@ -164,7 +164,7 @@ public:
    * @brief Multi-dimensional access: a(i0, i1, ..., iN-1).
    *        (The arr[i, j, k] subscript form needs C++23 P2128, so the
    *        fixed path uses operator() — the same convention as the
-   *        dynamic Ndarray.)
+   *        dynamic ndarray.)
    */
   template <typename... Idx>
     requires(sizeof...(Idx) == rank && rank >= 2)
@@ -500,7 +500,7 @@ private:
     constexpr std::size_t red_numel =
         (static_cast<std::size_t>(E) * ... * 1ull);
     const std::size_t axis_ext = static_cast<std::size_t>(static_shape[axis]);
-    ndarray<Out, E...> out{};
+    ndarrayf<Out, E...> out{};
     for (std::size_t j = 0; j < red_numel; ++j) {
       const auto cr = detail::expr::unflatten(j, out.static_shape);
       R acc = init;
@@ -513,13 +513,13 @@ private:
   }
 
   template <typename R, int... E>
-  constexpr ndarray<R, E...>
+  constexpr ndarrayf<R, E...>
   std_axis_impl(int axis, detail::expr::shape_tag<E...>, int ddof) const {
     using traits = detail::fixed::scalar_traits<T>;
     constexpr std::size_t red_numel =
         (static_cast<std::size_t>(E) * ... * 1ull);
     const std::size_t n = static_cast<std::size_t>(static_shape[axis]);
-    ndarray<R, E...> out{};
+    ndarrayf<R, E...> out{};
     for (std::size_t j = 0; j < red_numel; ++j) {
       const auto cr = detail::expr::unflatten(j, out.static_shape);
       R mean_acc = R{0};
@@ -539,14 +539,14 @@ private:
   }
 
   template <int... E>
-  constexpr ndarray<T, E...>
+  constexpr ndarrayf<T, E...>
   extremum_axis(int axis, detail::expr::shape_tag<E...>, bool is_max) const {
     using traits = detail::fixed::scalar_traits<T>;
     using V = typename traits::value_type;
     constexpr std::size_t red_numel =
         (static_cast<std::size_t>(E) * ... * 1ull);
     const std::size_t n = static_cast<std::size_t>(static_shape[axis]);
-    ndarray<T, E...> out{};
+    ndarrayf<T, E...> out{};
     for (std::size_t j = 0; j < red_numel; ++j) {
       const auto cr = detail::expr::unflatten(j, out.static_shape);
       V best = traits::get(axis_elem(axis, cr, 0));
@@ -582,14 +582,14 @@ private:
   }
 
   template <int... E>
-  constexpr ndarray<std::size_t, E...>
+  constexpr ndarrayf<std::size_t, E...>
   argextremum_axis(int axis, detail::expr::shape_tag<E...>, bool is_max) const {
     using traits = detail::fixed::scalar_traits<T>;
     using V = typename traits::value_type;
     constexpr std::size_t red_numel =
         (static_cast<std::size_t>(E) * ... * 1ull);
     const std::size_t n = static_cast<std::size_t>(static_shape[axis]);
-    ndarray<std::size_t, E...> out{};
+    ndarrayf<std::size_t, E...> out{};
     for (std::size_t j = 0; j < red_numel; ++j) {
       const auto cr = detail::expr::unflatten(j, out.static_shape);
       std::size_t best_i = 0;
@@ -614,10 +614,10 @@ private:
   }
 
   template <int... E>
-  constexpr ndarray<T, E...>
+  constexpr ndarrayf<T, E...>
   transpose_impl(detail::expr::shape_tag<E...>) const {
     constexpr std::array<int, rank> rshape{E...};
-    ndarray<T, E...> out{};
+    ndarrayf<T, E...> out{};
     for (std::size_t i = 0; i < size_v; ++i) {
       const auto c = detail::expr::unflatten(i, static_shape);
       std::array<std::size_t, rank> rc{};
@@ -630,8 +630,8 @@ private:
   }
 
   template <int... E>
-  constexpr ndarray<T, E...> reshape_impl(detail::expr::shape_tag<E...>) const {
-    ndarray<T, E...> out{};
+  constexpr ndarrayf<T, E...> reshape_impl(detail::expr::shape_tag<E...>) const {
+    ndarrayf<T, E...> out{};
     for (std::size_t i = 0; i < size_v; ++i) {
       out.m_data[i] = m_data[i];
     }
@@ -639,9 +639,9 @@ private:
   }
 
   template <int... E>
-  constexpr ndarray<T, E...> squeeze_impl(detail::expr::shape_tag<E...>) const {
+  constexpr ndarrayf<T, E...> squeeze_impl(detail::expr::shape_tag<E...>) const {
     constexpr std::array<int, sizeof...(E)> rshape{E...};
-    ndarray<T, E...> out{};
+    ndarrayf<T, E...> out{};
     for (std::size_t i = 0; i < size_v; ++i) {
       const auto c = detail::expr::unflatten(i, static_shape);
       std::array<std::size_t, sizeof...(E)> rc{};
@@ -657,10 +657,10 @@ private:
   }
 
   template <int Axis, int... E>
-  constexpr ndarray<T, E...>
+  constexpr ndarrayf<T, E...>
   squeeze_axis_impl(detail::expr::shape_tag<E...>) const {
     constexpr std::array<int, rank - 1> rshape{E...};
-    ndarray<T, E...> out{};
+    ndarrayf<T, E...> out{};
     for (std::size_t i = 0; i < size_v; ++i) {
       const auto c = detail::expr::unflatten(i, static_shape);
       std::array<std::size_t, rank - 1> rc{};
@@ -676,10 +676,10 @@ private:
   }
 
   template <int Axis, int... E>
-  constexpr ndarray<T, E...>
+  constexpr ndarrayf<T, E...>
   expand_dims_impl(detail::expr::shape_tag<E...>) const {
     constexpr std::array<int, rank + 1> rshape{E...};
-    ndarray<T, E...> out{};
+    ndarrayf<T, E...> out{};
     for (std::size_t i = 0; i < size_v; ++i) {
       const auto c = detail::expr::unflatten(i, static_shape);
       std::array<std::size_t, rank + 1> rc{};
@@ -989,11 +989,11 @@ struct concat_tag<detail::expr::shape_tag<Head, Tail...>, Sum> {
 
 /** @brief Copy every element into its axis-0 slot of the result. */
 template <typename R, int... E, typename... As>
-constexpr ndarray<R, E...> concat_impl(detail::expr::shape_tag<E...>,
+constexpr ndarrayf<R, E...> concat_impl(detail::expr::shape_tag<E...>,
                                        const As &...as) {
   constexpr std::size_t numel = (static_cast<std::size_t>(E) * ... * 1ull);
   constexpr std::array<int, sizeof...(As) + 1> offs = concat_offsets<As...>();
-  ndarray<R, E...> out{};
+  ndarrayf<R, E...> out{};
   for (std::size_t i = 0; i < numel; ++i) {
     const auto c = detail::expr::unflatten(i, out.static_shape);
     const std::size_t ax = c[0];
@@ -1052,10 +1052,10 @@ template <typename A0, typename... Rest> struct stack_ok {
 
 /** @brief Copy every element into its new-axis slot of the result. */
 template <typename R, int Axis, int... E, typename... As>
-constexpr ndarray<R, E...> stack_impl(detail::expr::shape_tag<E...>,
+constexpr ndarrayf<R, E...> stack_impl(detail::expr::shape_tag<E...>,
                                       const As &...as) {
   constexpr std::size_t numel = (static_cast<std::size_t>(E) * ... * 1ull);
-  ndarray<R, E...> out{};
+  ndarrayf<R, E...> out{};
   for (std::size_t i = 0; i < numel; ++i) {
     const auto c = detail::expr::unflatten(i, out.static_shape);
     const std::size_t sel = c[Axis];

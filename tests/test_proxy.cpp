@@ -10,7 +10,7 @@
 int main() {
     // 1D proxy read/write
     {
-        np::Ndarray<int> a(std::vector<int>{4});
+        np::ndarray<int> a(std::vector<int>{4});
         a.fill(0);
         a[0] = 10;
         a[1] = 20;
@@ -24,7 +24,7 @@ int main() {
 
     // 2D proxy chained indexing
     {
-        np::Ndarray<int> a(std::vector<int>{2, 3});
+        np::ndarray<int> a(std::vector<int>{2, 3});
         a.fill(0);
         a[1][2] = 42;
         test::check(a[1][2] == 42, "2D chained proxy write");
@@ -36,7 +36,7 @@ int main() {
 
     // 3D proxy
     {
-        np::Ndarray<int> a(std::vector<int>{2, 2, 2});
+        np::ndarray<int> a(std::vector<int>{2, 2, 2});
         a.fill(7);
         a[1][0][1] = -1;
         test::check(a[1][0][1] == -1, "3D chained proxy");
@@ -46,7 +46,7 @@ int main() {
 
     // Proxy to scalar conversion / comparison
     {
-        np::Ndarray<double> a(std::vector<int>{3});
+        np::ndarray<double> a(std::vector<int>{3});
         a[0] = 1.5;
         double v = a[0];
         test::check(v == 1.5, "proxy -> T conversion");
@@ -56,7 +56,7 @@ int main() {
 
     // get/set/at
     {
-        np::Ndarray<int> a(std::vector<int>{2, 3});
+        np::ndarray<int> a(std::vector<int>{2, 3});
         a.fill(0);
         a.set(std::array<std::size_t, 2>{1, 1}, 5);
         test::check(a.get(std::array<std::size_t, 2>{1, 1}) == 5, "get/set");

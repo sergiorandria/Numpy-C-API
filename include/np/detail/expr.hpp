@@ -40,7 +40,7 @@ namespace np {
  *        ndarray_fixed.hpp; only declared here so that expression nodes
  *        can name the materialization target).
  */
-template <typename T, int... Extents> class ndarray;
+template <typename T, int... Extents> class ndarrayf;
 
 } // namespace np
 
@@ -60,7 +60,7 @@ template <int... E> struct shape_tag {
  */
 template <typename S> struct shape_tag_of;
 
-template <typename T, int... E> struct shape_tag_of<ndarray<T, E...>> {
+template <typename T, int... E> struct shape_tag_of<ndarrayf<T, E...>> {
   using type = shape_tag<E...>;
 };
 
@@ -269,8 +269,8 @@ public:
 
   /** @brief Single fused pass into a fresh fixed-shape array. */
   template <typename V = value_type, int... E>
-  constexpr ndarray<V, E...> eval_impl(shape_tag<E...>) const {
-    ndarray<V, E...> out{};
+  constexpr ndarrayf<V, E...> eval_impl(shape_tag<E...>) const {
+    ndarrayf<V, E...> out{};
     for (std::size_t i = 0; i < out.size_v; ++i) {
       out[i] = (*this)[i];
     }
@@ -318,8 +318,8 @@ public:
   }
 
   template <typename V = value_type, int... E>
-  constexpr ndarray<V, E...> eval_impl(shape_tag<E...>) const {
-    ndarray<V, E...> out{};
+  constexpr ndarrayf<V, E...> eval_impl(shape_tag<E...>) const {
+    ndarrayf<V, E...> out{};
     for (std::size_t i = 0; i < out.size_v; ++i) {
       out[i] = (*this)[i];
     }
@@ -347,7 +347,7 @@ template <typename Op, typename S> struct shape_tag_of<unary_expr<Op, S>> {
   using type = shape_tag_t<S>;
 };
 
-/** @brief Reverse a shape_tag (used by ndarray::transpose). */
+/** @brief Reverse a shape_tag (used by ndarrayf::transpose). */
 template <typename Acc, typename Tag> struct rev_impl;
 
 template <int... Acc> struct rev_impl<shape_tag<Acc...>, shape_tag<>> {
@@ -376,7 +376,7 @@ struct remove_at<Axis, Cur, shape_tag<Head, Tail...>> {
           typename remove_at<Axis, Cur + 1, shape_tag<Tail...>>::type>::type>;
 };
 
-/** @brief Drop every extent equal to 1 (used by ndarray::squeeze). */
+/** @brief Drop every extent equal to 1 (used by ndarrayf::squeeze). */
 template <typename Tag> struct squeeze_tag;
 
 template <> struct squeeze_tag<shape_tag<>> {
@@ -391,7 +391,7 @@ template <int Head, int... Tail> struct squeeze_tag<shape_tag<Head, Tail...>> {
 
 /**
  * @brief Insert extent `Value` at zero-based position `Axis` (used by
- *        ndarray::expand_dims and np::stack).
+ *        ndarrayf::expand_dims and np::stack).
  */
 template <int Value, int Axis, int Cur, typename Tag> struct insert;
 

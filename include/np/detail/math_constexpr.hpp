@@ -6,7 +6,7 @@
  * fixed-shape path of `np` provides its own constexpr kernels. The error
  * budget (~1e-10 relative) is deliberately looser than libm: these functions
  * exist to fold compile-time expressions (see tests/test_constexpr.cpp), not
- * to replace the runtime fast paths (Ndarray elementwise ops still use
+ * to replace the runtime fast paths (ndarray elementwise ops still use
  * std::cmath).
  */
 #ifndef NP_DETAIL_MATH_CONSTEXPR_HPP

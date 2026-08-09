@@ -28,7 +28,7 @@ bool approx_vec(const std::vector<Cplx>& a, const std::vector<Cplx>& b) {
   return true;
 }
 
-bool approx_flat(const np::Ndarray<Cplx>& a, const std::vector<Cplx>& ref) {
+bool approx_flat(const np::ndarray<Cplx>& a, const std::vector<Cplx>& ref) {
   if (a._numel() != ref.size()) {
     return false;
   }
@@ -40,7 +40,7 @@ bool approx_flat(const np::Ndarray<Cplx>& a, const std::vector<Cplx>& ref) {
   return true;
 }
 
-bool approx_real_flat(const np::Ndarray<double>& a,
+bool approx_real_flat(const np::ndarray<double>& a,
                       const std::vector<double>& ref) {
   if (a._numel() != ref.size()) {
     return false;
@@ -54,8 +54,8 @@ bool approx_real_flat(const np::Ndarray<double>& a,
 }
 
 template <typename T>
-np::Ndarray<T> fill(std::vector<int> shape, std::vector<T> values) {
-  np::Ndarray<T> a(shape);
+np::ndarray<T> fill(std::vector<int> shape, std::vector<T> values) {
+  np::ndarray<T> a(shape);
   for (std::size_t i = 0; i < values.size(); ++i) {
     a.data()[i] = values[i];
   }
@@ -144,7 +144,7 @@ int main() {
         auto fwd = np::fft::fft(a, std::nullopt, -1, Norm::Forward);
         test::check(test::approx_c(fwd(0), Cplx{2.5, 0}), "forward DC sum/n");
 
-        auto dec = [](const np::Ndarray<Cplx>& y, double i) {
+        auto dec = [](const np::ndarray<Cplx>& y, double i) {
             return test::approx_c(y.data()[(std::size_t)i], Cplx{i + 1, 0});
         };
         auto rt_b = np::fft::ifft(np::fft::fft(a), std::nullopt, -1, Norm::Backward);
@@ -336,7 +336,7 @@ int main() {
     // -----------------------------------------------------------------
     {
         bool threw = false;
-        np::Ndarray<double> empty(std::vector<int>{0});
+        np::ndarray<double> empty(std::vector<int>{0});
         try {
             np::fft::fft(empty);
         } catch (const std::invalid_argument&) {

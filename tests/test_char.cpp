@@ -30,7 +30,7 @@ int main() {
     // Test multiply (repetition)
     {
         auto a = array(std::vector<std::string>{"abc", "x"});
-        Ndarray<int> counts = empty<int>(std::vector<int>{2});
+        ndarray<int> counts = empty<int>(std::vector<int>{2});
         counts.data() = {3, 5};
         auto result = multiply(a, counts);
         test::check(result.data()[0] == "abcabcabc", "multiply: repetition 1");

@@ -46,7 +46,7 @@ struct NdPlan {
  *          omitted the final axis default length becomes 2*(m-1).
  */
 template <typename T>
-[[nodiscard]] NdPlan cook_nd(const Ndarray<T> &x,
+[[nodiscard]] NdPlan cook_nd(const ndarray<T> &x,
                              const std::optional<std::vector<int>> &s,
                              const std::optional<std::vector<int>> &axes,
                              bool invreal_last) {
@@ -107,7 +107,7 @@ template <typename T>
 }
 
 /** @brief Shape of `x` with dimension `axis` replaced by `len`. */
-inline std::vector<int> adjust_axis(const Ndarray<Cplx> &x, int axis,
+inline std::vector<int> adjust_axis(const ndarray<Cplx> &x, int axis,
                                     std::size_t len) {
   return with_axis_len(x.shape, axis, len);
 }
@@ -126,22 +126,22 @@ inline std::vector<int> adjust_axis(const Ndarray<Cplx> &x, int axis,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.fftn.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto fftn(const Ndarray<T> &x,
+NP_NODISCARD auto fftn(const ndarray<T> &x,
                        std::optional<std::vector<int>> s = std::nullopt,
                        std::optional<std::vector<int>> axes = std::nullopt,
-                       Norm norm = Norm::Backward) -> Ndarray<Cplx> {
+                       Norm norm = Norm::Backward) -> ndarray<Cplx> {
   static_assert(is_transform_element_v<T>,
                 "np::fft requires arithmetic or std::complex element types");
   if (x.ndim() == 0) {
     throw std::invalid_argument("fftn: input must have at least one dimension");
   }
   detail::NdPlan plan = detail::cook_nd(x, s, axes, false);
-  Ndarray<Cplx> cur = detail::to_complex(x);
+  ndarray<Cplx> cur = detail::to_complex(x);
   const auto &cache = detail::twiddle_cache();
   for (std::size_t i = 0; i < plan.axes.size(); ++i) {
     const int a = plan.axes[i];
     const std::size_t len = plan.lens[i];
-    Ndarray<Cplx> nxt(detail::with_axis_len(cur.shape, a, len));
+    ndarray<Cplx> nxt(detail::with_axis_len(cur.shape, a, len));
     detail::transform_lines(cur, a, len, nxt, false,
                             detail::scale_factor(norm, len, false), cache);
     cur = std::move(nxt);
@@ -155,22 +155,22 @@ NP_NODISCARD auto fftn(const Ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.ifftn.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto ifftn(const Ndarray<T> &x,
+NP_NODISCARD auto ifftn(const ndarray<T> &x,
                         std::optional<std::vector<int>> s = std::nullopt,
                         std::optional<std::vector<int>> axes = std::nullopt,
-                        Norm norm = Norm::Backward) -> Ndarray<Cplx> {
+                        Norm norm = Norm::Backward) -> ndarray<Cplx> {
   static_assert(is_transform_element_v<T>,
                 "np::fft requires arithmetic or std::complex element types");
   if (x.ndim() == 0) {
     throw std::invalid_argument("ifftn: input must have at least one dimension");
   }
   detail::NdPlan plan = detail::cook_nd(x, s, axes, false);
-  Ndarray<Cplx> cur = detail::to_complex(x);
+  ndarray<Cplx> cur = detail::to_complex(x);
   const auto &cache = detail::twiddle_cache();
   for (std::size_t i = 0; i < plan.axes.size(); ++i) {
     const int a = plan.axes[i];
     const std::size_t len = plan.lens[i];
-    Ndarray<Cplx> nxt(detail::with_axis_len(cur.shape, a, len));
+    ndarray<Cplx> nxt(detail::with_axis_len(cur.shape, a, len));
     detail::transform_lines(cur, a, len, nxt, true,
                             detail::scale_factor(norm, len, true), cache);
     cur = std::move(nxt);
@@ -184,10 +184,10 @@ NP_NODISCARD auto ifftn(const Ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.fft2.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto fft2(const Ndarray<T> &x,
+NP_NODISCARD auto fft2(const ndarray<T> &x,
                        std::optional<std::vector<int>> s = std::nullopt,
                        std::optional<std::vector<int>> axes = std::nullopt,
-                       Norm norm = Norm::Backward) -> Ndarray<Cplx> {
+                       Norm norm = Norm::Backward) -> ndarray<Cplx> {
   if (!axes) {
     axes = std::vector<int>{-2, -1};
   }
@@ -200,10 +200,10 @@ NP_NODISCARD auto fft2(const Ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.ifft2.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto ifft2(const Ndarray<T> &x,
+NP_NODISCARD auto ifft2(const ndarray<T> &x,
                         std::optional<std::vector<int>> s = std::nullopt,
                         std::optional<std::vector<int>> axes = std::nullopt,
-                        Norm norm = Norm::Backward) -> Ndarray<Cplx> {
+                        Norm norm = Norm::Backward) -> ndarray<Cplx> {
   if (!axes) {
     axes = std::vector<int>{-2, -1};
   }
@@ -219,10 +219,10 @@ NP_NODISCARD auto ifft2(const Ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.rfftn.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto rfftn(const Ndarray<T> &x,
+NP_NODISCARD auto rfftn(const ndarray<T> &x,
                         std::optional<std::vector<int>> s = std::nullopt,
                         std::optional<std::vector<int>> axes = std::nullopt,
-                        Norm norm = Norm::Backward) -> Ndarray<Cplx> {
+                        Norm norm = Norm::Backward) -> ndarray<Cplx> {
   static_assert(is_transform_element_v<T>,
                 "np::fft requires arithmetic or std::complex element types");
   if (x.ndim() == 0) {
@@ -237,7 +237,7 @@ NP_NODISCARD auto rfftn(const Ndarray<T> &x,
   // Real transform first, on the last listed axis.
   const int last_axis = plan.axes.back();
   const std::size_t last_len = plan.lens.back();
-  Ndarray<Cplx> cur(detail::with_axis_len(x.shape, last_axis, last_len / 2 + 1));
+  ndarray<Cplx> cur(detail::with_axis_len(x.shape, last_axis, last_len / 2 + 1));
   detail::rfft_lines(x, last_axis, last_len, cur,
                      detail::scale_factor(norm, last_len, false), cache);
 
@@ -246,7 +246,7 @@ NP_NODISCARD auto rfftn(const Ndarray<T> &x,
        j >= 0; --j) {
     const int a = plan.axes[static_cast<std::size_t>(j)];
     const std::size_t len = plan.lens[static_cast<std::size_t>(j)];
-    Ndarray<Cplx> nxt(detail::with_axis_len(cur.shape, a, len));
+    ndarray<Cplx> nxt(detail::with_axis_len(cur.shape, a, len));
     detail::transform_lines(cur, a, len, nxt, false,
                             detail::scale_factor(norm, len, false), cache);
     cur = std::move(nxt);
@@ -263,10 +263,10 @@ NP_NODISCARD auto rfftn(const Ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.irfftn.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto irfftn(const Ndarray<T> &x,
+NP_NODISCARD auto irfftn(const ndarray<T> &x,
                          std::optional<std::vector<int>> s = std::nullopt,
                          std::optional<std::vector<int>> axes = std::nullopt,
-                         Norm norm = Norm::Backward) -> Ndarray<double> {
+                         Norm norm = Norm::Backward) -> ndarray<double> {
   static_assert(is_transform_element_v<T>,
                 "np::fft requires arithmetic or std::complex element types");
   if (x.ndim() == 0) {
@@ -277,18 +277,18 @@ NP_NODISCARD auto irfftn(const Ndarray<T> &x,
     throw std::invalid_argument("irfftn: no axis to transform");
   }
   const auto &cache = detail::twiddle_cache();
-  Ndarray<Cplx> cur = detail::to_complex(x);
+  ndarray<Cplx> cur = detail::to_complex(x);
   for (std::size_t i = 0; i + 1 < plan.axes.size(); ++i) {
     const int a = plan.axes[i];
     const std::size_t len = plan.lens[i];
-    Ndarray<Cplx> nxt(detail::with_axis_len(cur.shape, a, len));
+    ndarray<Cplx> nxt(detail::with_axis_len(cur.shape, a, len));
     detail::transform_lines(cur, a, len, nxt, true,
                             detail::scale_factor(norm, len, true), cache);
     cur = std::move(nxt);
   }
   const int last_axis = plan.axes.back();
   const std::size_t last_len = plan.lens.back();
-  Ndarray<double> out(detail::with_axis_len(cur.shape, last_axis, last_len));
+  ndarray<double> out(detail::with_axis_len(cur.shape, last_axis, last_len));
   detail::irfft_lines(cur, last_axis, last_len, out,
                       detail::scale_factor(norm, last_len, true), cache);
   return out;
@@ -300,10 +300,10 @@ NP_NODISCARD auto irfftn(const Ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft2.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto rfft2(const Ndarray<T> &x,
+NP_NODISCARD auto rfft2(const ndarray<T> &x,
                         std::optional<std::vector<int>> s = std::nullopt,
                         std::optional<std::vector<int>> axes = std::nullopt,
-                        Norm norm = Norm::Backward) -> Ndarray<Cplx> {
+                        Norm norm = Norm::Backward) -> ndarray<Cplx> {
   if (!axes) {
     axes = std::vector<int>{-2, -1};
   }
@@ -316,10 +316,10 @@ NP_NODISCARD auto rfft2(const Ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.irfft2.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto irfft2(const Ndarray<T> &x,
+NP_NODISCARD auto irfft2(const ndarray<T> &x,
                          std::optional<std::vector<int>> s = std::nullopt,
                          std::optional<std::vector<int>> axes = std::nullopt,
-                         Norm norm = Norm::Backward) -> Ndarray<double> {
+                         Norm norm = Norm::Backward) -> ndarray<double> {
   if (!axes) {
     axes = std::vector<int>{-2, -1};
   }

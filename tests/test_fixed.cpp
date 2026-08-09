@@ -1,6 +1,6 @@
 /**
  * @file test_fixed.cpp
- * @brief Runtime tests for the fixed-shape np::ndarray<T, Extents...> path
+ * @brief Runtime tests for the fixed-shape np::ndarrayf<T, Extents...> path
  *        (construction, reductions, manipulation, elementwise operators,
  *        broadcasting, joins). Compile-time guarantees are exercised in
  *        test_compile_time.cpp / test_constexpr.cpp.
@@ -13,7 +13,7 @@
 int main() {
     // Construction and access
     {
-        np::ndarray<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
+        np::ndarrayf<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
         test::check(a.rank == 2, "rank");
         test::check(a.size_v == 6 && a.size() == 6, "size");
         test::check(a.static_shape[0] == 2 && a.static_shape[1] == 3,
@@ -28,7 +28,7 @@ int main() {
     {
         bool threw = false;
         try {
-            np::ndarray<int, 2, 3> bad{{1, 2}, {3, 4, 5}};
+            np::ndarrayf<int, 2, 3> bad{{1, 2}, {3, 4, 5}};
             (void)bad;
         } catch (const std::invalid_argument&) {
             threw = true;
@@ -37,16 +37,16 @@ int main() {
 
         threw = false;
         try {
-            np::ndarray<int, 2, 3> bad{{1, 2, 3}};
+            np::ndarrayf<int, 2, 3> bad{{1, 2, 3}};
             (void)bad;
         } catch (const std::invalid_argument&) {
             threw = true;
         }
         test::check(threw, "wrong row count throws");
 
-        np::ndarray<int, 2, 3> ok{{1, 2, 3}, {4, 5, 6}};
+        np::ndarrayf<int, 2, 3> ok{{1, 2, 3}, {4, 5, 6}};
         test::check(ok(1, 0) == 4, "valid nested init");
-        np::ndarray<int, 4> flat{1, 2, 3, 4};
+        np::ndarrayf<int, 4> flat{1, 2, 3, 4};
         test::check(flat[3] == 4, "rank-1 init list");
         np::ndarray<double> scalar{2.5};
         test::check(scalar[0] == 2.5, "rank-0 init list");
@@ -54,20 +54,20 @@ int main() {
 
     // std::array construction
     {
-        np::ndarray<int, 3> b{std::array<int, 3>{7, 8, 9}};
+        np::ndarrayf<int, 3> b{std::array<int, 3>{7, 8, 9}};
         test::check(b[1] == 8, "std::array ctor");
     }
 
     // fill
     {
-        np::ndarray<int, 2, 2> f;
+        np::ndarrayf<int, 2, 2> f;
         f.fill(5);
         test::check(f(1, 1) == 5 && f(0, 0) == 5, "fill");
     }
 
     // Reductions
     {
-        np::ndarray<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
+        np::ndarrayf<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
         test::check(a.sum() == 21, "sum all");
         test::check(a.prod() == 720, "prod all");
         test::check(a.min() == 1 && a.max() == 6, "min/max");
@@ -88,7 +88,7 @@ int main() {
         auto colmax = a.max<1>();
         test::check(colmax[0] == 3 && colmax[1] == 6, "max axis=1");
 
-        np::ndarray<bool, 2, 2> tb{{true, true}, {true, false}};
+        np::ndarrayf<bool, 2, 2> tb{{true, true}, {true, false}};
         test::check(tb.all() == false && tb.any() == true, "bool all/any");
         test::check(tb.all<1>()[0] == true && tb.all<1>()[1] == false,
                     "bool all axis");
@@ -97,7 +97,7 @@ int main() {
 
     // Manipulation
     {
-        np::ndarray<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
+        np::ndarrayf<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
         auto t = a.transpose();
         test::check(t.rank == 2 && t.static_shape[0] == 3 &&
                         t.static_shape[1] == 2,
@@ -114,7 +114,7 @@ int main() {
         auto f = a.flatten();
         test::check(f.rank == 1 && f.size_v == 6 && f[5] == 6, "flatten");
 
-        np::ndarray<int, 1, 3, 1> sq_src{{1, 2, 3}};
+        np::ndarrayf<int, 1, 3, 1> sq_src{{1, 2, 3}};
         auto sq = sq_src.squeeze();
         test::check(sq.rank == 1 && sq.size_v == 3 && sq[2] == 3,
                     "squeeze all");
@@ -137,44 +137,44 @@ int main() {
 
     // Elementwise expressions
     {
-        np::ndarray<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
+        np::ndarrayf<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
         auto e = a + a * 2;
         test::check(e(0, 0) == 3 && e(1, 2) == 18, "lazy chain");
-        np::ndarray<int, 2, 3> conv = a + a;
+        np::ndarrayf<int, 2, 3> conv = a + a;
         test::check(conv(0, 2) == 6, "implicit eval conversion");
         auto mat = e.eval();
         test::check(mat.rank == 2 && mat(1, 1) == 15, "explicit eval");
 
-        np::ndarray<int, 2, 3> dm = a - 1;
+        np::ndarrayf<int, 2, 3> dm = a - 1;
         test::check(dm(1, 0) == 3, "scalar subtraction");
-        np::ndarray<int, 2, 3> m2 = a * a;
+        np::ndarrayf<int, 2, 3> m2 = a * a;
         test::check(m2(1, 2) == 36, "elementwise multiply");
-        np::ndarray<int, 2, 3> d = a / np::ndarray<int, 2, 3>{{1, 1, 1},
+        np::ndarrayf<int, 2, 3> d = a / np::ndarrayf<int, 2, 3>{{1, 1, 1},
                                                                {2, 2, 2}};
         test::check(d(1, 0) == 2, "elementwise divide");
-        np::ndarray<int, 2, 3> mm = a % 2;
+        np::ndarrayf<int, 2, 3> mm = a % 2;
         test::check(mm(0, 0) == 1 && mm(1, 0) == 0, "modulo");
 
-        np::ndarray<bool, 2, 3> gt = a > 3;
+        np::ndarrayf<bool, 2, 3> gt = a > 3;
         test::check(gt(0, 0) == false && gt(1, 0) == true, "comparison");
-        np::ndarray<bool, 2, 3> le = a <= 3;
+        np::ndarrayf<bool, 2, 3> le = a <= 3;
         test::check(le(1, 2) == false && le(0, 2) == true, "le comparison");
 
         auto neg = -a;
         test::check(neg(0, 0) == -1 && neg(1, 2) == -6, "unary minus");
 
-        np::ndarray<int, 2, 3> ands = a & np::ndarray<int, 2, 3>{{1, 1, 1},
+        np::ndarrayf<int, 2, 3> ands = a & np::ndarrayf<int, 2, 3>{{1, 1, 1},
                                                                  {0, 0, 0}};
         test::check(ands(1, 0) == 0 && ands(0, 0) == 1, "bitwise and");
-        np::ndarray<int, 2, 3> shifts = a << 1;
+        np::ndarrayf<int, 2, 3> shifts = a << 1;
         test::check(shifts(0, 0) == 2 && shifts(1, 2) == 12, "left shift");
     }
 
     // Broadcasting
     {
-        np::ndarray<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
-        np::ndarray<int, 3> col{10, 20, 30};
-        np::ndarray<int, 2, 1> row{{100}, {200}};
+        np::ndarrayf<int, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
+        np::ndarrayf<int, 3> col{10, 20, 30};
+        np::ndarrayf<int, 2, 1> row{{100}, {200}};
         auto bc = a + col + row;
         test::check(bc.rank == 2 && bc.static_shape[0] == 2 &&
                         bc.static_shape[1] == 3,
@@ -187,34 +187,34 @@ int main() {
 
     // Elementwise math functions
     {
-        np::ndarray<double, 2> s{4.0, 9.0};
+        np::ndarrayf<double, 2> s{4.0, 9.0};
         auto sr = np::sqrt(s).eval();
         test::check(sr[0] == 2.0 && sr[1] == 3.0, "np::sqrt");
-        np::ndarray<int, 2> ai{-3, 4};
+        np::ndarrayf<int, 2> ai{-3, 4};
         test::check(np::abs(ai).eval()[0] == 3, "np::abs");
-        test::check(np::square(np::ndarray<int, 2>{2, 3}).eval()[1] == 9,
+        test::check(np::square(np::ndarrayf<int, 2>{2, 3}).eval()[1] == 9,
                     "np::square");
-        test::check(np::power(np::ndarray<int, 2>{2, 3}, 3).eval()[1] == 27,
+        test::check(np::power(np::ndarrayf<int, 2>{2, 3}, 3).eval()[1] == 27,
                     "np::power");
-        auto se = np::exp(np::ndarray<double, 1>{0.0}).eval();
+        auto se = np::exp(np::ndarrayf<double, 1>{0.0}).eval();
         test::check(se[0] == 1.0, "np::exp");
-        auto sl = np::log(np::ndarray<double, 1>{1.0}).eval();
+        auto sl = np::log(np::ndarrayf<double, 1>{1.0}).eval();
         test::check(sl[0] == 0.0, "np::log");
-        auto ss = np::sin(np::ndarray<double, 1>{0.0}).eval();
+        auto ss = np::sin(np::ndarrayf<double, 1>{0.0}).eval();
         test::check(ss[0] == 0.0, "np::sin");
-        auto sf = np::floor(np::ndarray<double, 1>{2.7}).eval();
+        auto sf = np::floor(np::ndarrayf<double, 1>{2.7}).eval();
         test::check(sf[0] == 2.0, "np::floor");
     }
 
     // concatenate / stack
     {
-        np::ndarray<int, 3> c1{{0, 1, 2}};
-        np::ndarray<int, 2> c2{{0, 1}};
+        np::ndarrayf<int, 3> c1{{0, 1, 2}};
+        np::ndarrayf<int, 2> c2{{0, 1}};
         auto cat = np::concatenate(c1, c2);
         test::check(cat.rank == 1 && cat.size_v == 5 && cat[3] == 0 &&
                         cat[4] == 1,
                     "concatenate");
-        np::ndarray<int, 2, 2> m1{{1, 2}, {3, 4}};
+        np::ndarrayf<int, 2, 2> m1{{1, 2}, {3, 4}};
         auto st = np::stack<0>(m1, m1);
         test::check(st.rank == 3 && st.static_shape[0] == 2 &&
                         st(1, 0, 1) == 2,
@@ -227,7 +227,7 @@ int main() {
 
     // Copy semantics
     {
-        np::ndarray<int, 2, 2> a{{1, 2}, {3, 4}};
+        np::ndarrayf<int, 2, 2> a{{1, 2}, {3, 4}};
         auto b = a;
         b(0, 0) = 99;
         test::check(a(0, 0) == 1, "copy is deep");
@@ -265,15 +265,15 @@ int main() {
 
     // Fixed-shape linalg
     {
-        np::ndarray<int, 3> u{1, 2, 3};
-        np::ndarray<int, 3> v{4, 5, 6};
+        np::ndarrayf<int, 3> u{1, 2, 3};
+        np::ndarrayf<int, 3> v{4, 5, 6};
         test::check(np::linalg::dot(u, v) == 32, "dot 1D . 1D");
 
-        np::ndarray<int, 2, 3> m{{1, 2, 3}, {4, 5, 6}};
+        np::ndarrayf<int, 2, 3> m{{1, 2, 3}, {4, 5, 6}};
         auto mv = np::linalg::dot(m, v);
         test::check(mv.rank == 1 && mv[0] == 32 && mv[1] == 77,
                     "dot 2D . 1D");
-        np::ndarray<int, 3, 2> n{{1, 2}, {3, 4}, {5, 6}};
+        np::ndarrayf<int, 3, 2> n{{1, 2}, {3, 4}, {5, 6}};
         auto vm = np::linalg::dot(v, n);
         test::check(vm.rank == 1 && vm[0] == 49 && vm[1] == 64,
                     "dot 1D . 2D");
@@ -289,7 +289,7 @@ int main() {
 
     // Fixed-shape linalg: decompositions and inverses
     {
-        np::ndarray<double, 2, 2> a{{1, 2}, {3, 4}};
+        np::ndarrayf<double, 2, 2> a{{1, 2}, {3, 4}};
         test::check(np::linalg::trace(a) == 5.0, "trace");
         test::check(test::approx(np::linalg::det(a), -2.0), "det");
         const auto sd = np::linalg::slogdet(a);
@@ -297,7 +297,7 @@ int main() {
                         test::approx(sd.logabsdet, std::log(2.0)),
                     "slogdet");
 
-        np::ndarray<double, 2, 2> singular{{1, 2}, {2, 4}};
+        np::ndarrayf<double, 2, 2> singular{{1, 2}, {2, 4}};
         test::check(np::linalg::det(singular) == 0.0,
                     "det singular is zero");
         const auto sds = np::linalg::slogdet(singular);
@@ -317,11 +317,11 @@ int main() {
         }
         test::check(threw, "inv singular throws");
 
-        np::ndarray<double, 2> b{1, 0};
+        np::ndarrayf<double, 2> b{1, 0};
         const auto x = np::linalg::solve(a, b);
         test::check(test::approx(x[0], -2.0) && test::approx(x[1], 1.5),
                     "solve 1-D rhs");
-        np::ndarray<double, 2, 3> B{{1, 0, 2}, {0, 1, 3}};
+        np::ndarrayf<double, 2, 3> B{{1, 0, 2}, {0, 1, 3}};
         const auto X = np::linalg::solve(a, B);
         const auto rec = np::linalg::matmul(a, X);
         test::check(test::approx(rec(0, 0), 1.0) && test::approx(rec(1, 1), 1.0) &&
@@ -335,14 +335,14 @@ int main() {
         }
         test::check(threw, "solve singular throws");
 
-        np::ndarray<double, 2, 2> pd{{4, 0}, {0, 9}};
+        np::ndarrayf<double, 2, 2> pd{{4, 0}, {0, 9}};
         const auto L = np::linalg::cholesky(pd);
         test::check(test::approx(L(0, 0), 2.0) && test::approx(L(1, 1), 3.0),
                     "cholesky lower");
         const auto U = np::linalg::cholesky(pd, true);
         test::check(test::approx(U(0, 0), 2.0) && test::approx(U(1, 1), 3.0),
                     "cholesky upper");
-        np::ndarray<double, 2, 2> nonpd{{1, 2}, {2, 1}};
+        np::ndarrayf<double, 2, 2> nonpd{{1, 2}, {2, 1}};
         threw = false;
         try {
             (void)np::linalg::cholesky(nonpd);
@@ -351,7 +351,7 @@ int main() {
         }
         test::check(threw, "cholesky non-PD throws");
 
-        np::ndarray<int, 2, 2> ai{{1, 2}, {3, 4}};
+        np::ndarrayf<int, 2, 2> ai{{1, 2}, {3, 4}};
         test::check(test::approx(np::linalg::det(ai), -2.0),
                     "det promotes int");
         const auto p2 = np::linalg::matrix_power(ai, 2);
@@ -370,7 +370,7 @@ int main() {
 
     // Fixed-shape linalg: norms
     {
-        np::ndarray<double, 4> v{1, 2, 3, 4};
+        np::ndarrayf<double, 4> v{1, 2, 3, 4};
         test::check(test::approx(np::linalg::norm(v), std::sqrt(30.0)),
                     "norm default (2-norm)");
         test::check(test::approx(np::linalg::norm(v, np::linalg::NormOrd::Two),
@@ -396,7 +396,7 @@ int main() {
         }
         test::check(threw, "norm fro on 1-D throws");
 
-        np::ndarray<double, 2, 2> m{{1, 2}, {3, 4}};
+        np::ndarrayf<double, 2, 2> m{{1, 2}, {3, 4}};
         test::check(test::approx(np::linalg::norm(m), std::sqrt(30.0)),
                     "matrix norm default (fro)");
         test::check(test::approx(np::linalg::norm(m, np::linalg::NormOrd::Fro),
@@ -420,7 +420,7 @@ int main() {
                                  5.830951894845301),
                     "matrix norm nuc");
 
-        np::ndarray<double, 2, 3> wide{{1, 0, 0}, {0, 2, 0}};
+        np::ndarrayf<double, 2, 3> wide{{1, 0, 0}, {0, 2, 0}};
         test::check(test::approx(np::linalg::norm(wide, np::linalg::NormOrd::Two),
                                  2.0) &&
                         test::approx(np::linalg::norm(wide, np::linalg::NormOrd::NegTwo),
@@ -430,18 +430,18 @@ int main() {
 
     // Fixed-shape linalg: SVD, QR, rank, pinv, cond
     {
-        np::ndarray<double, 3, 2> r1{{1, 2}, {0, 0}, {0, 0}};
+        np::ndarrayf<double, 3, 2> r1{{1, 2}, {0, 0}, {0, 0}};
         const auto s = np::linalg::svdvals(r1);
         test::check(s.rank == 1 && test::approx(s[0], std::sqrt(5.0)),
                     "svdvals rank-1");
-        np::ndarray<int, 2, 2> ai{{1, 2}, {3, 4}};
+        np::ndarrayf<int, 2, 2> ai{{1, 2}, {3, 4}};
         const auto si = np::linalg::svdvals(ai);
         test::check(test::approx(si[0], 5.464985704219043) &&
                         test::approx(si[1], 0.3659661906262574),
                     "svdvals int promotes, descending");
 
         // Full SVD on M >= N and M < N: reconstruction and orthonormality.
-        np::ndarray<double, 2, 3> wide{{1, 0, 0}, {0, 2, 0}};
+        np::ndarrayf<double, 2, 3> wide{{1, 0, 0}, {0, 2, 0}};
         const auto sw = np::linalg::svd(wide);
         test::check(sw.u.rank == 2 && sw.vh.rank == 2 &&
                         sw.u.static_shape[0] == 2 && sw.u.static_shape[1] == 2 &&
@@ -466,7 +466,7 @@ int main() {
                         test::approx(wr.vh(1, 0), 1.0),
                     "svd reduced vh values");
 
-        np::ndarray<double, 3, 2> tall{{1, 0}, {0, 2}, {0, 0}};
+        np::ndarrayf<double, 3, 2> tall{{1, 0}, {0, 2}, {0, 0}};
         const auto st = np::linalg::svd<false>(tall);
         test::check(st.u.static_shape[0] == 3 && st.u.static_shape[1] == 2,
                     "svd reduced u shape (M, K)");
@@ -482,7 +482,7 @@ int main() {
         test::check(test::approx(acc, 0.0, 1e-12),
                     "svd reduced reconstruction M>N");
 
-        np::ndarray<double, 2, 2> m{{1, 2}, {3, 4}};
+        np::ndarrayf<double, 2, 2> m{{1, 2}, {3, 4}};
         const auto sm = np::linalg::svd(m);
         test::check(test::approx(sm.s[0], 5.464985704219043) &&
                         test::approx(sm.s[1], 0.3659661906262574),
@@ -539,15 +539,15 @@ int main() {
         }
 
         test::check(np::linalg::matrix_rank(m) == 2, "matrix_rank 2x2");
-        np::ndarray<double, 2, 2> rank1{{1, 2}, {2, 4}};
+        np::ndarrayf<double, 2, 2> rank1{{1, 2}, {2, 4}};
         test::check(np::linalg::matrix_rank(rank1) == 1, "matrix_rank rank-1");
         test::check(np::linalg::matrix_rank(rank1, 1e-9) == 1,
                     "matrix_rank explicit tol");
         test::check(np::linalg::matrix_rank(rank1, 1e9) == 0,
                     "matrix_rank huge tol");
-        np::ndarray<double, 3> z{0, 0, 0};
+        np::ndarrayf<double, 3> z{0, 0, 0};
         test::check(np::linalg::matrix_rank(z) == 0, "matrix_rank 1-D zero");
-        np::ndarray<double, 3> nz{0, 5, 0};
+        np::ndarrayf<double, 3> nz{0, 5, 0};
         test::check(np::linalg::matrix_rank(nz) == 1, "matrix_rank 1-D");
 
         const auto pv = np::linalg::pinv(r1);
@@ -567,14 +567,14 @@ int main() {
         test::check(test::approx(np::linalg::cond(m, np::linalg::NormOrd::Fro),
                                  15.0, 1e-9),
                     "cond fro");
-        np::ndarray<double, 2, 2> cs{{1, 0}, {0, 0}};
+        np::ndarrayf<double, 2, 2> cs{{1, 0}, {0, 0}};
         test::check(np::linalg::cond(cs) == std::numeric_limits<double>::infinity(),
                     "cond singular is inf");
     }
 
     // Fixed-shape linalg: eigendecomposition, cross, outer, inner, lstsq
     {
-        np::ndarray<double, 3, 3> s{{2, 0, 0}, {0, 3, 0}, {0, 0, 5}};
+        np::ndarrayf<double, 3, 3> s{{2, 0, 0}, {0, 3, 0}, {0, 0, 5}};
         const auto e = np::linalg::eigh(s);
         test::check(test::approx(e.w[0], 2.0) && test::approx(e.w[1], 3.0) &&
                         test::approx(e.w[2], 5.0),
@@ -587,7 +587,7 @@ int main() {
                         test::approx(ev[2], 5.0),
                     "eigvalsh");
 
-        np::ndarray<double, 2, 2> sym{{1, 3}, {3, 4}};
+        np::ndarrayf<double, 2, 2> sym{{1, 3}, {3, 4}};
         const auto e2 = np::linalg::eigh(sym);
         test::check(test::approx(e2.w[0], -0.8541019662496847) &&
                         test::approx(e2.w[1], 5.854101966249685),
@@ -604,47 +604,47 @@ int main() {
         test::check(test::approx(e2.v(0, 0) * e2.v(0, 0) + e2.v(1, 0) * e2.v(1, 0),
                                  1.0),
                     "eigh eigenvectors unit");
-        np::ndarray<int, 2, 2> asym{{1, 2}, {3, 4}};
+        np::ndarrayf<int, 2, 2> asym{{1, 2}, {3, 4}};
         const auto e3 = np::linalg::eigh(asym);
         test::check(test::approx(e3.w[0], -0.8541019662496847) &&
                         test::approx(e3.w[1], 5.854101966249685),
                     "eigh reads lower triangle (numpy UPLO='L')");
 
-        const auto c = np::linalg::cross(np::ndarray<double, 3>{1, 0, 0},
-                                         np::ndarray<double, 3>{0, 1, 0});
+        const auto c = np::linalg::cross(np::ndarrayf<double, 3>{1, 0, 0},
+                                         np::ndarrayf<double, 3>{0, 1, 0});
         test::check(test::approx(c[0], 0.0) && test::approx(c[1], 0.0) &&
                         test::approx(c[2], 1.0),
                     "cross 3-vectors");
-        np::ndarray<double, 2, 3> ca{{1, 0, 0}, {0, 1, 0}};
-        np::ndarray<double, 2, 3> cb{{0, 1, 0}, {0, 0, 1}};
+        np::ndarrayf<double, 2, 3> ca{{1, 0, 0}, {0, 1, 0}};
+        np::ndarrayf<double, 2, 3> cb{{0, 1, 0}, {0, 0, 1}};
         const auto c2 = np::linalg::cross(ca, cb);
         test::check(test::approx(c2(0, 2), 1.0) && test::approx(c2(1, 0), 1.0),
                     "cross rows");
 
-        np::ndarray<double, 2> oa{1, 2};
-        np::ndarray<double, 3> ob{3, 4, 5};
+        np::ndarrayf<double, 2> oa{1, 2};
+        np::ndarrayf<double, 3> ob{3, 4, 5};
         const auto ot = np::linalg::outer(oa, ob);
         test::check(test::approx(ot(0, 0), 3.0) && test::approx(ot(1, 2), 10.0),
                     "outer");
-        test::check(np::linalg::inner(oa, np::ndarray<double, 2>{3, 4}) == 11.0,
+        test::check(np::linalg::inner(oa, np::ndarrayf<double, 2>{3, 4}) == 11.0,
                     "inner 1-D");
-        np::ndarray<double, 2, 3> ia{{1, 2, 3}, {4, 5, 6}};
-        np::ndarray<double, 2, 3> ib{{1, 0, 0}, {0, 1, 0}};
+        np::ndarrayf<double, 2, 3> ia{{1, 2, 3}, {4, 5, 6}};
+        np::ndarrayf<double, 2, 3> ib{{1, 0, 0}, {0, 1, 0}};
         const auto inn = np::linalg::inner(ia, ib);
         test::check(test::approx(inn(0, 0), 1.0) && test::approx(inn(0, 1), 2.0) &&
                         test::approx(inn(1, 1), 5.0),
                     "inner 2-D contracts last axis");
 
         // lstsq: overdetermined (3x2) and underdetermined (2x3).
-        np::ndarray<double, 3, 2> ov{{1, 0}, {0, 1}, {0, 0}};
-        np::ndarray<double, 3> obv{1, 2, 0};
+        np::ndarrayf<double, 3, 2> ov{{1, 0}, {0, 1}, {0, 0}};
+        np::ndarrayf<double, 3> obv{1, 2, 0};
         const auto ls = np::linalg::lstsq(ov, obv);
         test::check(test::approx(ls.x[0], 1.0) && test::approx(ls.x[1], 2.0) &&
                         ls.rank == 2 && test::approx(ls.s[0], 1.0) &&
                         test::approx(ls.s[1], 1.0),
                     "lstsq overdetermined");
-        np::ndarray<double, 2, 3> und{{1, 0, 0}, {0, 2, 0}};
-        np::ndarray<double, 2> ubv{1, 0};
+        np::ndarrayf<double, 2, 3> und{{1, 0, 0}, {0, 2, 0}};
+        np::ndarrayf<double, 2> ubv{1, 0};
         const auto lu = np::linalg::lstsq(und, ubv);
         test::check(test::approx(lu.x[0], 1.0) && test::approx(lu.x[1], 0.0) &&
                         test::approx(lu.x[2], 0.0) && lu.rank == 2,

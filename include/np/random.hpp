@@ -57,18 +57,18 @@ public:
    */
   template <typename T = std::int64_t>
   auto integers(T low, T high, const std::vector<int> &size = {})
-      -> Ndarray<T> {
+      -> ndarray<T> {
     if (high <= low) {
       throw std::invalid_argument("high must be greater than low");
     }
 
     if (size.empty()) {
       std::uniform_int_distribution<T> dist(low, high - 1);
-      return Ndarray<T>::from_data({1}, {dist(engine_)});
+      return ndarray<T>::from_data({1}, {dist(engine_)});
     }
 
     std::uniform_int_distribution<T> dist(low, high - 1);
-    Ndarray<T> result(size, dtype_of<T>);
+    ndarray<T> result(size, dtype_of<T>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       *it = dist(engine_);
     }
@@ -81,16 +81,16 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.random.html
    */
   template <typename T = double>
-  auto random(const std::vector<int> &size = {}) -> Ndarray<T> {
+  auto random(const std::vector<int> &size = {}) -> ndarray<T> {
     static_assert(std::is_floating_point_v<T>, "T must be floating point");
 
     if (size.empty()) {
       std::uniform_real_distribution<T> dist(T{0}, T{1});
-      return Ndarray<T>::from_data({1}, {dist(engine_)});
+      return ndarray<T>::from_data({1}, {dist(engine_)});
     }
 
     std::uniform_real_distribution<T> dist(T{0}, T{1});
-    Ndarray<T> result(size, dtype_of<T>);
+    ndarray<T> result(size, dtype_of<T>);
 
 #ifdef _NP_KERNEL_PERFORMANCE_LOOP_UNROLL
 #pragma unroll loop
@@ -124,7 +124,7 @@ public:
    * Reference:
    * numpy-reference/reference/random/generated/numpy.random.Generator.permutation.html
    */
-  template <typename T> auto permutation(const Ndarray<T> &x) -> Ndarray<T> {
+  template <typename T> auto permutation(const ndarray<T> &x) -> ndarray<T> {
     auto result = x.copy();
     shuffle(result);
     return result;
@@ -133,7 +133,7 @@ public:
   /**
    * @brief Return permuted range.
    */
-  auto permutation(std::int64_t n) -> Ndarray<std::int64_t> {
+  auto permutation(std::int64_t n) -> ndarray<std::int64_t> {
     auto arr = arange<std::int64_t>(0, n, 1);
     shuffle(arr);
     return arr;
@@ -144,7 +144,7 @@ public:
    * Reference:
    * numpy-reference/reference/random/generated/numpy.random.Generator.shuffle.html
    */
-  template <typename T> void shuffle(Ndarray<T> &x) {
+  template <typename T> void shuffle(ndarray<T> &x) {
     if (x.ndim() == 1) {
       std::shuffle(x.data().begin(), x.data().end(), engine_);
     } else {
@@ -172,8 +172,8 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.choice.html
    */
   template <typename T>
-  auto choice(const Ndarray<T> &a, std::size_t size = 1, bool replace = true)
-      -> Ndarray<T> {
+  auto choice(const ndarray<T> &a, std::size_t size = 1, bool replace = true)
+      -> ndarray<T> {
     if (a.ndim() != 1) {
       throw std::invalid_argument("choice: array must be 1-D");
     }
@@ -203,7 +203,7 @@ public:
       }
     }
 
-    return Ndarray<T>::from_data({static_cast<int>(size)},
+    return ndarray<T>::from_data({static_cast<int>(size)},
                                  std::move(result_data));
   }
 
@@ -218,7 +218,7 @@ public:
    */
   template <typename T = double>
   auto uniform(T low = T{0}, T high = T{1}, const std::vector<int> &size = {})
-      -> Ndarray<T> {
+      -> ndarray<T> {
     std::uniform_real_distribution<T> dist(low, high);
     return _fill_distribution<T>(engine_, dist, size);
   }
@@ -229,7 +229,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.standard_normal.html
    */
   template <typename T = double>
-  auto standard_normal(const std::vector<int> &size = {}) -> Ndarray<T> {
+  auto standard_normal(const std::vector<int> &size = {}) -> ndarray<T> {
     std::normal_distribution<T> dist(T{0}, T{1});
     return _fill_distribution<T>(engine_, dist, size);
   }
@@ -241,7 +241,7 @@ public:
    */
   template <typename T = double>
   auto normal(T loc = T{0}, T scale = T{1}, const std::vector<int> &size = {})
-      -> Ndarray<T> {
+      -> ndarray<T> {
     std::normal_distribution<T> dist(loc, scale);
     return _fill_distribution<T>(engine_, dist, size);
   }
@@ -253,7 +253,7 @@ public:
    */
   template <typename T = double>
   auto exponential(T scale = T{1}, const std::vector<int> &size = {})
-      -> Ndarray<T> {
+      -> ndarray<T> {
     std::exponential_distribution<T> dist(T{1} / scale);
     return _fill_distribution<T>(engine_, dist, size);
   }
@@ -264,7 +264,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.standard_exponential.html
    */
   template <typename T = double>
-  auto standard_exponential(const std::vector<int> &size = {}) -> Ndarray<T> {
+  auto standard_exponential(const std::vector<int> &size = {}) -> ndarray<T> {
     return exponential(T{1}, size);
   }
 
@@ -275,7 +275,7 @@ public:
    */
   template <typename T = double>
   auto gamma(T shape, T scale = T{1}, const std::vector<int> &size = {})
-      -> Ndarray<T> {
+      -> ndarray<T> {
     std::gamma_distribution<T> dist(shape, scale);
     return _fill_distribution<T>(engine_, dist, size);
   }
@@ -287,7 +287,7 @@ public:
    */
   template <typename T = double>
   auto standard_gamma(T shape, const std::vector<int> &size = {})
-      -> Ndarray<T> {
+      -> ndarray<T> {
     return gamma(shape, T{1}, size);
   }
 
@@ -297,7 +297,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.beta.html
    */
   template <typename T = double>
-  auto beta(T a, T b, const std::vector<int> &size = {}) -> Ndarray<T> {
+  auto beta(T a, T b, const std::vector<int> &size = {}) -> ndarray<T> {
     // Beta distribution: X ~ Gamma(a,1) / (Gamma(a,1) + Gamma(b,1))
     std::gamma_distribution<T> dist_a(a, T{1});
     std::gamma_distribution<T> dist_b(b, T{1});
@@ -305,10 +305,10 @@ public:
     if (size.empty()) {
       T x = dist_a(engine_);
       T y = dist_b(engine_);
-      return Ndarray<T>::from_data({1}, {x / (x + y)});
+      return ndarray<T>::from_data({1}, {x / (x + y)});
     }
 
-    Ndarray<T> result(size, dtype_of<T>);
+    ndarray<T> result(size, dtype_of<T>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       T x = dist_a(engine_);
       T y = dist_b(engine_);
@@ -323,7 +323,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.chisquare.html
    */
   template <typename T = double>
-  auto chisquare(T df, const std::vector<int> &size = {}) -> Ndarray<T> {
+  auto chisquare(T df, const std::vector<int> &size = {}) -> ndarray<T> {
     std::chi_squared_distribution<T> dist(df);
     return _fill_distribution<T>(engine_, dist, size);
   }
@@ -334,7 +334,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.f.html
    */
   template <typename T = double>
-  auto f(T dfnum, T dfden, const std::vector<int> &size = {}) -> Ndarray<T> {
+  auto f(T dfnum, T dfden, const std::vector<int> &size = {}) -> ndarray<T> {
     std::fisher_f_distribution<T> dist(dfnum, dfden);
     return _fill_distribution<T>(engine_, dist, size);
   }
@@ -345,7 +345,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.standard_t.html
    */
   template <typename T = double>
-  auto standard_t(T df, const std::vector<int> &size = {}) -> Ndarray<T> {
+  auto standard_t(T df, const std::vector<int> &size = {}) -> ndarray<T> {
     std::student_t_distribution<T> dist(df);
     return _fill_distribution<T>(engine_, dist, size);
   }
@@ -357,7 +357,7 @@ public:
    */
   template <typename T = double>
   auto lognormal(T mean = T{0}, T sigma = T{1},
-                 const std::vector<int> &size = {}) -> Ndarray<T> {
+                 const std::vector<int> &size = {}) -> ndarray<T> {
     std::lognormal_distribution<T> dist(mean, sigma);
     return _fill_distribution<T>(engine_, dist, size);
   }
@@ -368,7 +368,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.standard_cauchy.html
    */
   template <typename T = double>
-  auto standard_cauchy(const std::vector<int> &size = {}) -> Ndarray<T> {
+  auto standard_cauchy(const std::vector<int> &size = {}) -> ndarray<T> {
     std::cauchy_distribution<T> dist(T{0}, T{1});
     return _fill_distribution<T>(engine_, dist, size);
   }
@@ -379,7 +379,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.weibull.html
    */
   template <typename T = double>
-  auto weibull(T a, const std::vector<int> &size = {}) -> Ndarray<T> {
+  auto weibull(T a, const std::vector<int> &size = {}) -> ndarray<T> {
     std::weibull_distribution<T> dist(a, T{1});
     return _fill_distribution<T>(engine_, dist, size);
   }
@@ -391,7 +391,7 @@ public:
    */
   template <typename T = double>
   auto poisson(T lam = T{1}, const std::vector<int> &size = {})
-      -> Ndarray<_Np_dtype::_Np_int64> {
+      -> ndarray<_Np_dtype::_Np_int64> {
     std::poisson_distribution<std::int64_t> dist(lam);
     return _fill_distribution<_Np_dtype::_Np_int64>(engine_, dist, size);
   }
@@ -402,7 +402,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.binomial.html
    */
   auto binomial(std::int64_t n, double p, const std::vector<int> &size = {})
-      -> Ndarray<_Np_dtype::_Np_int64> {
+      -> ndarray<_Np_dtype::_Np_int64> {
     std::binomial_distribution<std::int64_t> dist(n, p);
     return _fill_distribution<_Np_dtype::_Np_int64>(engine_, dist, size);
   }
@@ -414,7 +414,7 @@ public:
    */
   auto negative_binomial(std::int64_t n, double p,
                          const std::vector<int> &size = {})
-      -> Ndarray<_Np_dtype::_Np_int64> {
+      -> ndarray<_Np_dtype::_Np_int64> {
     std::negative_binomial_distribution<std::int64_t> dist(n, p);
     return _fill_distribution<_Np_dtype::_Np_int64>(engine_, dist, size);
   }
@@ -425,7 +425,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.geometric.html
    */
   auto geometric(double p, const std::vector<int> &size = {})
-      -> Ndarray<_Np_dtype::_Np_int64> {
+      -> ndarray<_Np_dtype::_Np_int64> {
     std::geometric_distribution<std::int64_t> dist(p);
     return _fill_distribution<_Np_dtype::_Np_int64>(engine_, dist, size);
   }
@@ -436,16 +436,16 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.pareto.html
    */
   template <typename T = double>
-  auto pareto(T a, const std::vector<int> &size = {}) -> Ndarray<T> {
+  auto pareto(T a, const std::vector<int> &size = {}) -> ndarray<T> {
     // Pareto: X = (1/U)^(1/a) - 1, where U ~ Uniform(0,1)
     std::uniform_real_distribution<T> dist(T{0}, T{1});
 
     if (size.empty()) {
       T u = dist(engine_);
-      return Ndarray<T>::from_data({1}, {std::pow(T{1} / u, T{1} / a) - T{1}});
+      return ndarray<T>::from_data({1}, {std::pow(T{1} / u, T{1} / a) - T{1}});
     }
 
-    Ndarray<T> result(size, dtype_of<T>);
+    ndarray<T> result(size, dtype_of<T>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       T u = dist(engine_);
       *it = std::pow(T{1} / u, T{1} / a) - T{1};
@@ -459,15 +459,15 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.power.html
    */
   template <typename T = double>
-  auto power(T a, const std::vector<int> &size = {}) -> Ndarray<T> {
+  auto power(T a, const std::vector<int> &size = {}) -> ndarray<T> {
     // Power: X = U^(1/a), where U ~ Uniform(0,1)
     std::uniform_real_distribution<T> dist(T{0}, T{1});
 
     if (size.empty()) {
-      return Ndarray<T>::from_data({1}, {std::pow(dist(engine_), T{1} / a)});
+      return ndarray<T>::from_data({1}, {std::pow(dist(engine_), T{1} / a)});
     }
 
-    Ndarray<T> result(size, dtype_of<T>);
+    ndarray<T> result(size, dtype_of<T>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       *it = std::pow(dist(engine_), T{1} / a);
     }
@@ -481,7 +481,7 @@ public:
    */
   template <typename T = double>
   auto laplace(T loc = T{0}, T scale = T{1}, const std::vector<int> &size = {})
-      -> Ndarray<T> {
+      -> ndarray<T> {
     // Laplace: X = loc - scale*sign(U-0.5)*log(1-2*|U-0.5|)
     std::uniform_real_distribution<T> dist(T{0}, T{1});
 
@@ -489,10 +489,10 @@ public:
       T u = dist(engine_);
       T sign = (u < T{0.5}) ? T{-1} : T{1};
       T val = loc - scale * sign * std::log(T{1} - T{2} * std::abs(u - T{0.5}));
-      return Ndarray<T>::from_data({1}, {val});
+      return ndarray<T>::from_data({1}, {val});
     }
 
-    Ndarray<T> result(size, dtype_of<T>);
+    ndarray<T> result(size, dtype_of<T>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       T u = dist(engine_);
       T sign = (u < T{0.5}) ? T{-1} : T{1};
@@ -508,7 +508,7 @@ public:
    */
   template <typename T = double>
   auto gumbel(T loc = T{0}, T scale = T{1}, const std::vector<int> &size = {})
-      -> Ndarray<T> {
+      -> ndarray<T> {
     std::extreme_value_distribution<T> dist(loc, scale);
     return _fill_distribution<T>(engine_, dist, size);
   }
@@ -520,17 +520,17 @@ public:
    */
   template <typename T = double>
   auto logistic(T loc = T{0}, T scale = T{1}, const std::vector<int> &size = {})
-      -> Ndarray<T> {
+      -> ndarray<T> {
     // Logistic: X = loc + scale * log(U/(1-U))
     std::uniform_real_distribution<T> dist(T{0}, T{1});
 
     if (size.empty()) {
       T u = dist(engine_);
-      return Ndarray<T>::from_data({1},
+      return ndarray<T>::from_data({1},
                                    {loc + scale * std::log(u / (T{1} - u))});
     }
 
-    Ndarray<T> result(size, dtype_of<T>);
+    ndarray<T> result(size, dtype_of<T>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       T u = dist(engine_);
       *it = loc + (scale * std::log(u / (T{1} - u)));
@@ -545,17 +545,17 @@ public:
    */
   template <typename T = double>
   auto rayleigh(T scale = T{1}, const std::vector<int> &size = {})
-      -> Ndarray<T> {
+      -> ndarray<T> {
     // Rayleigh: X = scale * sqrt(-2*log(U))
     std::uniform_real_distribution<T> dist(T{0}, T{1});
 
     if (size.empty()) {
       T u = dist(engine_);
-      return Ndarray<T>::from_data({1},
+      return ndarray<T>::from_data({1},
                                    {scale * std::sqrt(-T{2} * std::log(u))});
     }
 
-    Ndarray<T> result(size, dtype_of<T>);
+    ndarray<T> result(size, dtype_of<T>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       T u = dist(engine_);
       *it = scale * std::sqrt(-T{2} * std::log(u));
@@ -570,7 +570,7 @@ public:
    */
   template <typename T = double>
   auto triangular(T left, T mode, T right, const std::vector<int> &size = {})
-      -> Ndarray<T> {
+      -> ndarray<T> {
     // Use inverse CDF method for triangular distribution
     std::uniform_real_distribution<T> dist(T{0}, T{1});
     const T fc = (mode - left) / (right - left);
@@ -581,10 +581,10 @@ public:
           (u < fc)
               ? left + std::sqrt(u * (right - left) * (mode - left))
               : right - std::sqrt((T{1} - u) * (right - left) * (right - mode));
-      return Ndarray<T>::from_data({1}, {val});
+      return ndarray<T>::from_data({1}, {val});
     }
 
-    Ndarray<T> result(size, dtype_of<T>);
+    ndarray<T> result(size, dtype_of<T>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       T u = dist(engine_);
       *it =
@@ -602,7 +602,7 @@ public:
    */
   auto hypergeometric(std::int64_t ngood, std::int64_t nbad,
                       std::int64_t nsample, const std::vector<int> &size = {})
-      -> Ndarray<std::int64_t> {
+      -> ndarray<std::int64_t> {
     if (ngood < 0 || nbad < 0 || nsample < 0 || nsample > ngood + nbad) {
       throw std::invalid_argument("hypergeometric: invalid parameters");
     }
@@ -629,10 +629,10 @@ public:
     };
 
     if (size.empty()) {
-      return Ndarray<std::int64_t>::from_data({1}, {sample_one()});
+      return ndarray<std::int64_t>::from_data({1}, {sample_one()});
     }
 
-    Ndarray<std::int64_t> result(size, dtype_of<std::int64_t>);
+    ndarray<std::int64_t> result(size, dtype_of<std::int64_t>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       *it = sample_one();
     }
@@ -646,7 +646,7 @@ public:
    */
   template <typename T = double>
   auto logseries(T p, const std::vector<int> &size = {})
-      -> Ndarray<std::int64_t> {
+      -> ndarray<std::int64_t> {
     // Log-series: P(X=k) = -p^k / (k * log(1-p))
     std::uniform_real_distribution<T> dist(T{0}, T{1});
     const T log_q = std::log(T{1} - p);
@@ -658,10 +658,10 @@ public:
       if (u >= p) {
         k = static_cast<std::int64_t>(std::floor(std::log(v) / log_q)) + 1;
       }
-      return Ndarray<std::int64_t>::from_data({1}, {k});
+      return ndarray<std::int64_t>::from_data({1}, {k});
     }
 
-    Ndarray<std::int64_t> result(size, dtype_of<std::int64_t>);
+    ndarray<std::int64_t> result(size, dtype_of<std::int64_t>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       T u = dist(engine_);
       T v = dist(engine_);
@@ -680,7 +680,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.wald.html
    */
   template <typename T = double>
-  auto wald(T mean, T scale, const std::vector<int> &size = {}) -> Ndarray<T> {
+  auto wald(T mean, T scale, const std::vector<int> &size = {}) -> ndarray<T> {
     // Wald/Inverse Gaussian: use transformation method
     std::normal_distribution<T> normal(T{0}, T{1});
     std::uniform_real_distribution<T> uniform(T{0}, T{1});
@@ -693,13 +693,13 @@ public:
                 std::sqrt(T{4} * mean * scale * y + mean * mean * y * y);
       T u = uniform(engine_);
       if (u <= mean / (mean + x)) {
-        return Ndarray<T>::from_data({1}, {x});
+        return ndarray<T>::from_data({1}, {x});
       } else {
-        return Ndarray<T>::from_data({1}, {mean * mean / x});
+        return ndarray<T>::from_data({1}, {mean * mean / x});
       }
     }
 
-    Ndarray<T> result(size, dtype_of<T>);
+    ndarray<T> result(size, dtype_of<T>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       T nu = normal(engine_);
       T y = nu * nu;
@@ -719,7 +719,7 @@ public:
    */
   template <typename T = double>
   auto vonmises(T mu, T kappa, const std::vector<int> &size = {})
-      -> Ndarray<T> {
+      -> ndarray<T> {
     // Von Mises: circular normal distribution
     // Use Best-Fisher algorithm
     std::uniform_real_distribution<T> uniform(T{0}, T{1});
@@ -745,10 +745,10 @@ public:
     };
 
     if (size.empty()) {
-      return Ndarray<T>::from_data({1}, {sample_one()});
+      return ndarray<T>::from_data({1}, {sample_one()});
     }
 
-    Ndarray<T> result(size, dtype_of<T>);
+    ndarray<T> result(size, dtype_of<T>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       *it = sample_one();
     }
@@ -761,7 +761,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.zipf.html
    */
   template <typename T = double>
-  auto zipf(T a, const std::vector<int> &size = {}) -> Ndarray<std::int64_t> {
+  auto zipf(T a, const std::vector<int> &size = {}) -> ndarray<std::int64_t> {
     // Zipf: P(k) ~ 1/k^a
     // Use rejection sampling
     std::uniform_real_distribution<T> uniform(T{0}, T{1});
@@ -782,10 +782,10 @@ public:
     };
 
     if (size.empty()) {
-      return Ndarray<std::int64_t>::from_data({1}, {sample_one()});
+      return ndarray<std::int64_t>::from_data({1}, {sample_one()});
     }
 
-    Ndarray<std::int64_t> result(size, dtype_of<std::int64_t>);
+    ndarray<std::int64_t> result(size, dtype_of<std::int64_t>);
     for (auto it = result.begin(); it != result.end(); ++it) {
       *it = sample_one();
     }
@@ -798,7 +798,7 @@ public:
    * numpy-reference/reference/random/generated/numpy.random.Generator.multinomial.html
    */
   auto multinomial(std::int64_t n, const std::vector<double> &pvals,
-                   const std::vector<int> &size = {}) -> Ndarray<std::int64_t> {
+                   const std::vector<int> &size = {}) -> ndarray<std::int64_t> {
     const std::size_t k = pvals.size();
 
     // Verify probabilities sum to 1
@@ -824,14 +824,14 @@ public:
       }
       counts[k - 1] = remaining;
 
-      return Ndarray<std::int64_t>::from_data({static_cast<int>(k)},
+      return ndarray<std::int64_t>::from_data({static_cast<int>(k)},
                                               std::move(counts));
     }
 
     // Multiple samples
     std::vector<int> out_shape = size;
     out_shape.push_back(static_cast<int>(k));
-    Ndarray<std::int64_t> result(out_shape, dtype_of<std::int64_t>);
+    ndarray<std::int64_t> result(out_shape, dtype_of<std::int64_t>);
 
     const std::size_t n_samples = result.size() / k;
     for (std::size_t s = 0; s < n_samples; ++s) {
@@ -879,9 +879,9 @@ private:
    */
   template <typename TargetType, typename Dist, typename Engine>
   auto _fill_distribution(Engine &rng, Dist &dist, const std::vector<int> &size)
-      -> Ndarray<TargetType> {
+      -> ndarray<TargetType> {
     if (size.empty()) {
-      return Ndarray<TargetType>::from_data({1}, {(dist(rng))});
+      return ndarray<TargetType>::from_data({1}, {(dist(rng))});
     }
 
     std::size_t total_elements = 1;
@@ -889,7 +889,7 @@ private:
       total_elements *= static_cast<std::size_t>(d);
     }
 
-    Ndarray<TargetType> result(size, dtype_of<TargetType>);
+    ndarray<TargetType> result(size, dtype_of<TargetType>);
     for (std::size_t i = 0; i < total_elements; ++i) {
       result[i] = static_cast<TargetType>(dist(rng));
     }
@@ -924,64 +924,64 @@ default_rng(std::optional<std::uint64_t> seed = std::nullopt) {
 /** @brief Random integers using default generator. */
 NP_API template <typename T = std::int64_t>
 NP_NODISCARD inline auto randint(T low, T high, const std::vector<int> &size = {})
-    -> Ndarray<T> {
+    -> ndarray<T> {
   return default_rng().integers(low, high, size);
 }
 
 /** @brief Random floats [0, 1) using default generator. */
 NP_API template <typename T = double>
-NP_NODISCARD inline auto rand(const std::vector<int> &size = {}) -> Ndarray<T> {
+NP_NODISCARD inline auto rand(const std::vector<int> &size = {}) -> ndarray<T> {
   return default_rng().random<T>(size);
 }
 
 /** @brief Standard normal using default generator. */
 NP_API template <typename T = double>
-NP_NODISCARD inline auto randn(const std::vector<int> &size = {}) -> Ndarray<T> {
+NP_NODISCARD inline auto randn(const std::vector<int> &size = {}) -> ndarray<T> {
   return default_rng().standard_normal<T>(size);
 }
 
 /** @brief Uniform distribution using default generator. */
 NP_API template <typename T = double>
 NP_NODISCARD inline auto uniform(T low = T{0}, T high = T{1},
-                    const std::vector<int> &size = {}) -> Ndarray<T> {
+                    const std::vector<int> &size = {}) -> ndarray<T> {
   return default_rng().uniform(low, high, size);
 }
 
 /** @brief Normal distribution using default generator. */
 NP_API template <typename T = double>
 NP_NODISCARD inline auto normal(T loc = T{0}, T scale = T{1},
-                   const std::vector<int> &size = {}) -> Ndarray<T> {
+                   const std::vector<int> &size = {}) -> ndarray<T> {
   return default_rng().normal(loc, scale, size);
 }
 
 /** @brief Exponential distribution using default generator. */
 NP_API template <typename T = double>
 NP_NODISCARD inline auto exponential(T scale = T{1}, const std::vector<int> &size = {})
-    -> Ndarray<T> {
+    -> ndarray<T> {
   return default_rng().exponential(scale, size);
 }
 
 /** @brief Permutation using default generator. */
 NP_API template <typename T>
-NP_NODISCARD inline auto permutation(const Ndarray<T> &x) -> Ndarray<T> {
+NP_NODISCARD inline auto permutation(const ndarray<T> &x) -> ndarray<T> {
   return default_rng().permutation(x);
 }
 
 /** @brief Permutation of range using default generator. */
 NP_API NP_NODISCARD inline auto permutation(std::int64_t n)
-    -> Ndarray<std::int64_t> {
+    -> ndarray<std::int64_t> {
   return default_rng().permutation(n);
 }
 
 /** @brief Shuffle using default generator. */
-NP_API template <typename T> inline void shuffle(Ndarray<T> &x) {
+NP_API template <typename T> inline void shuffle(ndarray<T> &x) {
   default_rng().shuffle(x);
 }
 
 /** @brief Choice using default generator. */
 NP_API template <typename T>
-NP_NODISCARD inline auto choice(const Ndarray<T> &a, std::size_t size = 1,
-                   bool replace = true) -> Ndarray<T> {
+NP_NODISCARD inline auto choice(const ndarray<T> &a, std::size_t size = 1,
+                   bool replace = true) -> ndarray<T> {
   return default_rng().choice(a, size, replace);
 }
 

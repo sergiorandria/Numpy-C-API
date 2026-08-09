@@ -23,7 +23,7 @@ int main() {
 
     // *_like
     {
-        np::Ndarray<int> a(std::vector<int>{2, 3});
+        np::ndarray<int> a(std::vector<int>{2, 3});
         auto zl = np::zeros_like(a);
         test::check(zl.shape == a.shape && zl.type == a.type, "zeros_like");
         test::check(zl.sum() == 0, "zeros_like values");

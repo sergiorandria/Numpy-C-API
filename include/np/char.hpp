@@ -3,7 +3,7 @@
  * @brief String operations for arrays of std::string (numpy.char module).
  *
  * Implements element-wise string manipulation functions matching numpy.char
- * semantics. All functions operate on Ndarray<std::string> and return either
+ * semantics. All functions operate on ndarray<std::string> and return either
  * string arrays, boolean arrays, or integer arrays depending on the operation.
  *
  * Function signatures, parameter order, and default values mirror the
@@ -43,8 +43,8 @@ namespace ch {
 namespace detail {
 
 /* Validate that two arrays have matching shapes */
-inline void validate_shapes(const Ndarray<std::string> &a,
-                            const Ndarray<std::string> &b,
+inline void validate_shapes(const ndarray<std::string> &a,
+                            const ndarray<std::string> &b,
                             const char *func_name) {
   if (a.shape != b.shape) {
     throw std::invalid_argument(std::string(func_name) + ": shape mismatch");
@@ -122,11 +122,11 @@ inline bool str_istitle(const std::string &s) {
  * @return Element-wise concatenated array
  * @throws std::invalid_argument if x1.shape != x2.shape
  */
-NP_API inline auto add(const Ndarray<std::string> &x1,
-                       const Ndarray<std::string> &x2) -> Ndarray<std::string> {
+NP_API inline auto add(const ndarray<std::string> &x1,
+                       const ndarray<std::string> &x2) -> ndarray<std::string> {
   detail::validate_shapes(x1, x2, "char.add");
 
-  Ndarray<std::string> result = empty<std::string>(x1.shape);
+  ndarray<std::string> result = empty<std::string>(x1.shape);
   for (std::size_t i = 0; i < x1.size(); ++i) {
     result.data()[i] = x1.data()[i] + x2.data()[i];
   }
@@ -142,12 +142,12 @@ NP_API inline auto add(const Ndarray<std::string> &x1,
  * @param i Integer array (repeat count for each string)
  * @return Element-wise string repetition
  */
-NP_API inline auto multiply(const Ndarray<std::string> &a,
-                            const Ndarray<int> &i) -> Ndarray<std::string> {
+NP_API inline auto multiply(const ndarray<std::string> &a,
+                            const ndarray<int> &i) -> ndarray<std::string> {
   if (a.shape != i.shape) {
     throw std::invalid_argument("multiply: arrays must have the same shape");
   }
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t idx = 0; idx < a.size(); ++idx) {
     int count = i.data()[idx];
     if (count < 0)
@@ -171,13 +171,13 @@ NP_API inline auto multiply(const Ndarray<std::string> &a,
  * @param values Values to substitute
  * @return Formatted strings
  */
-NP_API inline auto mod(const Ndarray<std::string> &a,
-                       const Ndarray<std::string> &values)
-    -> Ndarray<std::string> {
+NP_API inline auto mod(const ndarray<std::string> &a,
+                       const ndarray<std::string> &values)
+    -> ndarray<std::string> {
   if (a.shape != values.shape) {
     throw std::invalid_argument("mod: arrays must have the same shape");
   }
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     // Simplified: just replace first %s with value
     std::string fmt = a.data()[i];
@@ -199,9 +199,9 @@ NP_API inline auto mod(const Ndarray<std::string> &a,
  * @param a Input string array
  * @return Array with capitalized strings
  */
-NP_API inline auto capitalize(const Ndarray<std::string> &a)
-    -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+NP_API inline auto capitalize(const ndarray<std::string> &a)
+    -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     std::string s = a.data()[i];
     if (!s.empty()) {
@@ -226,9 +226,9 @@ NP_API inline auto capitalize(const Ndarray<std::string> &a)
  * @param fillchar Padding character (default: space)
  * @return Array with centered strings
  */
-NP_API inline auto center(const Ndarray<std::string> &a, int width,
-                          char fillchar = ' ') -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+NP_API inline auto center(const ndarray<std::string> &a, int width,
+                          char fillchar = ' ') -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     if (static_cast<int>(s.size()) >= width) {
@@ -252,9 +252,9 @@ NP_API inline auto center(const Ndarray<std::string> &a, int width,
  * @param a Input string array
  * @return Array with lowercase strings
  */
-NP_API inline auto lower(const Ndarray<std::string> &a)
-    -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+NP_API inline auto lower(const ndarray<std::string> &a)
+    -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     std::string s = a.data()[i];
     std::transform(s.begin(), s.end(), s.begin(),
@@ -272,9 +272,9 @@ NP_API inline auto lower(const Ndarray<std::string> &a)
  * @param a Input string array
  * @return Array with uppercase strings
  */
-NP_API inline auto upper(const Ndarray<std::string> &a)
-    -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+NP_API inline auto upper(const ndarray<std::string> &a)
+    -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     std::string s = a.data()[i];
     std::transform(s.begin(), s.end(), s.begin(),
@@ -293,10 +293,10 @@ NP_API inline auto upper(const Ndarray<std::string> &a)
  * @param chars Characters to remove (default: whitespace)
  * @return Array with stripped strings
  */
-NP_API inline auto strip(const Ndarray<std::string> &a,
+NP_API inline auto strip(const ndarray<std::string> &a,
                          const std::string &chars = " \t\n\r")
-    -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+    -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     std::string s = a.data()[i];
     // Left strip
@@ -321,10 +321,10 @@ NP_API inline auto strip(const Ndarray<std::string> &a,
  * @param chars Characters to remove (default: whitespace)
  * @return Array with left-stripped strings
  */
-NP_API inline auto lstrip(const Ndarray<std::string> &a,
+NP_API inline auto lstrip(const ndarray<std::string> &a,
                           const std::string &chars = " \t\n\r")
-    -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+    -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     std::string s = a.data()[i];
     std::size_t start = s.find_first_not_of(chars);
@@ -346,10 +346,10 @@ NP_API inline auto lstrip(const Ndarray<std::string> &a,
  * @param chars Characters to remove (default: whitespace)
  * @return Array with right-stripped strings
  */
-NP_API inline auto rstrip(const Ndarray<std::string> &a,
+NP_API inline auto rstrip(const ndarray<std::string> &a,
                           const std::string &chars = " \t\n\r")
-    -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+    -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     std::size_t end = s.find_last_not_of(chars);
@@ -370,9 +370,9 @@ NP_API inline auto rstrip(const Ndarray<std::string> &a,
  * @param a Input string array
  * @return Array with swapped case strings
  */
-NP_API inline auto swapcase(const Ndarray<std::string> &a)
-    -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+NP_API inline auto swapcase(const ndarray<std::string> &a)
+    -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     std::string s = a.data()[i];
     for (char &c : s) {
@@ -395,9 +395,9 @@ NP_API inline auto swapcase(const Ndarray<std::string> &a)
  * @param a Input string array
  * @return Array with titlecased strings
  */
-NP_API inline auto title(const Ndarray<std::string> &a)
-    -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+NP_API inline auto title(const ndarray<std::string> &a)
+    -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     std::string s = a.data()[i];
     bool capitalize_next = true;
@@ -427,9 +427,9 @@ NP_API inline auto title(const Ndarray<std::string> &a)
  * @param width Minimum width of resulting string
  * @return Array with zero-filled strings
  */
-NP_API inline auto zfill(const Ndarray<std::string> &a, int width)
-    -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+NP_API inline auto zfill(const ndarray<std::string> &a, int width)
+    -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     std::string s = a.data()[i];
     if (static_cast<int>(s.size()) >= width) {
@@ -457,9 +457,9 @@ NP_API inline auto zfill(const Ndarray<std::string> &a, int width)
  * @param fillchar Padding character (default: space)
  * @return Array with left-justified strings
  */
-NP_API inline auto ljust(const Ndarray<std::string> &a, int width,
-                         char fillchar = ' ') -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+NP_API inline auto ljust(const ndarray<std::string> &a, int width,
+                         char fillchar = ' ') -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     if (static_cast<int>(s.size()) >= width) {
@@ -482,9 +482,9 @@ NP_API inline auto ljust(const Ndarray<std::string> &a, int width,
  * @param fillchar Padding character (default: space)
  * @return Array with right-justified strings
  */
-NP_API inline auto rjust(const Ndarray<std::string> &a, int width,
-                         char fillchar = ' ') -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+NP_API inline auto rjust(const ndarray<std::string> &a, int width,
+                         char fillchar = ' ') -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     if (static_cast<int>(s.size()) >= width) {
@@ -508,10 +508,10 @@ NP_API inline auto rjust(const Ndarray<std::string> &a, int width,
  * @param count Maximum number of replacements (-1 = all)
  * @return Array with replaced strings
  */
-NP_API inline auto replace(const Ndarray<std::string> &a,
+NP_API inline auto replace(const ndarray<std::string> &a,
                            const std::string &old, const std::string &new_str,
-                           int count = -1) -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+                           int count = -1) -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     std::string s = a.data()[i];
     std::size_t pos = 0;
@@ -539,12 +539,12 @@ NP_API inline auto replace(const Ndarray<std::string> &a,
  * @param x2 Second string array
  * @return Boolean array
  */
-NP_API inline auto equal(const Ndarray<std::string> &x1,
-                         const Ndarray<std::string> &x2) -> Ndarray<bool> {
+NP_API inline auto equal(const ndarray<std::string> &x1,
+                         const ndarray<std::string> &x2) -> ndarray<bool> {
   if (x1.shape != x2.shape) {
     throw std::invalid_argument("equal: arrays must have the same shape");
   }
-  Ndarray<bool> result = empty<bool>(x1.shape);
+  ndarray<bool> result = empty<bool>(x1.shape);
   for (std::size_t i = 0; i < x1.size(); ++i) {
     result.data()[i] = (x1.data()[i] == x2.data()[i]);
   }
@@ -560,12 +560,12 @@ NP_API inline auto equal(const Ndarray<std::string> &x1,
  * @param x2 Second string array
  * @return Boolean array
  */
-NP_API inline auto not_equal(const Ndarray<std::string> &x1,
-                             const Ndarray<std::string> &x2) -> Ndarray<bool> {
+NP_API inline auto not_equal(const ndarray<std::string> &x1,
+                             const ndarray<std::string> &x2) -> ndarray<bool> {
   if (x1.shape != x2.shape) {
     throw std::invalid_argument("not_equal: arrays must have the same shape");
   }
-  Ndarray<bool> result = empty<bool>(x1.shape);
+  ndarray<bool> result = empty<bool>(x1.shape);
   for (std::size_t i = 0; i < x1.size(); ++i) {
     result.data()[i] = (x1.data()[i] != x2.data()[i]);
   }
@@ -581,14 +581,14 @@ NP_API inline auto not_equal(const Ndarray<std::string> &x1,
  * @param x2 Second string array
  * @return Boolean array
  */
-NP_API inline auto greater_equal(const Ndarray<std::string> &x1,
-                                 const Ndarray<std::string> &x2)
-    -> Ndarray<bool> {
+NP_API inline auto greater_equal(const ndarray<std::string> &x1,
+                                 const ndarray<std::string> &x2)
+    -> ndarray<bool> {
   if (x1.shape != x2.shape) {
     throw std::invalid_argument(
         "greater_equal: arrays must have the same shape");
   }
-  Ndarray<bool> result = empty<bool>(x1.shape);
+  ndarray<bool> result = empty<bool>(x1.shape);
   for (std::size_t i = 0; i < x1.size(); ++i) {
     result.data()[i] = (x1.data()[i] >= x2.data()[i]);
   }
@@ -604,12 +604,12 @@ NP_API inline auto greater_equal(const Ndarray<std::string> &x1,
  * @param x2 Second string array
  * @return Boolean array
  */
-NP_API inline auto less_equal(const Ndarray<std::string> &x1,
-                              const Ndarray<std::string> &x2) -> Ndarray<bool> {
+NP_API inline auto less_equal(const ndarray<std::string> &x1,
+                              const ndarray<std::string> &x2) -> ndarray<bool> {
   if (x1.shape != x2.shape) {
     throw std::invalid_argument("less_equal: arrays must have the same shape");
   }
-  Ndarray<bool> result = empty<bool>(x1.shape);
+  ndarray<bool> result = empty<bool>(x1.shape);
   for (std::size_t i = 0; i < x1.size(); ++i) {
     result.data()[i] = (x1.data()[i] <= x2.data()[i]);
   }
@@ -625,12 +625,12 @@ NP_API inline auto less_equal(const Ndarray<std::string> &x1,
  * @param x2 Second string array
  * @return Boolean array
  */
-NP_API inline auto greater(const Ndarray<std::string> &x1,
-                           const Ndarray<std::string> &x2) -> Ndarray<bool> {
+NP_API inline auto greater(const ndarray<std::string> &x1,
+                           const ndarray<std::string> &x2) -> ndarray<bool> {
   if (x1.shape != x2.shape) {
     throw std::invalid_argument("greater: arrays must have the same shape");
   }
-  Ndarray<bool> result = empty<bool>(x1.shape);
+  ndarray<bool> result = empty<bool>(x1.shape);
   for (std::size_t i = 0; i < x1.size(); ++i) {
     result.data()[i] = (x1.data()[i] > x2.data()[i]);
   }
@@ -646,12 +646,12 @@ NP_API inline auto greater(const Ndarray<std::string> &x1,
  * @param x2 Second string array
  * @return Boolean array
  */
-NP_API inline auto less(const Ndarray<std::string> &x1,
-                        const Ndarray<std::string> &x2) -> Ndarray<bool> {
+NP_API inline auto less(const ndarray<std::string> &x1,
+                        const ndarray<std::string> &x2) -> ndarray<bool> {
   if (x1.shape != x2.shape) {
     throw std::invalid_argument("less: arrays must have the same shape");
   }
-  Ndarray<bool> result = empty<bool>(x1.shape);
+  ndarray<bool> result = empty<bool>(x1.shape);
   for (std::size_t i = 0; i < x1.size(); ++i) {
     result.data()[i] = (x1.data()[i] < x2.data()[i]);
   }
@@ -671,9 +671,9 @@ NP_API inline auto less(const Ndarray<std::string> &x1,
  * @param end End position (optional)
  * @return Array of counts
  */
-NP_API inline auto count(const Ndarray<std::string> &a, const std::string &sub,
-                         int start = 0, int end = -1) -> Ndarray<int> {
-  Ndarray<int> result = empty<int>(a.shape);
+NP_API inline auto count(const ndarray<std::string> &a, const std::string &sub,
+                         int start = 0, int end = -1) -> ndarray<int> {
+  ndarray<int> result = empty<int>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     int len = static_cast<int>(s.size());
@@ -705,10 +705,10 @@ NP_API inline auto count(const Ndarray<std::string> &a, const std::string &sub,
  * @param end End position (optional)
  * @return Boolean array
  */
-NP_API inline auto endswith(const Ndarray<std::string> &a,
+NP_API inline auto endswith(const ndarray<std::string> &a,
                             const std::string &suffix, int start = 0,
-                            int end = -1) -> Ndarray<bool> {
-  Ndarray<bool> result = empty<bool>(a.shape);
+                            int end = -1) -> ndarray<bool> {
+  ndarray<bool> result = empty<bool>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     int len = static_cast<int>(s.size());
@@ -735,10 +735,10 @@ NP_API inline auto endswith(const Ndarray<std::string> &a,
  * @param end End position (optional)
  * @return Boolean array
  */
-NP_API inline auto startswith(const Ndarray<std::string> &a,
+NP_API inline auto startswith(const ndarray<std::string> &a,
                               const std::string &prefix, int start = 0,
-                              int end = -1) -> Ndarray<bool> {
-  Ndarray<bool> result = empty<bool>(a.shape);
+                              int end = -1) -> ndarray<bool> {
+  ndarray<bool> result = empty<bool>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     int len = static_cast<int>(s.size());
@@ -763,9 +763,9 @@ NP_API inline auto startswith(const Ndarray<std::string> &a,
  * @param end End position (optional)
  * @return Array of indices (or -1 if not found)
  */
-NP_API inline auto find(const Ndarray<std::string> &a, const std::string &sub,
-                        int start = 0, int end = -1) -> Ndarray<int> {
-  Ndarray<int> result = empty<int>(a.shape);
+NP_API inline auto find(const ndarray<std::string> &a, const std::string &sub,
+                        int start = 0, int end = -1) -> ndarray<int> {
+  ndarray<int> result = empty<int>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     int len = static_cast<int>(s.size());
@@ -793,9 +793,9 @@ NP_API inline auto find(const Ndarray<std::string> &a, const std::string &sub,
  * @param end End position (optional)
  * @return Array of indices (or -1 if not found)
  */
-NP_API inline auto rfind(const Ndarray<std::string> &a, const std::string &sub,
-                         int start = 0, int end = -1) -> Ndarray<int> {
-  Ndarray<int> result = empty<int>(a.shape);
+NP_API inline auto rfind(const ndarray<std::string> &a, const std::string &sub,
+                         int start = 0, int end = -1) -> ndarray<int> {
+  ndarray<int> result = empty<int>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     int len = static_cast<int>(s.size());
@@ -820,8 +820,8 @@ NP_API inline auto rfind(const Ndarray<std::string> &a, const std::string &sub,
  * @param a Input string array
  * @return Array of string lengths
  */
-NP_API inline auto str_len(const Ndarray<std::string> &a) -> Ndarray<int> {
-  Ndarray<int> result = empty<int>(a.shape);
+NP_API inline auto str_len(const ndarray<std::string> &a) -> ndarray<int> {
+  ndarray<int> result = empty<int>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     result.data()[i] = static_cast<int>(a.data()[i].size());
   }
@@ -838,8 +838,8 @@ NP_API inline auto str_len(const Ndarray<std::string> &a) -> Ndarray<int> {
  * @param a Input string array
  * @return Boolean array
  */
-NP_API inline auto isalpha(const Ndarray<std::string> &a) -> Ndarray<bool> {
-  Ndarray<bool> result = empty<bool>(a.shape);
+NP_API inline auto isalpha(const ndarray<std::string> &a) -> ndarray<bool> {
+  ndarray<bool> result = empty<bool>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     result.data()[i] =
@@ -858,8 +858,8 @@ NP_API inline auto isalpha(const Ndarray<std::string> &a) -> Ndarray<bool> {
  * @param a Input string array
  * @return Boolean array
  */
-NP_API inline auto isalnum(const Ndarray<std::string> &a) -> Ndarray<bool> {
-  Ndarray<bool> result = empty<bool>(a.shape);
+NP_API inline auto isalnum(const ndarray<std::string> &a) -> ndarray<bool> {
+  ndarray<bool> result = empty<bool>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     result.data()[i] =
@@ -878,8 +878,8 @@ NP_API inline auto isalnum(const Ndarray<std::string> &a) -> Ndarray<bool> {
  * @param a Input string array
  * @return Boolean array
  */
-NP_API inline auto isdigit(const Ndarray<std::string> &a) -> Ndarray<bool> {
-  Ndarray<bool> result = empty<bool>(a.shape);
+NP_API inline auto isdigit(const ndarray<std::string> &a) -> ndarray<bool> {
+  ndarray<bool> result = empty<bool>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     result.data()[i] =
@@ -898,8 +898,8 @@ NP_API inline auto isdigit(const Ndarray<std::string> &a) -> Ndarray<bool> {
  * @param a Input string array
  * @return Boolean array
  */
-NP_API inline auto islower(const Ndarray<std::string> &a) -> Ndarray<bool> {
-  Ndarray<bool> result = empty<bool>(a.shape);
+NP_API inline auto islower(const ndarray<std::string> &a) -> ndarray<bool> {
+  ndarray<bool> result = empty<bool>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     bool has_cased = false;
@@ -926,8 +926,8 @@ NP_API inline auto islower(const Ndarray<std::string> &a) -> Ndarray<bool> {
  * @param a Input string array
  * @return Boolean array
  */
-NP_API inline auto isupper(const Ndarray<std::string> &a) -> Ndarray<bool> {
-  Ndarray<bool> result = empty<bool>(a.shape);
+NP_API inline auto isupper(const ndarray<std::string> &a) -> ndarray<bool> {
+  ndarray<bool> result = empty<bool>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     bool has_cased = false;
@@ -954,8 +954,8 @@ NP_API inline auto isupper(const Ndarray<std::string> &a) -> Ndarray<bool> {
  * @param a Input string array
  * @return Boolean array
  */
-NP_API inline auto isspace(const Ndarray<std::string> &a) -> Ndarray<bool> {
-  Ndarray<bool> result = empty<bool>(a.shape);
+NP_API inline auto isspace(const ndarray<std::string> &a) -> ndarray<bool> {
+  ndarray<bool> result = empty<bool>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     result.data()[i] =
@@ -974,8 +974,8 @@ NP_API inline auto isspace(const Ndarray<std::string> &a) -> Ndarray<bool> {
  * @param a Input string array
  * @return Boolean array
  */
-NP_API inline auto istitle(const Ndarray<std::string> &a) -> Ndarray<bool> {
-  Ndarray<bool> result = empty<bool>(a.shape);
+NP_API inline auto istitle(const ndarray<std::string> &a) -> ndarray<bool> {
+  ndarray<bool> result = empty<bool>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     bool in_word = false;
@@ -1015,8 +1015,8 @@ NP_API inline auto istitle(const Ndarray<std::string> &a) -> Ndarray<bool> {
  * @param a Input string array
  * @return Boolean array
  */
-NP_API inline auto isdecimal(const Ndarray<std::string> &a) -> Ndarray<bool> {
-  Ndarray<bool> result = empty<bool>(a.shape);
+NP_API inline auto isdecimal(const ndarray<std::string> &a) -> ndarray<bool> {
+  ndarray<bool> result = empty<bool>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     // C++ doesn't have direct isdecimal; use isdigit as approximation
@@ -1036,8 +1036,8 @@ NP_API inline auto isdecimal(const Ndarray<std::string> &a) -> Ndarray<bool> {
  * @param a Input string array
  * @return Boolean array
  */
-NP_API inline auto isnumeric(const Ndarray<std::string> &a) -> Ndarray<bool> {
-  Ndarray<bool> result = empty<bool>(a.shape);
+NP_API inline auto isnumeric(const ndarray<std::string> &a) -> ndarray<bool> {
+  ndarray<bool> result = empty<bool>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     // C++ doesn't have direct isnumeric; use isdigit as approximation
@@ -1060,13 +1060,13 @@ NP_API inline auto isnumeric(const Ndarray<std::string> &a) -> Ndarray<bool> {
  * @param seq Sequence string array
  * @return Array with joined strings
  */
-NP_API inline auto join(const Ndarray<std::string> &sep,
-                        const Ndarray<std::string> &seq)
-    -> Ndarray<std::string> {
+NP_API inline auto join(const ndarray<std::string> &sep,
+                        const ndarray<std::string> &seq)
+    -> ndarray<std::string> {
   if (sep.shape != seq.shape) {
     throw std::invalid_argument("join: arrays must have the same shape");
   }
-  Ndarray<std::string> result = empty<std::string>(sep.shape);
+  ndarray<std::string> result = empty<std::string>(sep.shape);
   for (std::size_t i = 0; i < sep.size(); ++i) {
     const std::string &s = seq.data()[i];
     const std::string &separator = sep.data()[i];
@@ -1090,9 +1090,9 @@ NP_API inline auto join(const Ndarray<std::string> &sep,
  * @param tabsize Number of spaces per tab (default: 8)
  * @return Array with expanded tabs
  */
-NP_API inline auto expandtabs(const Ndarray<std::string> &a, int tabsize = 8)
-    -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+NP_API inline auto expandtabs(const ndarray<std::string> &a, int tabsize = 8)
+    -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
     std::string expanded;
@@ -1124,13 +1124,13 @@ NP_API inline auto expandtabs(const Ndarray<std::string> &a, int tabsize = 8)
  * @param sep Separator string
  * @return Array of tuples (before, sep, after) - flattened as 3x larger array
  */
-NP_API inline auto partition(const Ndarray<std::string> &a,
-                             const std::string &sep) -> Ndarray<std::string> {
+NP_API inline auto partition(const ndarray<std::string> &a,
+                             const std::string &sep) -> ndarray<std::string> {
   // Returns array with 3x elements: [before0, sep0, after0, before1, sep1,
   // after1, ...]
   std::vector<int> new_shape = a.shape;
   new_shape.back() *= 3;
-  Ndarray<std::string> result = empty<std::string>(new_shape);
+  ndarray<std::string> result = empty<std::string>(new_shape);
 
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
@@ -1157,11 +1157,11 @@ NP_API inline auto partition(const Ndarray<std::string> &a,
  * @param sep Separator string
  * @return Array of tuples (before, sep, after) - flattened as 3x larger array
  */
-NP_API inline auto rpartition(const Ndarray<std::string> &a,
-                              const std::string &sep) -> Ndarray<std::string> {
+NP_API inline auto rpartition(const ndarray<std::string> &a,
+                              const std::string &sep) -> ndarray<std::string> {
   std::vector<int> new_shape = a.shape;
   new_shape.back() *= 3;
-  Ndarray<std::string> result = empty<std::string>(new_shape);
+  ndarray<std::string> result = empty<std::string>(new_shape);
 
   for (std::size_t i = 0; i < a.size(); ++i) {
     const std::string &s = a.data()[i];
@@ -1191,9 +1191,9 @@ NP_API inline auto rpartition(const Ndarray<std::string> &a,
  * @return Array of indices
  * @throws std::invalid_argument if substring not found
  */
-NP_API inline auto index(const Ndarray<std::string> &a, const std::string &sub,
-                         int start = 0, int end = -1) -> Ndarray<int> {
-  Ndarray<int> result = find(a, sub, start, end);
+NP_API inline auto index(const ndarray<std::string> &a, const std::string &sub,
+                         int start = 0, int end = -1) -> ndarray<int> {
+  ndarray<int> result = find(a, sub, start, end);
   for (std::size_t i = 0; i < result.size(); ++i) {
     if (result.data()[i] == -1) {
       throw std::invalid_argument("index: substring not found");
@@ -1214,9 +1214,9 @@ NP_API inline auto index(const Ndarray<std::string> &a, const std::string &sub,
  * @return Array of indices
  * @throws std::invalid_argument if substring not found
  */
-NP_API inline auto rindex(const Ndarray<std::string> &a, const std::string &sub,
-                          int start = 0, int end = -1) -> Ndarray<int> {
-  Ndarray<int> result = rfind(a, sub, start, end);
+NP_API inline auto rindex(const ndarray<std::string> &a, const std::string &sub,
+                          int start = 0, int end = -1) -> ndarray<int> {
+  ndarray<int> result = rfind(a, sub, start, end);
   for (std::size_t i = 0; i < result.size(); ++i) {
     if (result.data()[i] == -1) {
       throw std::invalid_argument("rindex: substring not found");
@@ -1239,9 +1239,9 @@ NP_API inline auto rindex(const Ndarray<std::string> &a, const std::string &sub,
  * @param maxsplit Maximum number of splits (-1 = unlimited)
  * @return Flattened array of split strings
  */
-NP_API inline auto split(const Ndarray<std::string> &a,
+NP_API inline auto split(const ndarray<std::string> &a,
                          const std::string &sep = "", int maxsplit = -1)
-    -> Ndarray<std::string> {
+    -> ndarray<std::string> {
   std::vector<std::string> all_parts;
 
   for (std::size_t i = 0; i < a.size(); ++i) {
@@ -1275,7 +1275,7 @@ NP_API inline auto split(const Ndarray<std::string> &a,
     all_parts.insert(all_parts.end(), parts.begin(), parts.end());
   }
 
-  Ndarray<std::string> result =
+  ndarray<std::string> result =
       empty<std::string>(std::vector<int>{static_cast<int>(all_parts.size())});
   result.data() = all_parts;
   return result;
@@ -1291,9 +1291,9 @@ NP_API inline auto split(const Ndarray<std::string> &a,
  * @param maxsplit Maximum number of splits (-1 = unlimited)
  * @return Flattened array of split strings
  */
-NP_API inline auto rsplit(const Ndarray<std::string> &a,
+NP_API inline auto rsplit(const ndarray<std::string> &a,
                           const std::string &sep = "", int maxsplit = -1)
-    -> Ndarray<std::string> {
+    -> ndarray<std::string> {
   std::vector<std::string> all_parts;
 
   for (std::size_t i = 0; i < a.size(); ++i) {
@@ -1331,7 +1331,7 @@ NP_API inline auto rsplit(const Ndarray<std::string> &a,
     all_parts.insert(all_parts.end(), parts.begin(), parts.end());
   }
 
-  Ndarray<std::string> result =
+  ndarray<std::string> result =
       empty<std::string>(std::vector<int>{static_cast<int>(all_parts.size())});
   result.data() = all_parts;
   return result;
@@ -1346,8 +1346,8 @@ NP_API inline auto rsplit(const Ndarray<std::string> &a,
  * @param keepends Keep line endings (default: false)
  * @return Flattened array of lines
  */
-NP_API inline auto splitlines(const Ndarray<std::string> &a,
-                              bool keepends = false) -> Ndarray<std::string> {
+NP_API inline auto splitlines(const ndarray<std::string> &a,
+                              bool keepends = false) -> ndarray<std::string> {
   std::vector<std::string> all_lines;
 
   for (std::size_t i = 0; i < a.size(); ++i) {
@@ -1362,7 +1362,7 @@ NP_API inline auto splitlines(const Ndarray<std::string> &a,
     }
   }
 
-  Ndarray<std::string> result =
+  ndarray<std::string> result =
       empty<std::string>(std::vector<int>{static_cast<int>(all_lines.size())});
   result.data() = all_lines;
   return result;
@@ -1381,11 +1381,11 @@ NP_API inline auto splitlines(const Ndarray<std::string> &a,
  * @param deletechars Characters to delete
  * @return Array with translated strings
  */
-NP_API inline auto translate(const Ndarray<std::string> &a,
+NP_API inline auto translate(const ndarray<std::string> &a,
                              const std::string &table,
                              const std::string &deletechars = "")
-    -> Ndarray<std::string> {
-  Ndarray<std::string> result = empty<std::string>(a.shape);
+    -> ndarray<std::string> {
+  ndarray<std::string> result = empty<std::string>(a.shape);
   for (std::size_t i = 0; i < a.size(); ++i) {
     std::string s = a.data()[i];
     std::string translated;
@@ -1420,10 +1420,10 @@ NP_API inline auto translate(const Ndarray<std::string> &a,
  * @param errors Error handling (ignored)
  * @return Copy of input array
  */
-NP_API inline auto encode(const Ndarray<std::string> &a,
+NP_API inline auto encode(const ndarray<std::string> &a,
                           const std::string &encoding = "utf-8",
                           const std::string &errors = "strict")
-    -> Ndarray<std::string> {
+    -> ndarray<std::string> {
   (void)encoding;
   (void)errors; // Unused in C++
   return a;     // C++ strings are already byte strings
@@ -1442,10 +1442,10 @@ NP_API inline auto encode(const Ndarray<std::string> &a,
  * @param errors Error handling (ignored)
  * @return Copy of input array
  */
-NP_API inline auto decode(const Ndarray<std::string> &a,
+NP_API inline auto decode(const ndarray<std::string> &a,
                           const std::string &encoding = "utf-8",
                           const std::string &errors = "strict")
-    -> Ndarray<std::string> {
+    -> ndarray<std::string> {
   (void)encoding;
   (void)errors; // Unused in C++
   return a;     // C++ strings are already decoded
@@ -1465,16 +1465,16 @@ NP_API inline auto decode(const Ndarray<std::string> &a,
  * @param rstrip Strip trailing whitespace before comparison
  * @return Integer array: -1 (less), 0 (equal), 1 (greater)
  */
-NP_API inline auto compare_chararrays(const Ndarray<std::string> &x1,
-                                      const Ndarray<std::string> &x2,
+NP_API inline auto compare_chararrays(const ndarray<std::string> &x1,
+                                      const ndarray<std::string> &x2,
                                       const std::string &cmp,
-                                      bool rstrip = false) -> Ndarray<int> {
+                                      bool rstrip = false) -> ndarray<int> {
   if (x1.shape != x2.shape) {
     throw std::invalid_argument(
         "compare_chararrays: arrays must have the same shape");
   }
 
-  Ndarray<int> result = empty<int>(x1.shape);
+  ndarray<int> result = empty<int>(x1.shape);
   for (std::size_t i = 0; i < x1.size(); ++i) {
     std::string s1 = x1.data()[i];
     std::string s2 = x2.data()[i];
@@ -1508,7 +1508,7 @@ NP_API inline auto compare_chararrays(const Ndarray<std::string> &x1,
 /* Creation Functions */
 
 /**
- * @brief Create a character array (Ndarray<std::string>).
+ * @brief Create a character array (ndarray<std::string>).
  *
  * Reference: numpy-reference/reference/generated/numpy.char.array.html
  *
@@ -1516,23 +1516,23 @@ NP_API inline auto compare_chararrays(const Ndarray<std::string> &x1,
  * @return String array
  */
 NP_API inline auto array(const std::vector<std::string> &object)
-    -> Ndarray<std::string> {
-  Ndarray<std::string> result =
+    -> ndarray<std::string> {
+  ndarray<std::string> result =
       empty<std::string>(std::vector<int>{static_cast<int>(object.size())});
   result.data() = object;
   return result;
 }
 
 /**
- * @brief Convert input to a character array (Ndarray<std::string>).
+ * @brief Convert input to a character array (ndarray<std::string>).
  *
  * Reference: numpy-reference/reference/generated/numpy.char.asarray.html
  *
  * @param a Input array
  * @return String array (copy if already string array)
  */
-NP_API inline auto asarray(const Ndarray<std::string> &a)
-    -> Ndarray<std::string> {
+NP_API inline auto asarray(const ndarray<std::string> &a)
+    -> ndarray<std::string> {
   return a; /* Already a string array */
 }
 
@@ -1543,11 +1543,11 @@ NP_API inline auto asarray(const Ndarray<std::string> &a)
  * functions directly available as methods.
  *
  * DEPRECATED: This class is deprecated in NumPy 2.5 and should not be used
- * in new code. Use Ndarray<std::string> with np::ch functions instead.
+ * in new code. Use ndarray<std::string> with np::ch functions instead.
  *
  * Reference: numpy-reference/reference/generated/numpy.char.chararray.html
  *
- * This class wraps an Ndarray<std::string> and provides all char module
+ * This class wraps an ndarray<std::string> and provides all char module
  * functions as convenient methods. It exists for API compatibility but
  * adds no functionality over using free functions directly.
  *
@@ -1555,26 +1555,26 @@ NP_API inline auto asarray(const Ndarray<std::string> &a)
  * accessible through the underlying array() method or implicit conversion.
  */
 class NP_DEPRECATED(
-    "chararray is deprecated; use Ndarray<std::string> with np::ch functions")
+    "chararray is deprecated; use ndarray<std::string> with np::ch functions")
     chararray {
 private:
-  Ndarray<std::string> data_;
+  ndarray<std::string> data_;
 
 public:
   /* Constructors */
-  explicit chararray(const Ndarray<std::string> &arr) : data_(arr) {}
+  explicit chararray(const ndarray<std::string> &arr) : data_(arr) {}
   explicit chararray(const std::vector<int> &shape)
       : data_(empty<std::string>(shape)) {}
 
   /* Access to underlying array */
-  Ndarray<std::string> &array() { return data_; }
-  const Ndarray<std::string> &array() const { return data_; }
+  ndarray<std::string> &array() { return data_; }
+  const ndarray<std::string> &array() const { return data_; }
 
-  /* Implicit conversion to Ndarray<std::string> */
-  operator Ndarray<std::string> &() { return data_; }
-  operator const Ndarray<std::string> &() const { return data_; }
+  /* Implicit conversion to ndarray<std::string> */
+  operator ndarray<std::string> &() { return data_; }
+  operator const ndarray<std::string> &() const { return data_; }
 
-  /* Ndarray properties - expose from wrapped array */
+  /* ndarray properties - expose from wrapped array */
   const std::vector<int> &shape() const { return data_.shape; }
   std::size_t size() const { return data_.size(); }
   int ndim() const { return static_cast<int>(data_.shape.size()); }
@@ -1625,71 +1625,71 @@ public:
     return chararray(ch::translate(data_, table));
   }
 
-  /* Splitting methods (return Ndarray<std::string>) */
+  /* Splitting methods (return ndarray<std::string>) */
   auto split(const std::string &sep = "", int maxsplit = -1) const
-      -> Ndarray<std::string> {
+      -> ndarray<std::string> {
     return ch::split(data_, sep, maxsplit);
   }
   auto rsplit(const std::string &sep = "", int maxsplit = -1) const
-      -> Ndarray<std::string> {
+      -> ndarray<std::string> {
     return ch::rsplit(data_, sep, maxsplit);
   }
-  auto splitlines(bool keepends = false) const -> Ndarray<std::string> {
+  auto splitlines(bool keepends = false) const -> ndarray<std::string> {
     return ch::splitlines(data_, keepends);
   }
-  auto partition(const std::string &sep) const -> Ndarray<std::string> {
+  auto partition(const std::string &sep) const -> ndarray<std::string> {
     return ch::partition(data_, sep);
   }
-  auto rpartition(const std::string &sep) const -> Ndarray<std::string> {
+  auto rpartition(const std::string &sep) const -> ndarray<std::string> {
     return ch::rpartition(data_, sep);
   }
 
   /* Join method */
-  auto join(const Ndarray<std::string> &seq) const -> Ndarray<std::string> {
+  auto join(const ndarray<std::string> &seq) const -> ndarray<std::string> {
     return ch::join(data_, seq);
   }
 
   /* Information methods (return int/bool arrays) */
   auto count(const std::string &sub, int start = 0, int end = -1) const
-      -> Ndarray<int> {
+      -> ndarray<int> {
     return ch::count(data_, sub, start, end);
   }
   auto find(const std::string &sub, int start = 0, int end = -1) const
-      -> Ndarray<int> {
+      -> ndarray<int> {
     return ch::find(data_, sub, start, end);
   }
   auto rfind(const std::string &sub, int start = 0, int end = -1) const
-      -> Ndarray<int> {
+      -> ndarray<int> {
     return ch::rfind(data_, sub, start, end);
   }
   auto index(const std::string &sub, int start = 0, int end = -1) const
-      -> Ndarray<int> {
+      -> ndarray<int> {
     return ch::index(data_, sub, start, end);
   }
   auto rindex(const std::string &sub, int start = 0, int end = -1) const
-      -> Ndarray<int> {
+      -> ndarray<int> {
     return ch::rindex(data_, sub, start, end);
   }
-  auto str_len() const -> Ndarray<int> { return ch::str_len(data_); }
+  auto str_len() const -> ndarray<int> { return ch::str_len(data_); }
 
   /* Boolean test methods */
   auto startswith(const std::string &prefix, int start = 0, int end = -1) const
-      -> Ndarray<bool> {
+      -> ndarray<bool> {
     return ch::startswith(data_, prefix, start, end);
   }
   auto endswith(const std::string &suffix, int start = 0, int end = -1) const
-      -> Ndarray<bool> {
+      -> ndarray<bool> {
     return ch::endswith(data_, suffix, start, end);
   }
-  auto isalpha() const -> Ndarray<bool> { return ch::isalpha(data_); }
-  auto isalnum() const -> Ndarray<bool> { return ch::isalnum(data_); }
-  auto isdigit() const -> Ndarray<bool> { return ch::isdigit(data_); }
-  auto isdecimal() const -> Ndarray<bool> { return ch::isdecimal(data_); }
-  auto isnumeric() const -> Ndarray<bool> { return ch::isnumeric(data_); }
-  auto islower() const -> Ndarray<bool> { return ch::islower(data_); }
-  auto isupper() const -> Ndarray<bool> { return ch::isupper(data_); }
-  auto isspace() const -> Ndarray<bool> { return ch::isspace(data_); }
-  auto istitle() const -> Ndarray<bool> { return ch::istitle(data_); }
+  auto isalpha() const -> ndarray<bool> { return ch::isalpha(data_); }
+  auto isalnum() const -> ndarray<bool> { return ch::isalnum(data_); }
+  auto isdigit() const -> ndarray<bool> { return ch::isdigit(data_); }
+  auto isdecimal() const -> ndarray<bool> { return ch::isdecimal(data_); }
+  auto isnumeric() const -> ndarray<bool> { return ch::isnumeric(data_); }
+  auto islower() const -> ndarray<bool> { return ch::islower(data_); }
+  auto isupper() const -> ndarray<bool> { return ch::isupper(data_); }
+  auto isspace() const -> ndarray<bool> { return ch::isspace(data_); }
+  auto istitle() const -> ndarray<bool> { return ch::istitle(data_); }
 
   /* Note: ndarray methods like reshape, transpose, copy, etc. are accessible
    * through the underlying array: ca.array().reshape(shape) or through
