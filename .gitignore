@@ -7,6 +7,13 @@ numpy-reference/
 # Report and documentation files (generated)
 *_SUMMARY.md
 *_UNIMPLEMENTED.md
+*_COMPLETE.md
+*_STATUS.md
+*_CHECKLIST.md
+*_PLAN.md
+*_EXAMPLES.md
+*_MESSAGE.md
 IMPLEMENTATION_SUMMARY.md
 REFERENCE_UNIMPLEMENTED.md
 RANDOM_MODULE_SUMMARY.md
+
