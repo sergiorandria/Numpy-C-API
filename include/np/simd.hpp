@@ -653,6 +653,28 @@ inline double sum_f64_avx512(const double *data, std::size_t n) {
 }
 
 /**
+ * @brief Vectorized sum reduction for float arrays (AVX-512).
+ */
+inline float sum_f32_avx512(const float *data, std::size_t n) {
+  __m512 vsum = _mm512_setzero_ps();
+  std::size_t i = 0;
+  const std::size_t vec_end = n - (n % 16);
+
+  for (; i < vec_end; i += 16) {
+    __m512 v = _mm512_loadu_ps(data + i);
+    vsum = _mm512_add_ps(vsum, v);
+  }
+
+  float sum = _mm512_reduce_add_ps(vsum);
+
+  for (; i < n; ++i) {
+    sum += data[i];
+  }
+
+  return sum;
+}
+
+/**
  * @brief Vectorized subtraction for double arrays (AVX-512).
  */
 inline void sub_f64_avx512(const double *a, const double *b, double *out,
@@ -945,7 +967,7 @@ template <typename T> inline T sum_vectorized(const T *data, std::size_t n) {
 #endif
   } else if constexpr (std::is_same_v<T, float>) {
 #if defined(NP_SIMD_AVX512)
-    return sum_f64_avx512(data, n);
+    return sum_f32_avx512(data, n);
 #elif defined(NP_SIMD_AVX)
     return sum_f32_avx(data, n);
 #elif defined(NP_SIMD_SSE2)

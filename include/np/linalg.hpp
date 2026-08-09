@@ -698,6 +698,9 @@ schur_eigenvectors(const std::vector<R> &h, const std::vector<R> &q,
     for (std::size_t i = 0; i < n; ++i) {
       nrm += std::norm(v[i * n + j]);
     }
+    // nrm is never zero here: the pivot component z[bs] is set to
+    // C{1} unconditionally above (both the 1x1 and 2x2-block pivot
+    // cases), so nrm >= 1 in exact arithmetic before this sqrt.
     nrm = std::sqrt(nrm);
     for (std::size_t i = 0; i < n; ++i) {
       v[i * n + j] /= nrm;

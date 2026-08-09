@@ -14,6 +14,7 @@
 #include <array>
 #include <cstddef>
 #include <ostream>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -32,7 +33,19 @@ template <std::size_t MaxDims = 8> struct IndexStack {
   std::array<std::size_t, MaxDims> m_data{};
   std::size_t m_count = 0;
 
-  constexpr void push_back(std::size_t v) noexcept { m_data[m_count++] = v; }
+  /**
+   * @throws std::out_of_range if the stack already holds `MaxDims`
+   *         indices (i.e. more than `MaxDims` chained `operator[]` calls).
+   */
+  constexpr void push_back(std::size_t v) {
+    if (m_count >= MaxDims) {
+      throw std::out_of_range(
+          "np::detail::IndexStack: chained operator[] depth exceeds "
+          "MaxDims (increase the Proxy<T, MaxDims> template parameter "
+          "for arrays with more dimensions)");
+    }
+    m_data[m_count++] = v;
+  }
 
   [[nodiscard]] constexpr std::size_t size() const noexcept { return m_count; }
 
@@ -198,9 +211,10 @@ public:
 
   /**
    * @brief Descend one dimension, appending the new index.
+   * @throws std::out_of_range if this would exceed `MaxDims` chained
+   *         subscripts (see `IndexStack::push_back`).
    */
-  [[nodiscard]] constexpr auto operator[](std::size_t idx) const noexcept
-      -> Self {
+  [[nodiscard]] constexpr auto operator[](std::size_t idx) const -> Self {
     Stack next = m_indices; // trivial copy -- no heap touch
     next.push_back(idx);
     return Self(m_array, next);

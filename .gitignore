@@ -3,6 +3,7 @@ build_*/
 *.exe
 .vs/
 numpy-reference/
+misc/program
 
 # Report and documentation files (generated)
 *_SUMMARY.md
