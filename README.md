@@ -26,6 +26,7 @@ This library provides a comprehensive C++ implementation of NumPy's array manipu
 - **Linear Algebra** (`linalg.hpp`, `linalg_fixed.hpp`) - dot, matmul, inner, outer, trace, diagonal
 - **Random Number Generation** (`random.hpp`) - 30+ distributions (uniform, normal, binomial, poisson, etc.)
 - **FFT** (`fft.hpp`) - 1D fast Fourier transform and inverse
+- **Statistics** (`statistics.hpp`) - median, percentile, quantile, average, ptp, cov, corrcoef, histogram, bincount, digitize and the NaN-skipping nan* family
 - **SIMD Optimizations** (`simd.hpp`) - Vectorized operations with automatic CPU detection
 - **Array Concatenation** (`concatenate.hpp`) - concatenate, stack, vstack, hstack, dstack
 
@@ -320,7 +321,7 @@ Current implementation covers approximately **46%** of the core NumPy API:
 - Array creation and manipulation (40%)
 - Mathematical functions (64%)
 - Logic functions (80%)
-- Statistical functions (30%)
+- Statistical functions (70%)
 - Linear algebra basics (20%)
 - Sorting and searching (53%)
 - Random number generation (100%)

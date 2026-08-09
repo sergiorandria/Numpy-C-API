@@ -17,5 +17,5 @@ Diagnostics:
     - "cert-dcl51-cpp"
     - "bugprone-reserved-identifier"
     - "llvmlibc-inline-function-decl"
-  #ClangTidy:
-  #  Add: "*"
+  ClangTidy:
+    Add: "*"

@@ -41,7 +41,8 @@ namespace np {
  *
  * Reference: numpy-reference/reference/generated/numpy.zeros.html
  */
-NP_API template <int... E> NP_NODISCARD constexpr ndarrayf<double, E...> zeros() {
+NP_API template <int... E>
+NP_NODISCARD constexpr ndarrayf<double, E...> zeros() {
   return ndarrayf<double, E...>{};
 }
 
@@ -51,7 +52,8 @@ NP_API template <int... E> NP_NODISCARD constexpr ndarrayf<double, E...> zeros()
  * @tparam E  Compile-time extents (must all be > 0).
  * @return     ndarrayf<T, E...> filled with T{0}.
  */
-NP_API template <typename T, int... E> NP_NODISCARD constexpr ndarrayf<T, E...> zeros() {
+NP_API template <typename T, int... E>
+NP_NODISCARD constexpr ndarrayf<T, E...> zeros() {
   return ndarrayf<T, E...>{};
 }
 
@@ -62,7 +64,8 @@ NP_API template <typename T, int... E> NP_NODISCARD constexpr ndarrayf<T, E...> 
  *
  * Reference: numpy-reference/reference/generated/numpy.ones.html
  */
-NP_API template <int... E> NP_NODISCARD constexpr ndarrayf<double, E...> ones() {
+NP_API template <int... E>
+NP_NODISCARD constexpr ndarrayf<double, E...> ones() {
   ndarrayf<double, E...> out{};
   out.fill(1.0);
   return out;
@@ -74,7 +77,8 @@ NP_API template <int... E> NP_NODISCARD constexpr ndarrayf<double, E...> ones() 
  * @tparam E  Compile-time extents (must all be > 0).
  * @return     ndarrayf<T, E...> filled with T{1}.
  */
-NP_API template <typename T, int... E> NP_NODISCARD constexpr ndarrayf<T, E...> ones() {
+NP_API template <typename T, int... E>
+NP_NODISCARD constexpr ndarrayf<T, E...> ones() {
   ndarrayf<T, E...> out{};
   out.fill(T{1});
   return out;
@@ -120,7 +124,8 @@ NP_NODISCARD constexpr ndarrayf<T, E...> full(const T &fill_value) {
  *
  * Reference: numpy-reference/reference/generated/numpy.eye.html
  */
-NP_API template <std::size_t N, std::size_t M = N, int k = 0, typename T = double>
+NP_API template <std::size_t N, std::size_t M = N, int k = 0,
+                 typename T = double>
 NP_NODISCARD constexpr ndarrayf<T, N, M> eye() {
   ndarrayf<T, N, M> out{};
   const std::ptrdiff_t kk = k;
@@ -154,7 +159,8 @@ NP_NODISCARD constexpr ndarrayf<T, N, N> identity() {
  *
  * Reference: numpy-reference/reference/generated/numpy.arange.html
  */
-NP_API template <std::size_t N, typename T = int> NP_NODISCARD constexpr ndarrayf<T, N> arange() {
+NP_API template <std::size_t N, typename T = int>
+NP_NODISCARD constexpr ndarrayf<T, N> arange() {
   ndarrayf<T, N> out{};
   for (std::size_t i = 0; i < N; ++i) {
     out[i] = static_cast<T>(i);
@@ -172,7 +178,7 @@ NP_API template <std::size_t N, typename T = int> NP_NODISCARD constexpr ndarray
  * @return       ndarrayf<T, N> containing {start, start+1, ..., start+N-1}.
  */
 NP_API template <std::size_t N, typename T>
-NP_NODISCARD constexpr ndarrayf<T, N> arange(T start, T stop) {
+NP_NODISCARD constexpr auto arange(T start, T stop) -> ndarrayf<T, N> {
   (void)stop;
   ndarrayf<T, N> out{};
   for (std::size_t i = 0; i < N; ++i) {
@@ -193,7 +199,7 @@ NP_NODISCARD constexpr ndarrayf<T, N> arange(T start, T stop) {
  * start+(N-1)*step}.
  */
 NP_API template <std::size_t N, typename T>
-NP_NODISCARD constexpr ndarrayf<T, N> arange(T start, T stop, T step) {
+NP_NODISCARD constexpr auto arange(T start, T stop, T step) -> ndarrayf<T, N> {
   (void)stop;
   ndarrayf<T, N> out{};
   for (std::size_t i = 0; i < N; ++i) {

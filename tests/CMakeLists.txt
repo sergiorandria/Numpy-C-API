@@ -11,6 +11,7 @@ set(NP_TESTS
     test_logic
     test_concatenate
     test_random
+    test_statistics
     test_simd
     test_manipulation
     test_scalar_custom

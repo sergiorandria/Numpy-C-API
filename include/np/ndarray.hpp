@@ -783,10 +783,31 @@ public:
    * @param keepdims If true, the reduced axis is retained with size 1.
    * @return Array with one fewer dimension (or same rank if
    *         `keepdims`).
+   * @return Array with one fewer dimension (or same rank if
+   *         `keepdims`).
    * @throws np::AxisError if the axis is out of bounds.
    * @complexity O(n).
    */
   auto max(int axis, bool keepdims = false) const -> ndarray<T>;
+
+  /**
+   * @brief Peak-to-peak (max - min) over all elements.
+   * @return `max() - min()`.
+   * @throws std::runtime_error if the array is empty.
+   * @complexity O(n).
+   */
+  T ptp() const;
+
+  /**
+   * @brief Peak-to-peak (max - min) along an axis.
+   * @param axis Axis along which to reduce.
+   * @param keepdims If true, the reduced axis is retained with size 1.
+   * @return Array with one fewer dimension (or same rank if
+   *         `keepdims`).
+   * @throws np::AxisError if the axis is out of bounds.
+   * @complexity O(n).
+   */
+  auto ptp(int axis, bool keepdims = false) const -> ndarray<T>;
 
   /**
    * @brief Arithmetic mean over all elements.
@@ -3057,6 +3078,8 @@ auto ndarray<T>::_reduce_axis(int axis, bool keepdims, std::optional<Acc> seed,
     for (int d = 0; d < nd; ++d) {
       if (d != axis) {
         out_idx.push_back(idx[d]);
+      } else if (keepdims) {
+        out_idx.push_back(0);
       }
     }
     const std::size_t of = detail::flat_index(out_idx, out.strides, 0);
@@ -3142,6 +3165,19 @@ auto ndarray<T>::max(int axis, bool keepdims) const -> ndarray<T> {
                          [](T &acc, const T &v) { acc = std::max(acc, v); });
 }
 
+template <typename T> T ndarray<T>::ptp() const { return max() - min(); }
+
+template <typename T>
+auto ndarray<T>::ptp(int axis, bool keepdims) const -> ndarray<T> {
+  const ndarray<T> mx = max(axis, keepdims);
+  const ndarray<T> mn = min(axis, keepdims);
+  ndarray<T> out(mx.shape);
+  for (std::size_t i = 0; i < out.size(); ++i) {
+    out.data()[i] = mx.data()[i] - mn.data()[i];
+  }
+  return out;
+}
+
 template <typename T>
 auto ndarray<T>::mean() const -> typename _mean_type<T>::type {
   using MeanT = typename _mean_type<T>::type;
@@ -3192,6 +3228,8 @@ auto ndarray<T>::_var_axis(int axis, bool keepdims) const -> ndarray<MeanT> {
     for (int d = 0; d < nd; ++d) {
       if (d != axis) {
         out_idx.push_back(idx[d]);
+      } else if (keepdims) {
+        out_idx.push_back(0);
       }
     }
     const std::size_t of = detail::flat_index(out_idx, out.strides, 0);
@@ -3301,6 +3339,8 @@ auto ndarray<T>::_arg_reduce_axis(int axis, bool keepdims, Cmp &&cmp) const
     for (int d = 0; d < nd; ++d) {
       if (d != axis) {
         out_idx.push_back(idx[d]);
+      } else if (keepdims) {
+        out_idx.push_back(0);
       }
     }
     const std::size_t of = detail::flat_index(out_idx, out.strides, 0);
