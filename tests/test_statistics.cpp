@@ -223,6 +223,74 @@ int main() {
     check(approx(r.at(1), 11.0), "nansum axis: row1");
   }
 
+  // =====================================================================
+  // nanargmin / nanargmax
+  // =====================================================================
+  {
+    auto a = ndarray<double>::from_data(std::vector<int>{6},
+                                        {3.0, nan, 1.0, nan, 5.0, 2.0});
+    check(nanargmax(a) == 4, "nanargmax: flattened index");
+    check(nanargmin(a) == 2, "nanargmin: flattened index");
+
+    auto m = ndarray<double>::from_data(
+        std::vector<int>{2, 4}, {1.0, nan, 5.0, 3.0, 8.0, 2.0, nan, 6.0});
+    auto mx = nanargmax(m, 1);
+    check(mx.shape == std::vector<int>{2}, "nanargmax axis: shape");
+    check(mx.at(0) == 2, "nanargmax axis: row0");
+    check(mx.at(1) == 0, "nanargmax axis: row1");
+    auto mn = nanargmin(m, 0);
+    check(mn.at(0) == 0 && mn.at(1) == 1 && mn.at(2) == 0,
+          "nanargmin axis: values");
+
+    auto all_nan = ndarray<double>::from_data(std::vector<int>{2}, {nan, nan});
+    bool threw = false;
+    try {
+      nanargmax(all_nan);
+    } catch (const std::invalid_argument &) {
+      threw = true;
+    }
+    check(threw, "nanargmax: all-NaN throws");
+  }
+
+  // =====================================================================
+  // nancumsum / nancumprod
+  // =====================================================================
+  {
+    auto a =
+        ndarray<double>::from_data(std::vector<int>{4}, {1.0, nan, 3.0, nan});
+    auto cs = nancumsum(a);
+    check(cs.shape == std::vector<int>{4}, "nancumsum: 1-D shape");
+    check(approx(cs.at(0), 1.0) && approx(cs.at(1), 1.0) &&
+              approx(cs.at(2), 4.0) && approx(cs.at(3), 4.0),
+          "nancumsum: nan as zero");
+    auto cp = nancumprod(a);
+    check(approx(cp.at(0), 1.0) && approx(cp.at(1), 1.0) &&
+              approx(cp.at(2), 3.0) && approx(cp.at(3), 3.0),
+          "nancumprod: nan as one");
+
+    auto m = ndarray<double>::from_data(std::vector<int>{2, 3},
+                                        {1.0, nan, 3.0, nan, 5.0, 6.0});
+    auto cs0 = nancumsum(m, 0);
+    check(cs0.shape == std::vector<int>{2, 3}, "nancumsum axis: shape");
+    check(approx(cs0.at(0, 0), 1.0) && approx(cs0.at(1, 0), 1.0),
+          "nancumsum axis: col0");
+    check(approx(cs0.at(0, 2), 3.0) && approx(cs0.at(1, 2), 9.0),
+          "nancumsum axis: col2");
+    auto cp1 = nancumprod(m, 1);
+    check(cp1.shape == std::vector<int>{2, 3}, "nancumprod axis: shape");
+    check(approx(cp1.at(0, 0), 1.0) && approx(cp1.at(0, 1), 1.0) &&
+              approx(cp1.at(0, 2), 3.0),
+          "nancumprod axis: row0");
+    check(approx(cp1.at(1, 0), 1.0) && approx(cp1.at(1, 1), 5.0) &&
+              approx(cp1.at(1, 2), 30.0),
+          "nancumprod axis: row1");
+
+    auto lead = ndarray<double>::from_data(std::vector<int>{2}, {nan, 2.0});
+    auto lcs = nancumsum(lead);
+    check(approx(lcs.at(0), 0.0) && approx(lcs.at(1), 2.0),
+          "nancumsum: leading nan as zero");
+  }
+
   if (test::failures() == 0) {
     std::printf("OK statistics\n");
     return 0;

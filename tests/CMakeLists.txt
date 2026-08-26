@@ -32,3 +32,14 @@ foreach(t ${NP_TESTS})
     endif()
     add_test(NAME ${t} COMMAND ${t})
 endforeach()
+
+# Standalone micro-benchmark for math.hpp ufunc paths. Not run by
+# ctest; invoke directly: ./build/tests/bench_math
+add_executable(bench_math bench_math.cpp)
+target_link_libraries(bench_math PRIVATE np::np)
+if(NOT MSVC)
+    # -O2 for meaningful timings; -mavx so the np::simd AVX kernels
+    # (NP_SIMD_AVX) are compiled and dispatched by the generic
+    # add/mul/div_vectorized wrappers.
+    target_compile_options(bench_math PRIVATE -O2 -mavx)
+endif()

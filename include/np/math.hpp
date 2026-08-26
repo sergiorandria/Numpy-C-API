@@ -4,15 +4,21 @@
  *
  * Provides broadcasting-aware wrappers around standard math functions:
  *   Trigonometric: sin, cos, tan, arcsin, arccos, arctan, arctan2, hypot
+ *   Angular conversion: degrees, radians, rad2deg, deg2rad
  *   Hyperbolic: sinh, cosh, tanh, arcsinh, arccosh, arctanh
- *   Exponential/Logarithmic: exp, log, log10, log2, sqrt, power
- *   Rounding: floor, ceil, trunc, rint
- *   Arithmetic: absolute, sign, maximum, minimum, fmod, fmax, fmin
- *   Misc: degrees, radians, square, cbrt, reciprocal
+ *   Exponential/Logarithmic: exp, expm1, exp2, log, log10, log2, log1p,
+ *                            sqrt, cbrt, power, logaddexp, logaddexp2
+ *   Rounding: floor, ceil, trunc, rint, round, around
+ *   Arithmetic: absolute, sign, maximum, minimum, fmod, fmax, fmin,
+ *               copysign, divide, true_divide, floor_divide, reciprocal,
+ *               positive, negative
+ *   Misc: square, nan_to_num, clip, fma
  *
  * All functions return C-contiguous arrays with row-major strides.
  * Binary operations broadcast shapes according to NumPy rules
- * (see numpy-reference/user/basics.broadcasting.html).
+ * (see numpy-reference/user/basics.broadcasting.html). Every unary,
+ * binary and ternary ufunc also provides an `out` overload that writes
+ * into a caller-provided destination array instead of allocating.
  *
  * Reference: numpy-reference/reference/routines.math.html
  *
@@ -23,14 +29,37 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <numbers>
 #include <type_traits>
 
 #include "api_macros.hpp"
 #include "ndarray.hpp"
+#include "simd.hpp"
 
 namespace np {
 
 namespace detail {
+
+// =================================================================
+// Type constraints
+// =================================================================
+
+/** @brief Accepts arithmetic types and std::complex specializations. */
+template <typename T>
+concept Numeric = std::is_arithmetic_v<T> || is_complex_v<T>;
+
+/** @brief Accepts floating-point types. */
+template <typename T>
+concept FloatingPoint = std::is_floating_point_v<T>;
+
+/** @brief Accepts integral and floating-point types (no complex). */
+template <typename T>
+concept Arithmetic = std::is_arithmetic_v<T>;
+
+// =================================================================
+// Element-wise helpers
+// =================================================================
 
 /** @brief Apply unary function element-wise with broadcasting.
  *
@@ -54,65 +83,210 @@ NP_NODISCARD auto ufunc_unary(const ndarray<T> &arr, Fn &&fn) -> ndarray<T> {
   return result;
 }
 
-/** @brief Apply binary function element-wise with broadcasting.
+/** @brief Apply unary function writing into a pre-allocated output.
  *
- * Time complexity: O(N) where N is the number of elements
- * in the broadcast output shape. Space complexity: O(N).
+ * The output array must have exactly the same shape as `arr`.
+ *
+ * @tparam T  Element type of the input array.
+ * @tparam Fn  Unary callable of the form `R(T)`.
+ * @param arr  Input array.
+ * @param out  Destination array (same shape as `arr`).
+ * @param fn   Unary function applied to each element.
+ * @return     Reference to `out`, now filled with the results.
+ * @throws     std::invalid_argument if `out.shape` differs from `arr.shape`.
+ */
+NP_API template <typename T, typename Fn>
+auto ufunc_unary_into(const ndarray<T> &arr, ndarray<T> &out, Fn &&fn)
+    -> ndarray<T> & {
+  if (out.shape != arr.shape) {
+    throw std::invalid_argument("out: shape does not match input");
+  }
+  auto it_in = arr.begin();
+  auto it_out = out.begin();
+  for (; it_in != arr.end(); ++it_in, ++it_out) {
+    *it_out = fn(*it_in);
+  }
+  return out;
+}
+
+/** @brief Apply binary function element-wise with broadcasting,
+ *         writing into a pre-allocated output.
+ *
+ * Mirrors np::detail::elementwise but writes into `out` instead of
+ * allocating. The output shape must equal the broadcast shape.
  *
  * @tparam T  Element type of the left-hand side array.
  * @tparam U  Element type of the right-hand side array.
+ * @tparam R  Element type of the output array.
  * @tparam Fn Binary callable of the form `R(T, U)`.
- * @param lhs Left-hand side array.
- * @param rhs Right-hand side array.
+ * @param a   Left-hand side array.
+ * @param b   Right-hand side array.
+ * @param out Destination array (must match the broadcast shape).
  * @param fn  Binary function applied to each pair of elements.
- * @return    ndarray<std::common_type_t<T, U>> with the
- *            broadcast shape.
- * @throws    std::invalid_argument if shapes cannot be broadcast.
+ * @return    Reference to `out`.
+ * @throws    std::invalid_argument if shapes cannot be broadcast
+ *            or if `out.shape` differs from the broadcast shape.
  */
-NP_API template <typename T, typename U, typename Fn>
-NP_NODISCARD auto ufunc_binary(const ndarray<T> &lhs, const ndarray<U> &rhs, Fn &&fn)
-    -> ndarray<std::common_type_t<T, U>> {
-  using R = std::common_type_t<T, U>;
-
-  // Broadcast shapes
-  const auto out_shape = detail::broadcast_shapes(lhs.shape, rhs.shape);
-  ndarray<R> result(out_shape, dtype_of<R>);
-
-  // Iterate and apply
-  const auto ndim_out = out_shape.size();
-  std::vector<std::size_t> idx(ndim_out, 0);
-
-  for (std::size_t i = 0; i < result.size(); ++i) {
-    // Map output index to input indices
-    std::vector<std::size_t> idx_lhs(lhs.ndim(), 0);
-    std::vector<std::size_t> idx_rhs(rhs.ndim(), 0);
-
-    for (std::size_t d = 0; d < ndim_out; ++d) {
-      if (d >= ndim_out - lhs.ndim()) {
-        const auto d_lhs = d - (ndim_out - lhs.ndim());
-        idx_lhs[d_lhs] = (lhs.shape[d_lhs] == 1) ? 0 : idx[d];
-      }
-      if (d >= ndim_out - rhs.ndim()) {
-        const auto d_rhs = d - (ndim_out - rhs.ndim());
-        idx_rhs[d_rhs] = (rhs.shape[d_rhs] == 1) ? 0 : idx[d];
-      }
-    }
-
-    const T val_lhs = lhs.get(idx_lhs);
-    const U val_rhs = rhs.get(idx_rhs);
-    result.set(idx, fn(val_lhs, val_rhs));
-
-    // Increment index
-    for (std::size_t d = ndim_out; d-- > 0;) {
-      if (++idx[d] < static_cast<std::size_t>(out_shape[d])) {
-        break;
-      }
-      idx[d] = 0;
-    }
+NP_API template <typename T, typename U, typename R, typename Fn>
+auto elementwise_into(const ndarray<T> &a, const ndarray<U> &b, ndarray<R> &out,
+                      Fn &&fn) -> ndarray<R> & {
+  const std::vector<int> out_shape = broadcast_shapes(a.shape, b.shape);
+  if (out.shape != out_shape) {
+    throw std::invalid_argument("out: shape does not match broadcast result");
   }
 
-  return result;
+  const int nr = static_cast<int>(out_shape.size());
+  const int shift_a = nr - static_cast<int>(a.shape.size());
+  const int shift_b = nr - static_cast<int>(b.shape.size());
+
+  std::vector<std::size_t> adj_a(nr), adj_b(nr);
+  for (int d = 0; d < nr; ++d) {
+    const int ka = d - shift_a;
+    const int kb = d - shift_b;
+    adj_a[d] = (ka < 0 || a.shape[ka] == 1) ? 0 : a.strides[ka];
+    adj_b[d] = (kb < 0 || b.shape[kb] == 1) ? 0 : b.strides[kb];
+  }
+
+  Odometer od(out_shape);
+  while (!od.done()) {
+    const auto &idx = od.idx();
+    std::size_t fa = a.offset, fb = b.offset, fo = out.offset;
+    for (int d = 0; d < nr; ++d) {
+      fa += idx[d] * adj_a[d];
+      fb += idx[d] * adj_b[d];
+      fo += idx[d] * out.strides[d];
+    }
+    out.data()[fo] = fn(a.data()[fa], b.data()[fb]);
+    od.advance();
+  }
+  return out;
 }
+
+/** @brief Apply ternary function element-wise with broadcasting.
+ *
+ * Computes the broadcast shape of all three inputs, then applies
+ * `fn(a[i], b[i], c[i])` to every logical element.
+ *
+ * @tparam T  Element type of the first array.
+ * @tparam U  Element type of the second array.
+ * @tparam V  Element type of the third array.
+ * @tparam Fn Ternary callable of the form `R(T, U, V)`.
+ * @param a   First array.
+ * @param b   Second array.
+ * @param c   Third array.
+ * @param fn  Ternary function applied to each triple of elements.
+ * @return    ndarray<R> with the broadcast shape.
+ * @throws    std::invalid_argument if shapes cannot be broadcast.
+ */
+NP_API template <typename T, typename U, typename V, typename Fn>
+NP_NODISCARD auto ufunc_ternary(const ndarray<T> &a, const ndarray<U> &b,
+                                const ndarray<V> &c, Fn &&fn) {
+  using OutT = std::invoke_result_t<Fn, T, U, V>;
+  const std::vector<int> ab_shape = broadcast_shapes(a.shape, b.shape);
+  const std::vector<int> out_shape = broadcast_shapes(ab_shape, c.shape);
+  ndarray<OutT> out(out_shape);
+
+  const int nr = static_cast<int>(out_shape.size());
+  const int shift_a = nr - static_cast<int>(a.shape.size());
+  const int shift_b = nr - static_cast<int>(b.shape.size());
+  const int shift_c = nr - static_cast<int>(c.shape.size());
+
+  std::vector<std::size_t> adj_a(nr), adj_b(nr), adj_c(nr);
+  for (int d = 0; d < nr; ++d) {
+    const int ka = d - shift_a;
+    const int kb = d - shift_b;
+    const int kc = d - shift_c;
+    adj_a[d] = (ka < 0 || a.shape[ka] == 1) ? 0 : a.strides[ka];
+    adj_b[d] = (kb < 0 || b.shape[kb] == 1) ? 0 : b.strides[kb];
+    adj_c[d] = (kc < 0 || c.shape[kc] == 1) ? 0 : c.strides[kc];
+  }
+
+  Odometer od(out_shape);
+  while (!od.done()) {
+    const auto &idx = od.idx();
+    std::size_t fa = a.offset, fb = b.offset, fc = c.offset, fo = 0;
+    for (int d = 0; d < nr; ++d) {
+      fa += idx[d] * adj_a[d];
+      fb += idx[d] * adj_b[d];
+      fc += idx[d] * adj_c[d];
+      fo += idx[d] * out.strides[d];
+    }
+    out.data()[fo] = fn(a.data()[fa], b.data()[fb], c.data()[fc]);
+    od.advance();
+  }
+  return out;
+}
+
+/** @brief Apply ternary function element-wise, writing into a
+ *         pre-allocated output.
+ *
+ * @tparam T  Element type of the first array.
+ * @tparam U  Element type of the second array.
+ * @tparam V  Element type of the third array.
+ * @tparam R  Element type of the output array.
+ * @tparam Fn Ternary callable of the form `R(T, U, V)`.
+ * @param a   First array.
+ * @param b   Second array.
+ * @param c   Third array.
+ * @param out Destination array (must match the broadcast shape).
+ * @param fn  Ternary function applied to each triple of elements.
+ * @return    Reference to `out`.
+ * @throws    std::invalid_argument if shapes cannot be broadcast
+ *            or if `out.shape` differs from the broadcast shape.
+ */
+NP_API template <typename T, typename U, typename V, typename R, typename Fn>
+auto ufunc_ternary_into(const ndarray<T> &a, const ndarray<U> &b,
+                        const ndarray<V> &c, ndarray<R> &out, Fn &&fn)
+    -> ndarray<R> & {
+  const std::vector<int> ab_shape = broadcast_shapes(a.shape, b.shape);
+  const std::vector<int> out_shape = broadcast_shapes(ab_shape, c.shape);
+  if (out.shape != out_shape) {
+    throw std::invalid_argument("out: shape does not match broadcast result");
+  }
+
+  const int nr = static_cast<int>(out_shape.size());
+  const int shift_a = nr - static_cast<int>(a.shape.size());
+  const int shift_b = nr - static_cast<int>(b.shape.size());
+  const int shift_c = nr - static_cast<int>(c.shape.size());
+
+  std::vector<std::size_t> adj_a(nr), adj_b(nr), adj_c(nr);
+  for (int d = 0; d < nr; ++d) {
+    const int ka = d - shift_a;
+    const int kb = d - shift_b;
+    const int kc = d - shift_c;
+    adj_a[d] = (ka < 0 || a.shape[ka] == 1) ? 0 : a.strides[ka];
+    adj_b[d] = (kb < 0 || b.shape[kb] == 1) ? 0 : b.strides[kb];
+    adj_c[d] = (kc < 0 || c.shape[kc] == 1) ? 0 : c.strides[kc];
+  }
+
+  Odometer od(out_shape);
+  while (!od.done()) {
+    const auto &idx = od.idx();
+    std::size_t fa = a.offset, fb = b.offset, fc = c.offset, fo = out.offset;
+    for (int d = 0; d < nr; ++d) {
+      fa += idx[d] * adj_a[d];
+      fb += idx[d] * adj_b[d];
+      fc += idx[d] * adj_c[d];
+      fo += idx[d] * out.strides[d];
+    }
+    out.data()[fo] = fn(a.data()[fa], b.data()[fb], c.data()[fc]);
+    od.advance();
+  }
+  return out;
+}
+
+/** @brief Round `v` to `decimals` digits using half-to-even rounding.
+ *
+ * @tparam T  Floating-point element type.
+ * @param v         Input value.
+ * @param decimals  Number of decimal places (may be negative).
+ * @return          Rounded value.
+ */
+template <typename T> inline T roundto_elem(T v, int decimals) {
+  const T scale = std::pow(T(10), static_cast<T>(decimals));
+  return std::rint(v * scale) / scale;
+}
+
 } // namespace detail
 
 // =================================================================
@@ -122,12 +296,21 @@ NP_NODISCARD auto ufunc_binary(const ndarray<T> &lhs, const ndarray<U> &rhs, Fn 
 
 /** @brief Trigonometric sine, element-wise.
  *
- * @tparam T  Element type (must be floating-point or complex).
+ * @tparam T  Element type (floating-point, integral or complex).
  * @param x   Input array.
  * @return    ndarray<T> with sin(x[i]) for each element.
  */
-NP_API template <typename T> NP_NODISCARD auto sin(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto sin(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::sin(v); });
+}
+
+/** @brief sin() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto sin(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::sin(v); });
 }
 
 /** @brief Trigonometric cosine, element-wise.
@@ -136,8 +319,17 @@ NP_API template <typename T> NP_NODISCARD auto sin(const ndarray<T> &x) -> ndarr
  * @param x   Input array.
  * @return    ndarray<T> with cos(x[i]) for each element.
  */
-NP_API template <typename T> NP_NODISCARD auto cos(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto cos(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::cos(v); });
+}
+
+/** @brief cos() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto cos(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::cos(v); });
 }
 
 /** @brief Trigonometric tangent, element-wise.
@@ -146,8 +338,17 @@ NP_API template <typename T> NP_NODISCARD auto cos(const ndarray<T> &x) -> ndarr
  * @param x   Input array.
  * @return    ndarray<T> with tan(x[i]) for each element.
  */
-NP_API template <typename T> NP_NODISCARD auto tan(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto tan(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::tan(v); });
+}
+
+/** @brief tan() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto tan(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::tan(v); });
 }
 
 /** @brief Inverse sine, element-wise.
@@ -159,8 +360,17 @@ NP_API template <typename T> NP_NODISCARD auto tan(const ndarray<T> &x) -> ndarr
  * @param x   Input array.
  * @return    ndarray<T> with asin(x[i]) for each element.
  */
-NP_API template <typename T> NP_NODISCARD auto arcsin(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto arcsin(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::asin(v); });
+}
+
+/** @brief arcsin() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto arcsin(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::asin(v); });
 }
 
 /** @brief Inverse cosine, element-wise.
@@ -172,8 +382,17 @@ NP_API template <typename T> NP_NODISCARD auto arcsin(const ndarray<T> &x) -> nd
  * @param x   Input array.
  * @return    ndarray<T> with acos(x[i]) for each element.
  */
-NP_API template <typename T> NP_NODISCARD auto arccos(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto arccos(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::acos(v); });
+}
+
+/** @brief arccos() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto arccos(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::acos(v); });
 }
 
 /** @brief Inverse tangent, element-wise.
@@ -184,8 +403,17 @@ NP_API template <typename T> NP_NODISCARD auto arccos(const ndarray<T> &x) -> nd
  * @param x   Input array.
  * @return    ndarray<T> with atan(x[i]) for each element.
  */
-NP_API template <typename T> NP_NODISCARD auto arctan(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto arctan(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::atan(v); });
+}
+
+/** @brief arctan() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto arctan(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::atan(v); });
 }
 
 /** @brief Element-wise arc tangent of x1/x2 choosing the quadrant correctly.
@@ -199,11 +427,24 @@ NP_API template <typename T> NP_NODISCARD auto arctan(const ndarray<T> &x) -> nd
  * @param x2  x-coordinate array.
  * @return    ndarray<std::common_type_t<T, U>> with atan2(x1[i], x2[i]).
  */
-NP_API template <typename T, typename U>
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
 NP_NODISCARD auto arctan2(const ndarray<T> &x1, const ndarray<U> &x2)
     -> ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
-  return detail::ufunc_binary(x1, x2, [](const T &y, const U &x) {
+  return detail::elementwise(x1, x2, [](const T &y, const U &x) {
+    return static_cast<R>(std::atan2(y, x));
+  });
+}
+
+/** @brief arctan2() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+auto arctan2(const ndarray<T> &x1, const ndarray<U> &x2,
+             ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(x1, x2, out, [](const T &y, const U &x) {
     return static_cast<R>(std::atan2(y, x));
   });
 }
@@ -218,57 +459,98 @@ NP_NODISCARD auto arctan2(const ndarray<T> &x1, const ndarray<U> &x2)
  * @param x2  Second side array.
  * @return    ndarray<std::common_type_t<T, U>> with hypot(x1[i], x2[i]).
  */
-NP_API template <typename T, typename U>
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
 NP_NODISCARD auto hypot(const ndarray<T> &x1, const ndarray<U> &x2)
     -> ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
-  return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
+  return detail::elementwise(x1, x2, [](const T &a, const U &b) {
+    return static_cast<R>(std::hypot(a, b));
+  });
+}
+
+/** @brief hypot() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+auto hypot(const ndarray<T> &x1, const ndarray<U> &x2,
+           ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(x1, x2, out, [](const T &a, const U &b) {
     return static_cast<R>(std::hypot(a, b));
   });
 }
 
 /** @brief Convert angles from radians to degrees.
  *
- * @tparam T  Element type.
+ * Uses std::numbers::pi_v<T> for the conversion constant.
+ *
+ * @tparam T  Element type (floating-point).
  * @param x   Input array in radians.
  * @return    ndarray<T> with degrees(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto degrees(const ndarray<T> &x) -> ndarray<T> {
-  constexpr double rad_to_deg = 180.0 / 3.14159265358979323846;
-  return detail::ufunc_unary(
-      x, [](const T &v) { return static_cast<T>(v * rad_to_deg); });
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto degrees(const ndarray<T> &x) -> ndarray<T> {
+  return detail::ufunc_unary(x, [](const T &v) {
+    return static_cast<T>(static_cast<T>(180) / std::numbers::pi_v<T>) * v;
+  });
+}
+
+/** @brief degrees() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::FloatingPoint T>
+auto degrees(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out, [](const T &v) {
+    return static_cast<T>(static_cast<T>(180) / std::numbers::pi_v<T>) * v;
+  });
 }
 
 /** @brief Convert angles from degrees to radians.
  *
- * @tparam T  Element type.
+ * Uses std::numbers::pi_v<T> for the conversion constant.
+ *
+ * @tparam T  Element type (floating-point).
  * @param x   Input array in degrees.
  * @return    ndarray<T> with radians(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto radians(const ndarray<T> &x) -> ndarray<T> {
-  constexpr double deg_to_rad = 3.14159265358979323846 / 180.0;
-  return detail::ufunc_unary(
-      x, [](const T &v) { return static_cast<T>(v * deg_to_rad); });
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto radians(const ndarray<T> &x) -> ndarray<T> {
+  return detail::ufunc_unary(x, [](const T &v) {
+    return static_cast<T>(std::numbers::pi_v<T> / static_cast<T>(180)) * v;
+  });
 }
 
-/** @brief Alias for degrees().
- *
- * @tparam T  Element type.
- * @param x   Input array in radians.
- * @return    ndarray<T> with degrees(x[i]).
- */
-NP_API template <typename T> NP_NODISCARD auto rad2deg(const ndarray<T> &x) -> ndarray<T> {
+/** @brief radians() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::FloatingPoint T>
+auto radians(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out, [](const T &v) {
+    return static_cast<T>(std::numbers::pi_v<T> / static_cast<T>(180)) * v;
+  });
+}
+
+/** @brief Alias for degrees(). */
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto rad2deg(const ndarray<T> &x) -> ndarray<T> {
   return degrees(x);
 }
 
-/** @brief Alias for radians().
- *
- * @tparam T  Element type.
- * @param x   Input array in degrees.
- * @return    ndarray<T> with radians(x[i]).
- */
-NP_API template <typename T> NP_NODISCARD auto deg2rad(const ndarray<T> &x) -> ndarray<T> {
+/** @brief rad2deg() writing into `out`. */
+NP_API template <detail::FloatingPoint T>
+auto rad2deg(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return degrees(x, out);
+}
+
+/** @brief Alias for radians(). */
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto deg2rad(const ndarray<T> &x) -> ndarray<T> {
   return radians(x);
+}
+
+/** @brief deg2rad() writing into `out`. */
+NP_API template <detail::FloatingPoint T>
+auto deg2rad(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return radians(x, out);
 }
 
 // =================================================================
@@ -282,8 +564,17 @@ NP_API template <typename T> NP_NODISCARD auto deg2rad(const ndarray<T> &x) -> n
  * @param x   Input array.
  * @return    ndarray<T> with sinh(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto sinh(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto sinh(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::sinh(v); });
+}
+
+/** @brief sinh() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto sinh(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::sinh(v); });
 }
 
 /** @brief Hyperbolic cosine, element-wise.
@@ -292,8 +583,17 @@ NP_API template <typename T> NP_NODISCARD auto sinh(const ndarray<T> &x) -> ndar
  * @param x   Input array.
  * @return    ndarray<T> with cosh(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto cosh(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto cosh(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::cosh(v); });
+}
+
+/** @brief cosh() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto cosh(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::cosh(v); });
 }
 
 /** @brief Hyperbolic tangent, element-wise.
@@ -302,8 +602,17 @@ NP_API template <typename T> NP_NODISCARD auto cosh(const ndarray<T> &x) -> ndar
  * @param x   Input array.
  * @return    ndarray<T> with tanh(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto tanh(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto tanh(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::tanh(v); });
+}
+
+/** @brief tanh() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto tanh(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::tanh(v); });
 }
 
 /** @brief Inverse hyperbolic sine, element-wise.
@@ -312,8 +621,17 @@ NP_API template <typename T> NP_NODISCARD auto tanh(const ndarray<T> &x) -> ndar
  * @param x   Input array.
  * @return    ndarray<T> with asinh(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto arcsinh(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto arcsinh(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::asinh(v); });
+}
+
+/** @brief arcsinh() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto arcsinh(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::asinh(v); });
 }
 
 /** @brief Inverse hyperbolic cosine, element-wise.
@@ -324,8 +642,17 @@ NP_API template <typename T> NP_NODISCARD auto arcsinh(const ndarray<T> &x) -> n
  * @param x   Input array.
  * @return    ndarray<T> with acosh(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto arccosh(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto arccosh(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::acosh(v); });
+}
+
+/** @brief arccosh() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto arccosh(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::acosh(v); });
 }
 
 /** @brief Inverse hyperbolic tangent, element-wise.
@@ -336,8 +663,17 @@ NP_API template <typename T> NP_NODISCARD auto arccosh(const ndarray<T> &x) -> n
  * @param x   Input array.
  * @return    ndarray<T> with atanh(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto arctanh(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto arctanh(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::atanh(v); });
+}
+
+/** @brief arctanh() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto arctanh(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::atanh(v); });
 }
 
 // =================================================================
@@ -351,30 +687,57 @@ NP_API template <typename T> NP_NODISCARD auto arctanh(const ndarray<T> &x) -> n
  * @param x   Input array.
  * @return    ndarray<T> with exp(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto exp(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto exp(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::exp(v); });
+}
+
+/** @brief exp() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto exp(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::exp(v); });
 }
 
 /** @brief Calculate exp(x) - 1 for all elements.
  *
  * More accurate than exp(x) - 1 for small x.
  *
- * @tparam T  Element type.
+ * @tparam T  Element type (floating-point).
  * @param x   Input array.
  * @return    ndarray<T> with expm1(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto expm1(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto expm1(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::expm1(v); });
+}
+
+/** @brief expm1() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::FloatingPoint T>
+auto expm1(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::expm1(v); });
 }
 
 /** @brief Calculate 2**x for all elements.
  *
- * @tparam T  Element type.
+ * @tparam T  Element type (floating-point).
  * @param x   Input array.
  * @return    ndarray<T> with 2^x[i].
  */
-NP_API template <typename T> NP_NODISCARD auto exp2(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto exp2(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::exp2(v); });
+}
+
+/** @brief exp2() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::FloatingPoint T>
+auto exp2(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::exp2(v); });
 }
 
 /** @brief Natural logarithm, element-wise.
@@ -385,8 +748,17 @@ NP_API template <typename T> NP_NODISCARD auto exp2(const ndarray<T> &x) -> ndar
  * @param x   Input array.
  * @return    ndarray<T> with log(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto log(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto log(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::log(v); });
+}
+
+/** @brief log() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto log(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::log(v); });
 }
 
 /** @brief Base-10 logarithm, element-wise.
@@ -395,30 +767,57 @@ NP_API template <typename T> NP_NODISCARD auto log(const ndarray<T> &x) -> ndarr
  * @param x   Input array.
  * @return    ndarray<T> with log10(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto log10(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto log10(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::log10(v); });
+}
+
+/** @brief log10() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto log10(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::log10(v); });
 }
 
 /** @brief Base-2 logarithm, element-wise.
  *
- * @tparam T  Element type.
+ * @tparam T  Element type (floating-point).
  * @param x   Input array.
  * @return    ndarray<T> with log2(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto log2(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto log2(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::log2(v); });
+}
+
+/** @brief log2() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::FloatingPoint T>
+auto log2(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::log2(v); });
 }
 
 /** @brief Calculate log(1 + x) for all elements.
  *
  * More accurate than log(1 + x) for small x.
  *
- * @tparam T  Element type.
+ * @tparam T  Element type (floating-point).
  * @param x   Input array.
  * @return    ndarray<T> with log1p(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto log1p(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto log1p(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::log1p(v); });
+}
+
+/** @brief log1p() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::FloatingPoint T>
+auto log1p(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::log1p(v); });
 }
 
 /** @brief Non-negative square root, element-wise.
@@ -430,8 +829,17 @@ NP_API template <typename T> NP_NODISCARD auto log1p(const ndarray<T> &x) -> nda
  * @param x   Input array.
  * @return    ndarray<T> with sqrt(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto sqrt(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto sqrt(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::sqrt(v); });
+}
+
+/** @brief sqrt() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto sqrt(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::sqrt(v); });
 }
 
 /** @brief Cube root, element-wise.
@@ -439,29 +847,75 @@ NP_API template <typename T> NP_NODISCARD auto sqrt(const ndarray<T> &x) -> ndar
  * For real inputs, the real cube root is returned (including
  * for negative inputs).
  *
- * @tparam T  Element type.
+ * @tparam T  Element type (floating-point).
  * @param x   Input array.
  * @return    ndarray<T> with cbrt(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto cbrt(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto cbrt(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::cbrt(v); });
 }
 
+/** @brief cbrt() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::FloatingPoint T>
+auto cbrt(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::cbrt(v); });
+}
+
 /** @brief Element-wise square.
+ *
+ * For contiguous float/double inputs a vectorized SIMD kernel is
+ * used (np::simd::mul_vectorized). Generic element types fall back
+ * to a scalar loop.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    ndarray<T> with x[i]^2.
  */
-NP_API template <typename T> NP_NODISCARD auto square(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto square(const ndarray<T> &x) -> ndarray<T> {
+  if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+    // TODO: transcendental ufuncs (sin, exp, log, ...) are NOT
+    // vectorized here; they would require a vector math library
+    // (SLEEF/SVML). Only multiplication/division have kernels in
+    // np::simd, so square/divide are the SIMD fast paths.
+    if (x.is_contiguous()) {
+      ndarray<T> result(x.shape, x.type);
+      if (result.size() > 0) {
+        np::simd::mul_vectorized(x.data().data(), x.data().data(),
+                                 result.data().data(), result.size());
+      }
+      return result;
+    }
+  }
   return detail::ufunc_unary(x, [](const T &v) { return v * v; });
+}
+
+/** @brief square() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto square(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+    if (x.is_contiguous() && out.is_contiguous() && out.shape == x.shape) {
+      if (out.size() > 0) {
+        np::simd::mul_vectorized(x.data().data(), x.data().data(),
+                                 out.data().data(), out.size());
+      }
+      return out;
+    }
+  }
+  return detail::ufunc_unary_into(x, out, [](const T &v) { return v * v; });
 }
 
 /** @brief First array elements raised to powers from second array, element-wise.
  *
- * For integer exponents, the result is exact (no floating-point
- * rounding in the exponentiation itself). For non-integer
- * exponents or negative bases, std::pow is used.
+ * For integral operands with a non-negative exponent the result is
+ * exact (computes base^exp exactly, matching operator**); negative
+ * integral exponents and non-integral operands fall back to
+ * std::pow promoted back to the common type. Complex bases use
+ * std::pow in the complex domain.
  *
  * @tparam T  Element type of the base array.
  * @tparam U  Element type of the exponent array.
@@ -469,12 +923,34 @@ NP_API template <typename T> NP_NODISCARD auto square(const ndarray<T> &x) -> nd
  * @param x2  Exponent array.
  * @return    ndarray<std::common_type_t<T, U>> with x1[i]^x2[i].
  */
-NP_API template <typename T, typename U>
+NP_API template <detail::Numeric T, detail::Numeric U>
 NP_NODISCARD auto power(const ndarray<T> &x1, const ndarray<U> &x2)
     -> ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
-  return detail::ufunc_binary(x1, x2, [](const T &base, const U &exp) {
-    return static_cast<R>(std::pow(base, exp));
+  return detail::elementwise(x1, x2, [](const T &base, const U &exp) -> R {
+    if constexpr (detail::is_complex_v<R>) {
+      return std::pow(static_cast<R>(base), static_cast<R>(exp));
+    } else {
+      return static_cast<R>(detail::power_elem(base, exp));
+    }
+  });
+}
+
+/** @brief power() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Numeric T, detail::Numeric U>
+auto power(const ndarray<T> &x1, const ndarray<U> &x2,
+           ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(x1, x2, out,
+                                  [](const T &base, const U &exp) -> R {
+    if constexpr (detail::is_complex_v<R>) {
+      return std::pow(static_cast<R>(base), static_cast<R>(exp));
+    } else {
+      return static_cast<R>(detail::power_elem(base, exp));
+    }
   });
 }
 
@@ -491,8 +967,17 @@ NP_NODISCARD auto power(const ndarray<T> &x1, const ndarray<U> &x2)
  * @param x   Input array.
  * @return    ndarray<T> with floor(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto floor(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto floor(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::floor(v); });
+}
+
+/** @brief floor() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::FloatingPoint T>
+auto floor(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::floor(v); });
 }
 
 /** @brief Return the ceiling of the input, element-wise.
@@ -503,8 +988,17 @@ NP_API template <typename T> NP_NODISCARD auto floor(const ndarray<T> &x) -> nda
  * @param x   Input array.
  * @return    ndarray<T> with ceil(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto ceil(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto ceil(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::ceil(v); });
+}
+
+/** @brief ceil() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::FloatingPoint T>
+auto ceil(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::ceil(v); });
 }
 
 /** @brief Return the truncated value of the input, element-wise.
@@ -515,8 +1009,17 @@ NP_API template <typename T> NP_NODISCARD auto ceil(const ndarray<T> &x) -> ndar
  * @param x   Input array.
  * @return    ndarray<T> with trunc(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto trunc(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto trunc(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::trunc(v); });
+}
+
+/** @brief trunc() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::FloatingPoint T>
+auto trunc(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::trunc(v); });
 }
 
 /** @brief Round to nearest integer, element-wise.
@@ -528,8 +1031,85 @@ NP_API template <typename T> NP_NODISCARD auto trunc(const ndarray<T> &x) -> nda
  * @param x   Input array.
  * @return    ndarray<T> with rint(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto rint(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto rint(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::rint(v); });
+}
+
+/** @brief rint() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::FloatingPoint T>
+auto rint(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::rint(v); });
+}
+
+/** @brief Round to the given number of decimals, element-wise.
+ *
+ * Rounds to `decimals` digits with half-to-even (banker's) rounding
+ * for floating-point inputs (numpy.round semantics). Integral inputs
+ * are returned unchanged; complex inputs round both parts. `decimals`
+ * may be negative to round to powers of ten.
+ *
+ * @tparam T  Element type.
+ * @param x         Input array.
+ * @param decimals  Number of decimal places (default 0).
+ * @return          ndarray<T> with rounded elements.
+ */
+NP_API template <detail::Numeric T>
+auto round(const ndarray<T> &x, int decimals, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out, [decimals](const T &v) -> T {
+    if constexpr (detail::is_complex_v<T>) {
+      return T{detail::roundto_elem(v.real(), decimals),
+               detail::roundto_elem(v.imag(), decimals)};
+    } else if constexpr (std::is_floating_point_v<T>) {
+      return detail::roundto_elem(v, decimals);
+    } else {
+      return v;
+    }
+  });
+}
+
+/** @brief Round to the given number of decimals, element-wise.
+ *
+ * @param x  Input array.
+ * @param decimals  Number of decimal places (default 0).
+ * @return   ndarray<T> with rounded elements.
+ */
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto round(const ndarray<T> &x, int decimals = 0) -> ndarray<T> {
+  ndarray<T> out(x.shape, x.type);
+  round(x, decimals, out);
+  return out;
+}
+
+/** @brief round() writing into `out` with decimals = 0. */
+NP_API template <detail::Numeric T>
+auto round(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return round(x, 0, out);
+}
+
+/** @brief Alias for round(), element-wise.
+ *
+ * @param x         Input array.
+ * @param decimals  Number of decimal places (default 0).
+ * @return          ndarray<T> with rounded elements.
+ */
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto around(const ndarray<T> &x, int decimals = 0) -> ndarray<T> {
+  return round(x, decimals);
+}
+
+/** @brief around() writing into `out` with decimals = 0. */
+NP_API template <detail::Numeric T>
+auto around(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return round(x, 0, out);
+}
+
+/** @brief around() writing into `out`. */
+NP_API template <detail::Numeric T>
+auto around(const ndarray<T> &x, int decimals, ndarray<T> &out) -> ndarray<T> & {
+  return round(x, decimals, out);
 }
 
 // =================================================================
@@ -546,45 +1126,114 @@ NP_API template <typename T> NP_NODISCARD auto rint(const ndarray<T> &x) -> ndar
  * @param x   Input array.
  * @return    ndarray<T> with abs(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto absolute(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto absolute(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return std::abs(v); });
 }
 
-/** @brief Alias for absolute().
- *
- * @tparam T  Element type.
- * @param x   Input array.
- * @return    ndarray<T> with abs(x[i]).
- */
-NP_API template <typename T> NP_NODISCARD auto abs(const ndarray<T> &x) -> ndarray<T> {
+/** @brief absolute() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto absolute(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return std::abs(v); });
+}
+
+/** @brief Alias for absolute(). */
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto abs(const ndarray<T> &x) -> ndarray<T> {
   return absolute(x);
 }
 
-/** @brief Alias for absolute().
- *
- * @tparam T  Element type.
- * @param x   Input array.
- * @return    ndarray<T> with abs(x[i]).
- */
-NP_API template <typename T> NP_NODISCARD auto fabs(const ndarray<T> &x) -> ndarray<T> {
+/** @brief abs() writing into `out`. */
+NP_API template <detail::Numeric T>
+auto abs(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return absolute(x, out);
+}
+
+/** @brief Alias for absolute(). */
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto fabs(const ndarray<T> &x) -> ndarray<T> {
   return absolute(x);
+}
+
+/** @brief fabs() writing into `out`. */
+NP_API template <detail::Numeric T>
+auto fabs(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return absolute(x, out);
 }
 
 /** @brief Returns element-wise indication of the sign.
  *
- * sign(x) = -1 if x < 0, 0 if x == 0, 1 if x > 0.
+ * sign(x) = -1 if x < 0, 0 if x == 0, 1 if x > 0. NaN propagates
+ * (sign(NaN) == NaN) and complex inputs return the phase unit
+ * vector x/|x|.
  *
  * @tparam T  Element type.
  * @param x   Input array.
  * @return    ndarray<T> with sign(x[i]).
  */
-NP_API template <typename T> NP_NODISCARD auto sign(const ndarray<T> &x) -> ndarray<T> {
-  return detail::ufunc_unary(x, [](const T &v) {
-    if (v > T{0})
-      return T{1};
-    if (v < T{0})
-      return T{-1};
-    return T{0};
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto sign(const ndarray<T> &x) -> ndarray<T> {
+  return detail::ufunc_unary(x, [](const T &v) -> T {
+    if constexpr (detail::is_complex_v<T>) {
+      if (v == T{0}) {
+        return T{0};
+      }
+      return v / std::abs(v);
+    } else if constexpr (std::is_floating_point_v<T>) {
+      if (std::isnan(v)) {
+        return v;
+      }
+      if (v > T{0}) {
+        return T{1};
+      }
+      if (v < T{0}) {
+        return T{-1};
+      }
+      return T{0};
+    } else {
+      if (v > T{0}) {
+        return T{1};
+      }
+      if (v < T{0}) {
+        return T{-1};
+      }
+      return T{0};
+    }
+  });
+}
+
+/** @brief sign() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto sign(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out, [](const T &v) -> T {
+    if constexpr (detail::is_complex_v<T>) {
+      if (v == T{0}) {
+        return T{0};
+      }
+      return v / std::abs(v);
+    } else if constexpr (std::is_floating_point_v<T>) {
+      if (std::isnan(v)) {
+        return v;
+      }
+      if (v > T{0}) {
+        return T{1};
+      }
+      if (v < T{0}) {
+        return T{-1};
+      }
+      return T{0};
+    } else {
+      if (v > T{0}) {
+        return T{1};
+      }
+      if (v < T{0}) {
+        return T{-1};
+      }
+      return T{0};
+    }
   });
 }
 
@@ -596,11 +1245,24 @@ NP_API template <typename T> NP_NODISCARD auto sign(const ndarray<T> &x) -> ndar
  * @param x2  Second input array.
  * @return    ndarray<std::common_type_t<T, U>> with max(x1[i], x2[i]).
  */
-NP_API template <typename T, typename U>
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
 NP_NODISCARD auto maximum(const ndarray<T> &x1, const ndarray<U> &x2)
     -> ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
-  return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
+  return detail::elementwise(x1, x2, [](const T &a, const U &b) {
+    return static_cast<R>(std::max(a, b));
+  });
+}
+
+/** @brief maximum() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+auto maximum(const ndarray<T> &x1, const ndarray<U> &x2,
+             ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(x1, x2, out, [](const T &a, const U &b) {
     return static_cast<R>(std::max(a, b));
   });
 }
@@ -613,11 +1275,24 @@ NP_NODISCARD auto maximum(const ndarray<T> &x1, const ndarray<U> &x2)
  * @param x2  Second input array.
  * @return    ndarray<std::common_type_t<T, U>> with min(x1[i], x2[i]).
  */
-NP_API template <typename T, typename U>
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
 NP_NODISCARD auto minimum(const ndarray<T> &x1, const ndarray<U> &x2)
     -> ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
-  return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
+  return detail::elementwise(x1, x2, [](const T &a, const U &b) {
+    return static_cast<R>(std::min(a, b));
+  });
+}
+
+/** @brief minimum() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+auto minimum(const ndarray<T> &x1, const ndarray<U> &x2,
+             ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(x1, x2, out, [](const T &a, const U &b) {
     return static_cast<R>(std::min(a, b));
   });
 }
@@ -632,11 +1307,24 @@ NP_NODISCARD auto minimum(const ndarray<T> &x1, const ndarray<U> &x2)
  * @param x2  Second input array.
  * @return    ndarray<std::common_type_t<T, U>>.
  */
-NP_API template <typename T, typename U>
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
 NP_NODISCARD auto fmax(const ndarray<T> &x1, const ndarray<U> &x2)
     -> ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
-  return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
+  return detail::elementwise(x1, x2, [](const T &a, const U &b) {
+    return static_cast<R>(std::fmax(a, b));
+  });
+}
+
+/** @brief fmax() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+auto fmax(const ndarray<T> &x1, const ndarray<U> &x2,
+          ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(x1, x2, out, [](const T &a, const U &b) {
     return static_cast<R>(std::fmax(a, b));
   });
 }
@@ -651,11 +1339,24 @@ NP_NODISCARD auto fmax(const ndarray<T> &x1, const ndarray<U> &x2)
  * @param x2  Second input array.
  * @return    ndarray<std::common_type_t<T, U>>.
  */
-NP_API template <typename T, typename U>
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
 NP_NODISCARD auto fmin(const ndarray<T> &x1, const ndarray<U> &x2)
     -> ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
-  return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
+  return detail::elementwise(x1, x2, [](const T &a, const U &b) {
+    return static_cast<R>(std::fmin(a, b));
+  });
+}
+
+/** @brief fmin() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+auto fmin(const ndarray<T> &x1, const ndarray<U> &x2,
+          ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(x1, x2, out, [](const T &a, const U &b) {
     return static_cast<R>(std::fmin(a, b));
   });
 }
@@ -671,11 +1372,24 @@ NP_NODISCARD auto fmin(const ndarray<T> &x1, const ndarray<U> &x2)
  * @param x2  Divisor array.
  * @return    ndarray<std::common_type_t<T, U>> with x1[i] % x2[i].
  */
-NP_API template <typename T, typename U>
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
 NP_NODISCARD auto fmod(const ndarray<T> &x1, const ndarray<U> &x2)
     -> ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
-  return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
+  return detail::elementwise(x1, x2, [](const T &a, const U &b) {
+    return static_cast<R>(std::fmod(a, b));
+  });
+}
+
+/** @brief fmod() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+auto fmod(const ndarray<T> &x1, const ndarray<U> &x2,
+          ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(x1, x2, out, [](const T &a, const U &b) {
     return static_cast<R>(std::fmod(a, b));
   });
 }
@@ -691,27 +1405,41 @@ NP_NODISCARD auto fmod(const ndarray<T> &x1, const ndarray<U> &x2)
  * @param x2  Divisor array.
  * @return    ndarray<std::common_type_t<T, U>> with remainder(x1[i], x2[i]).
  */
-NP_API template <typename T, typename U>
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
 NP_NODISCARD auto remainder(const ndarray<T> &x1, const ndarray<U> &x2)
     -> ndarray<std::common_type_t<T, U>> {
   using R = std::common_type_t<T, U>;
-  return detail::ufunc_binary(x1, x2, [](const T &a, const U &b) {
+  return detail::elementwise(x1, x2, [](const T &a, const U &b) {
     return static_cast<R>(std::remainder(a, b));
   });
 }
 
-/** @brief Alias for remainder().
- *
- * @tparam T  Element type of x1.
- * @tparam U  Element type of x2.
- * @param x1  Dividend array.
- * @param x2  Divisor array.
- * @return    ndarray<std::common_type_t<T, U>> with remainder(x1[i], x2[i]).
- */
-NP_API template <typename T, typename U>
+/** @brief remainder() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+auto remainder(const ndarray<T> &x1, const ndarray<U> &x2,
+               ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(x1, x2, out, [](const T &a, const U &b) {
+    return static_cast<R>(std::remainder(a, b));
+  });
+}
+
+/** @brief Alias for remainder(). */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
 NP_NODISCARD auto mod(const ndarray<T> &x1, const ndarray<U> &x2)
     -> ndarray<std::common_type_t<T, U>> {
   return remainder(x1, x2);
+}
+
+/** @brief mod() writing into `out`. */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+auto mod(const ndarray<T> &x1, const ndarray<U> &x2,
+         ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  return remainder(x1, x2, out);
 }
 
 /** @brief Return the reciprocal of the argument, element-wise.
@@ -724,8 +1452,17 @@ NP_NODISCARD auto mod(const ndarray<T> &x1, const ndarray<U> &x2)
  * @param x   Input array.
  * @return    ndarray<T> with 1/x[i].
  */
-NP_API template <typename T> NP_NODISCARD auto reciprocal(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto reciprocal(const ndarray<T> &x) -> ndarray<T> {
   return detail::ufunc_unary(x, [](const T &v) { return T{1} / v; });
+}
+
+/** @brief reciprocal() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto reciprocal(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out,
+                                  [](const T &v) { return T{1} / v; });
 }
 
 /** @brief Numerical positive, element-wise.
@@ -736,8 +1473,16 @@ NP_API template <typename T> NP_NODISCARD auto reciprocal(const ndarray<T> &x) -
  * @param x   Input array.
  * @return    Copy of x.
  */
-NP_API template <typename T> NP_NODISCARD auto positive(const ndarray<T> &x) -> ndarray<T> {
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto positive(const ndarray<T> &x) -> ndarray<T> {
   return x.copy();
+}
+
+/** @brief positive() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto positive(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out, [](const T &v) { return v; });
 }
 
 /** @brief Numerical negative, element-wise.
@@ -746,8 +1491,243 @@ NP_API template <typename T> NP_NODISCARD auto positive(const ndarray<T> &x) -> 
  * @param x   Input array.
  * @return    ndarray<T> with -x[i].
  */
-NP_API template <typename T> NP_NODISCARD auto negative(const ndarray<T> &x) -> ndarray<T> {
-  return -x;
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto negative(const ndarray<T> &x) -> ndarray<T> {
+  return detail::ufunc_unary(x, [](const T &v) { return -v; });
+}
+
+/** @brief negative() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Numeric T>
+auto negative(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out, [](const T &v) { return -v; });
+}
+
+/** @brief Element-wise change of sign of x1 to that of x2 (copysign).
+ *
+ * @tparam T  Element type of x1.
+ * @tparam U  Element type of x2.
+ * @param x1  Array whose magnitude is kept.
+ * @param x2  Array whose sign is used.
+ * @return    ndarray<std::common_type_t<T, U>> with copysign(x1, x2).
+ */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+NP_NODISCARD auto copysign(const ndarray<T> &x1, const ndarray<U> &x2)
+    -> ndarray<std::common_type_t<T, U>> {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise(x1, x2, [](const T &a, const U &b) {
+    return static_cast<R>(
+        std::copysign(static_cast<double>(a), static_cast<double>(b)));
+  });
+}
+
+/** @brief copysign() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+auto copysign(const ndarray<T> &x1, const ndarray<U> &x2,
+              ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(x1, x2, out, [](const T &a, const U &b) {
+    return static_cast<R>(
+        std::copysign(static_cast<double>(a), static_cast<double>(b)));
+  });
+}
+
+/** @brief Element-wise logaddexp: log(exp(x1) + exp(x2)).
+ *
+ * Computed as max(x,y) + log1p(exp(-|x-y|)) for stability. Both
+ * +inf and both -inf inputs are preserved exactly.
+ *
+ * @tparam T  Element type of x1.
+ * @tparam U  Element type of x2.
+ * @param x1  First input array.
+ * @param x2  Second input array.
+ * @return    ndarray<std::common_type_t<T, U>>.
+ */
+NP_API template <detail::FloatingPoint T, detail::FloatingPoint U>
+NP_NODISCARD auto logaddexp(const ndarray<T> &x1, const ndarray<U> &x2)
+    -> ndarray<std::common_type_t<T, U>> {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise(x1, x2, [](const T &a, const U &b) -> R {
+    const R x = static_cast<R>(a);
+    const R y = static_cast<R>(b);
+    if (std::isinf(x) && x == y) {
+      return x;
+    }
+    const R m = std::max(x, y);
+    return m + std::log1p(std::exp(-std::fabs(x - y)));
+  });
+}
+
+/** @brief logaddexp() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::FloatingPoint T, detail::FloatingPoint U>
+auto logaddexp(const ndarray<T> &x1, const ndarray<U> &x2,
+               ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(x1, x2, out, [](const T &a, const U &b) -> R {
+    const R x = static_cast<R>(a);
+    const R y = static_cast<R>(b);
+    if (std::isinf(x) && x == y) {
+      return x;
+    }
+    const R m = std::max(x, y);
+    return m + std::log1p(std::exp(-std::fabs(x - y)));
+  });
+}
+
+/** @brief Element-wise log2(exp2(x1) + exp2(x2)).
+ *
+ * Computed as max(x,y) + log1p(exp2(-|x-y|))/ln(2) for stability.
+ * Both +inf and both -inf inputs are preserved exactly.
+ *
+ * @tparam T  Element type of x1.
+ * @tparam U  Element type of x2.
+ * @param x1  First input array.
+ * @param x2  Second input array.
+ * @return    ndarray<std::common_type_t<T, U>>.
+ */
+NP_API template <detail::FloatingPoint T, detail::FloatingPoint U>
+NP_NODISCARD auto logaddexp2(const ndarray<T> &x1, const ndarray<U> &x2)
+    -> ndarray<std::common_type_t<T, U>> {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise(x1, x2, [](const T &a, const U &b) -> R {
+    const R x = static_cast<R>(a);
+    const R y = static_cast<R>(b);
+    if (std::isinf(x) && x == y) {
+      return x;
+    }
+    const R m = std::max(x, y);
+    return m + std::log1p(std::exp2(-std::fabs(x - y))) /
+                   std::numbers::ln2_v<R>;
+  });
+}
+
+/** @brief logaddexp2() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::FloatingPoint T, detail::FloatingPoint U>
+auto logaddexp2(const ndarray<T> &x1, const ndarray<U> &x2,
+                ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(x1, x2, out, [](const T &a, const U &b) -> R {
+    const R x = static_cast<R>(a);
+    const R y = static_cast<R>(b);
+    if (std::isinf(x) && x == y) {
+      return x;
+    }
+    const R m = std::max(x, y);
+    return m + std::log1p(std::exp2(-std::fabs(x - y))) /
+                   std::numbers::ln2_v<R>;
+  });
+}
+
+/** @brief Element-wise true division: x1 / x2.
+ *
+ * Mirrors the library's operator/ semantics (element-wise a/b
+ * promoted to the common type). For same-typed contiguous float/
+ * double arrays a vectorized SIMD kernel is used.
+ *
+ * @tparam T  Element type of x1.
+ * @tparam U  Element type of x2.
+ * @param x1  Dividend array.
+ * @param x2  Divisor array.
+ * @return    ndarray<std::common_type_t<T, U>> with x1[i] / x2[i].
+ */
+NP_API template <detail::Numeric T, detail::Numeric U>
+NP_NODISCARD auto divide(const ndarray<T> &x1, const ndarray<U> &x2)
+    -> ndarray<std::common_type_t<T, U>> {
+  using R = std::common_type_t<T, U>;
+  if constexpr (std::is_same_v<T, U> &&
+                (std::is_same_v<T, float> || std::is_same_v<T, double>)) {
+    if (x1.is_contiguous() && x2.is_contiguous() && x1.shape == x2.shape) {
+      ndarray<R> result(x1.shape, dtype_of<R>);
+      if (result.size() > 0) {
+        np::simd::div_vectorized(x1.data().data(), x2.data().data(),
+                                 result.data().data(), result.size());
+      }
+      return result;
+    }
+  }
+  return detail::elementwise(x1, x2, [](const T &a, const U &b) {
+    return static_cast<R>(a / b);
+  });
+}
+
+/** @brief divide() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Numeric T, detail::Numeric U>
+auto divide(const ndarray<T> &x1, const ndarray<U> &x2,
+            ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  if constexpr (std::is_same_v<T, U> &&
+                (std::is_same_v<T, float> || std::is_same_v<T, double>)) {
+    if (x1.is_contiguous() && x2.is_contiguous() && out.is_contiguous() &&
+        out.shape == x1.shape && x1.shape == x2.shape) {
+      if (out.size() > 0) {
+        np::simd::div_vectorized(x1.data().data(), x2.data().data(),
+                                 out.data().data(), out.size());
+      }
+      return out;
+    }
+  }
+  return detail::elementwise_into(x1, x2, out, [](const T &a, const U &b) {
+    return static_cast<R>(a / b);
+  });
+}
+
+/** @brief Alias for divide() (element-wise x1 / x2). */
+NP_API template <detail::Numeric T, detail::Numeric U>
+NP_NODISCARD auto true_divide(const ndarray<T> &x1, const ndarray<U> &x2)
+    -> ndarray<std::common_type_t<T, U>> {
+  return divide(x1, x2);
+}
+
+/** @brief true_divide() writing into `out`. */
+NP_API template <detail::Numeric T, detail::Numeric U>
+auto true_divide(const ndarray<T> &x1, const ndarray<U> &x2,
+                 ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  return divide(x1, x2, out);
+}
+
+/** @brief Element-wise floor division: floor(x1 / x2).
+ *
+ * Matches numpy.floor_divide semantics (and the library's
+ * floordiv()): the floor of the quotient, with the C-flavored
+ * behavior adjusted for mismatched signs.
+ *
+ * @tparam T  Element type of x1.
+ * @tparam U  Element type of x2.
+ * @param x1  Dividend array.
+ * @param x2  Divisor array.
+ * @return    ndarray<std::common_type_t<T, U>> with floor(x1 / x2).
+ */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+NP_NODISCARD auto floor_divide(const ndarray<T> &x1, const ndarray<U> &x2)
+    -> ndarray<std::common_type_t<T, U>> {
+  return detail::elementwise(x1, x2, [](const T &a, const U &b) {
+    return detail::floored_div(a, b);
+  });
+}
+
+/** @brief floor_divide() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Arithmetic T, detail::Arithmetic U>
+auto floor_divide(const ndarray<T> &x1, const ndarray<U> &x2,
+                  ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  return detail::elementwise_into(x1, x2, out, [](const T &a, const U &b) {
+    return detail::floored_div(a, b);
+  });
 }
 
 // =================================================================
@@ -780,7 +1760,7 @@ NP_NODISCARD auto clip(const ndarray<T> &x, const T &a_min, const T &a_max) -> n
  * @param neginf_val Replacement for -inf (default: lowest finite value).
  * @return         ndarray<T> with replaced values.
  */
-NP_API template <typename T>
+NP_API template <detail::Arithmetic T>
 NP_NODISCARD auto nan_to_num(const ndarray<T> &x, const T &nan_val = T{0},
                 const T &posinf_val = std::numeric_limits<T>::max(),
                 const T &neginf_val = std::numeric_limits<T>::lowest())
@@ -795,10 +1775,29 @@ NP_NODISCARD auto nan_to_num(const ndarray<T> &x, const T &nan_val = T{0},
   });
 }
 
-/** @brief Return (x1 * x2 + x3) element-wise.
+/** @brief nan_to_num() writing into `out`. Same shape as `x`.
+ * @throws std::invalid_argument if `out.shape` differs from `x.shape`. */
+NP_API template <detail::Arithmetic T>
+auto nan_to_num(const ndarray<T> &x, ndarray<T> &out, const T &nan_val,
+                const T &posinf_val, const T &neginf_val) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out, [=](const T &v) {
+    if (std::isnan(v))
+      return nan_val;
+    if (std::isinf(v)) {
+      return v > T{0} ? posinf_val : neginf_val;
+    }
+    return v;
+  });
+}
+
+/** @brief Return (x1 * x2 + x3) element-wise, with a single
+ *         fused multiply-add per element when supported.
  *
- * Fused multiply-add with broadcasting. All three arrays
- * must be broadcast-compatible.
+ * For floating-point common types the CPU fused multiply-add
+ * instruction is used (std::fma), so each element is computed in
+ * a single rounding step (matching numpy.fma). Integral and
+ * complex types fall back to x1*x2 + x3. All three arrays must be
+ * broadcast-compatible.
  *
  * @tparam T  Element type of x1.
  * @tparam U  Element type of x2.
@@ -808,15 +1807,40 @@ NP_NODISCARD auto nan_to_num(const ndarray<T> &x, const T &nan_val = T{0},
  * @param x3  Addend.
  * @return    ndarray<std::common_type_t<T, U, V>>.
  */
-NP_API template <typename T, typename U, typename V>
-NP_NODISCARD auto fma(const ndarray<T> &x1, const ndarray<U> &x2, const ndarray<V> &x3)
+NP_API template <detail::Numeric T, detail::Numeric U, detail::Numeric V>
+NP_NODISCARD auto fma(const ndarray<T> &x1, const ndarray<U> &x2,
+                      const ndarray<V> &x3)
     -> ndarray<std::common_type_t<T, U, V>> {
   using R = std::common_type_t<T, U, V>;
-  // Broadcast all three arrays
-  auto temp = detail::ufunc_binary(
-      x1, x2, [](const T &a, const U &b) { return static_cast<R>(a * b); });
-  return detail::ufunc_binary(
-      temp, x3, [](const R &a, const V &b) { return a + static_cast<R>(b); });
+  return detail::ufunc_ternary(x1, x2, x3, [](const T &a, const U &b,
+                                              const V &c) -> R {
+    if constexpr (std::is_floating_point_v<R>) {
+      return static_cast<R>(
+          std::fma(static_cast<R>(a), static_cast<R>(b), static_cast<R>(c)));
+    } else {
+      return static_cast<R>(a) * static_cast<R>(b) + static_cast<R>(c);
+    }
+  });
+}
+
+/** @brief fma() writing into `out`. Must match broadcast shape.
+ * @throws std::invalid_argument if shapes cannot be broadcast
+ *         or if `out.shape` differs from the broadcast shape. */
+NP_API template <detail::Numeric T, detail::Numeric U, detail::Numeric V>
+auto fma(const ndarray<T> &x1, const ndarray<U> &x2, const ndarray<V> &x3,
+         ndarray<std::common_type_t<T, U, V>> &out)
+    -> ndarray<std::common_type_t<T, U, V>> & {
+  using R = std::common_type_t<T, U, V>;
+  return detail::ufunc_ternary_into(x1, x2, x3, out, [](const T &a,
+                                                        const U &b,
+                                                        const V &c) -> R {
+    if constexpr (std::is_floating_point_v<R>) {
+      return static_cast<R>(
+          std::fma(static_cast<R>(a), static_cast<R>(b), static_cast<R>(c)));
+    } else {
+      return static_cast<R>(a) * static_cast<R>(b) + static_cast<R>(c);
+    }
+  });
 }
 
 } // namespace np

@@ -126,7 +126,7 @@ NP_NODISCARD constexpr ndarrayf<T, E...> full(const T &fill_value) {
  */
 NP_API template <std::size_t N, std::size_t M = N, int k = 0,
                  typename T = double>
-NP_NODISCARD constexpr ndarrayf<T, N, M> eye() {
+NP_NODISCARD constexpr auto eye() -> ndarrayf<T, N, M> {
   ndarrayf<T, N, M> out{};
   const std::ptrdiff_t kk = k;
   for (std::size_t i = 0; i < N; ++i) {

@@ -4,7 +4,9 @@
  *
  * Provides scalar and axis-aware reductions on np::ndarray mirroring
  * numpy: median, percentile, quantile, average, ptp, corrcoef, cov,
- * histogram, bincount, digitize and the NaN-skipping nan* family.
+ * histogram, bincount, digitize and the NaN-skipping nan* family
+ * (nanmin, nanmax, nansum, nanprod, nanmean, nanvar, nanstd, nanmedian,
+ * nanpercentile, nanquantile, nanargmin, nanargmax, nancumsum, nancumprod).
  *
  * Axis convention matches np::ndarray's member reductions:
  *  - the no-axis overload reduces over the whole (flattened) array and
@@ -153,6 +155,46 @@ template <typename T> constexpr bool is_nan_elem(const T &v) {
     (void)v;
     return false;
   }
+}
+
+/**
+ * @brief Same-shape cumulative reduction along `axis`.
+ *
+ * Walks each slice along `axis` in order, applying `step(acc, v)` for
+ * every non-NaN element and writing the current `acc` at every position
+ * (NaN holds the running value, NumPy nancumsum/nancumprod semantics).
+ * Output element type is `R`.
+ */
+template <typename R, typename T, typename Step>
+[[nodiscard]] ndarray<R> cum_axis_map(const ndarray<T> &arr, int axis, R init,
+                                      Step &&step) {
+  axis = stat_normalize_axis(axis, arr.ndim(), "np::nancum*");
+  const std::size_t nd = static_cast<std::size_t>(arr.ndim());
+  const std::size_t alen = static_cast<std::size_t>(arr.shape[axis]);
+  std::vector<int> red_shape = arr.shape;
+  red_shape.erase(red_shape.begin() + axis);
+
+  ndarray<R> out(arr.shape);
+  Odometer od(red_shape);
+  std::vector<std::size_t> full(nd, 0);
+  while (!od.done()) {
+    const auto &red = od.idx();
+    for (std::size_t d = 0, r = 0; d < nd; ++d) {
+      full[d] = (static_cast<int>(d) == axis) ? 0 : red[r++];
+    }
+    R running = init;
+    for (std::size_t a = 0; a < alen; ++a) {
+      full[static_cast<std::size_t>(axis)] = a;
+      const T v = arr.get(full);
+      if (!is_nan_elem(v)) {
+        step(running, v);
+      }
+      const std::size_t flat = row_major_offset(full, out.shape);
+      out.data()[flat] = running;
+    }
+    od.advance();
+  }
+  return out;
 }
 
 } // namespace detail
@@ -694,6 +736,239 @@ NP_NODISCARD auto nanquantile(const ndarray<T> &arr, const Q &q, int axis)
     throw std::invalid_argument("nanquantile: q must be in [0, 1]");
   }
   return nanpercentile(arr, p * 100.0, axis);
+}
+
+// =================================================================
+// nanargmin / nanargmax (NaN-skipping index reductions)
+// =================================================================
+
+/**
+ * @brief Index of the smallest element, ignoring NaN (flattened).
+ *
+ * Reference:
+ * https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html
+ *
+ * The returned index is into the flattened array; the first occurrence
+ * of the minimum wins. Integer/bool inputs have no NaN so this matches
+ * `ndarray::argmin`.
+ *
+ * @throws std::invalid_argument if every element is NaN.
+ */
+NP_API template <typename T>
+NP_NODISCARD std::size_t nanargmin(const ndarray<T> &arr) {
+  bool any = false;
+  T best{};
+  std::size_t best_idx = 0;
+  std::size_t pos = 0;
+  for (auto it = arr.begin(); it != arr.end(); ++it, ++pos) {
+    if (detail::is_nan_elem(*it))
+      continue;
+    if (!any || *it < best) {
+      best = *it;
+      best_idx = pos;
+      any = true;
+    }
+  }
+  if (!any) {
+    throw std::invalid_argument("nanargmin: all-NaN slice");
+  }
+  return best_idx;
+}
+
+/**
+ * @brief Indices of the smallest elements along an axis, ignoring NaN.
+ *
+ * Reference:
+ * https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html
+ *
+ * @throws std::invalid_argument if a slice is all-NaN.
+ * @throws np::AxisError if `axis` is out of bounds.
+ */
+NP_API template <typename T>
+NP_NODISCARD auto nanargmin(const ndarray<T> &arr, int axis)
+    -> ndarray<std::size_t> {
+  return detail::stat_axis_map<std::size_t>(
+      arr, axis, [](const std::vector<T> &slice) -> std::size_t {
+        bool any = false;
+        T best{};
+        std::size_t best_idx = 0;
+        for (std::size_t p = 0; p < slice.size(); ++p) {
+          if (detail::is_nan_elem(slice[p]))
+            continue;
+          if (!any || slice[p] < best) {
+            best = slice[p];
+            best_idx = p;
+            any = true;
+          }
+        }
+        if (!any) {
+          throw std::invalid_argument("nanargmin: all-NaN slice");
+        }
+        return best_idx;
+      });
+}
+
+/**
+ * @brief Index of the largest element, ignoring NaN (flattened).
+ *
+ * Reference:
+ * https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html
+ *
+ * The returned index is into the flattened array; the first occurrence
+ * of the maximum wins. Integer/bool inputs have no NaN so this matches
+ * `ndarray::argmax`.
+ *
+ * @throws std::invalid_argument if every element is NaN.
+ */
+NP_API template <typename T>
+NP_NODISCARD std::size_t nanargmax(const ndarray<T> &arr) {
+  bool any = false;
+  T best{};
+  std::size_t best_idx = 0;
+  std::size_t pos = 0;
+  for (auto it = arr.begin(); it != arr.end(); ++it, ++pos) {
+    if (detail::is_nan_elem(*it))
+      continue;
+    if (!any || *it > best) {
+      best = *it;
+      best_idx = pos;
+      any = true;
+    }
+  }
+  if (!any) {
+    throw std::invalid_argument("nanargmax: all-NaN slice");
+  }
+  return best_idx;
+}
+
+/**
+ * @brief Indices of the largest elements along an axis, ignoring NaN.
+ *
+ * Reference:
+ * https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html
+ *
+ * @throws std::invalid_argument if a slice is all-NaN.
+ * @throws np::AxisError if `axis` is out of bounds.
+ */
+NP_API template <typename T>
+NP_NODISCARD auto nanargmax(const ndarray<T> &arr, int axis)
+    -> ndarray<std::size_t> {
+  return detail::stat_axis_map<std::size_t>(
+      arr, axis, [](const std::vector<T> &slice) -> std::size_t {
+        bool any = false;
+        T best{};
+        std::size_t best_idx = 0;
+        for (std::size_t p = 0; p < slice.size(); ++p) {
+          if (detail::is_nan_elem(slice[p]))
+            continue;
+          if (!any || slice[p] > best) {
+            best = slice[p];
+            best_idx = p;
+            any = true;
+          }
+        }
+        if (!any) {
+          throw std::invalid_argument("nanargmax: all-NaN slice");
+        }
+        return best_idx;
+      });
+}
+
+// =================================================================
+// nancumsum / nancumprod (NaN-skipping cumulative reductions)
+// =================================================================
+
+/**
+ * @brief Cumulative sum over all elements (flattened), ignoring NaN.
+ *
+ * Reference:
+ * https://numpy.org/doc/stable/reference/generated/numpy.nancumsum.html
+ *
+ * NaNs are treated as zero: the running sum is unchanged while NaN
+ * positions are encountered, and leading NaNs are replaced by zeros.
+ * The result is 1-D with the same number of elements as `arr`. The
+ * dtype follows np::nansum (integer/bool input promotes to double).
+ */
+NP_API template <typename T>
+NP_NODISCARD auto nancumsum(const ndarray<T> &arr)
+    -> ndarray<typename np::_mean_type<T>::type> {
+  using R = typename np::_mean_type<T>::type;
+  ndarray<R> out(std::vector<int>{static_cast<int>(arr.size())});
+  R running = R{};
+  std::size_t i = 0;
+  for (auto it = arr.begin(); it != arr.end(); ++it) {
+    if (!detail::is_nan_elem(*it)) {
+      running += static_cast<R>(*it);
+    }
+    out.data()[i++] = running;
+  }
+  return out;
+}
+
+/**
+ * @brief Cumulative sum along an axis, ignoring NaN.
+ *
+ * Reference:
+ * https://numpy.org/doc/stable/reference/generated/numpy.nancumsum.html
+ *
+ * Returns an array with the same shape as `arr`. NaNs are treated as
+ * zero (the running sum is unchanged while NaN positions are met).
+ *
+ * @throws np::AxisError if `axis` is out of bounds.
+ */
+NP_API template <typename T>
+NP_NODISCARD auto nancumsum(const ndarray<T> &arr, int axis)
+    -> ndarray<typename np::_mean_type<T>::type> {
+  using R = typename np::_mean_type<T>::type;
+  return detail::cum_axis_map<R>(
+      arr, axis, R{}, [](R &acc, const T &v) { acc += static_cast<R>(v); });
+}
+
+/**
+ * @brief Cumulative product over all elements (flattened), ignoring NaN.
+ *
+ * Reference:
+ * https://numpy.org/doc/stable/reference/generated/numpy.nancumprod.html
+ *
+ * NaNs are treated as one: the running product is unchanged while NaN
+ * positions are encountered, and leading NaNs are replaced by ones.
+ * The result is 1-D with the same number of elements as `arr`.
+ */
+NP_API template <typename T>
+NP_NODISCARD auto nancumprod(const ndarray<T> &arr)
+    -> ndarray<typename np::_mean_type<T>::type> {
+  using R = typename np::_mean_type<T>::type;
+  ndarray<R> out(std::vector<int>{static_cast<int>(arr.size())});
+  R running = static_cast<R>(1);
+  std::size_t i = 0;
+  for (auto it = arr.begin(); it != arr.end(); ++it) {
+    if (!detail::is_nan_elem(*it)) {
+      running = static_cast<R>(running * static_cast<R>(*it));
+    }
+    out.data()[i++] = running;
+  }
+  return out;
+}
+
+/**
+ * @brief Cumulative product along an axis, ignoring NaN.
+ *
+ * Reference:
+ * https://numpy.org/doc/stable/reference/generated/numpy.nancumprod.html
+ *
+ * Returns an array with the same shape as `arr`. NaNs are treated as
+ * one (the running product is unchanged while NaN positions are met).
+ *
+ * @throws np::AxisError if `axis` is out of bounds.
+ */
+NP_API template <typename T>
+NP_NODISCARD auto nancumprod(const ndarray<T> &arr, int axis)
+    -> ndarray<typename np::_mean_type<T>::type> {
+  using R = typename np::_mean_type<T>::type;
+  return detail::cum_axis_map<R>(
+      arr, axis, static_cast<R>(1), [](R &acc, const T &v) {
+        acc = static_cast<R>(acc * static_cast<R>(v));
+      });
 }
 
 /**
