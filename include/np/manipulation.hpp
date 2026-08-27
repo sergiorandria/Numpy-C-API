@@ -1729,6 +1729,80 @@ namespace np
     return a.swapaxes(axis1, axis2);
   }
 
+  // Normal comment: select and place
+
+  NP_API template <typename T>
+  NP_NODISCARD auto select(
+      const std::vector<ndarray<bool>>& condlist,
+      const std::vector<ndarray<T>>& choicelist,
+      T default_val = T{0}) -> ndarray<T>
+  {
+    if (condlist.size() != choicelist.size())
+      throw std::invalid_argument("select: condlist and choicelist size mismatch");
+    if (condlist.empty())
+      throw std::invalid_argument("select: empty condlist");
+    std::vector<int> shape = condlist[0].shape;
+    for (auto& c : condlist)
+      if (c.shape != shape)
+        throw std::invalid_argument("select: condlist shapes must match");
+    for (auto& ch : choicelist)
+      if (ch.shape != shape)
+        throw std::invalid_argument(
+            "select: choicelist shapes must match condlist shape");
+    ndarray<T> out(shape);
+    detail::Odometer od(shape);
+    while (!od.done())
+    {
+      const auto& idx = od.idx();
+      bool found = false;
+      for (std::size_t k = 0; k < condlist.size(); ++k)
+      {
+        if (condlist[k].get(idx))
+        {
+          out.set(idx, choicelist[k].get(idx));
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+        out.set(idx, default_val);
+      od.advance();
+    }
+    return out;
+  }
+
+  NP_API template <typename T>
+  void place(ndarray<T>& arr, const ndarray<bool>& mask, const ndarray<T>& vals)
+  {
+    if (arr.shape != mask.shape)
+      throw std::invalid_argument("place: arr and mask shape mismatch");
+    if (vals.size() == 0)
+      throw std::invalid_argument("place: vals empty");
+    std::size_t v_idx = 0;
+    detail::Odometer od(arr.shape);
+    while (!od.done())
+    {
+      const auto& idx = od.idx();
+      if (mask.get(idx))
+      {
+        arr.set(idx, vals.data()[vals._flat_logical(v_idx % vals.size())]);
+        ++v_idx;
+      }
+      od.advance();
+    }
+  }
+
+  NP_API template <typename T>
+  void place(ndarray<T>& arr, const ndarray<bool>& mask, const std::vector<T>& vals)
+  {
+    if (vals.empty())
+      throw std::invalid_argument("place: vals empty");
+    ndarray<T> v(std::vector<int>{static_cast<int>(vals.size())});
+    for (std::size_t i = 0; i < vals.size(); ++i)
+      v.data()[i] = vals[i];
+    place(arr, mask, v);
+  }
+
 } // namespace np
 
 #endif // NP_MANIPULATION_HPP

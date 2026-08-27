@@ -977,6 +977,60 @@ namespace np
     return out;
   }
 
+  // Normal comment: remaining index helpers
+
+  NP_API inline auto diag_indices_from(const ndarray<int>& arr)
+      -> std::vector<ndarray<int>>
+  {
+    if (arr.ndim() < 2)
+      throw std::invalid_argument("diag_indices_from: need at least 2-D");
+    int n = std::min(arr.shape[0], arr.shape[1]);
+    return diag_indices(n, 2);
+  }
+
+  NP_API inline auto tril_indices_from(const ndarray<int>& arr, int k = 0)
+      -> std::pair<ndarray<int>, ndarray<int>>
+  {
+    if (arr.ndim() != 2)
+      throw std::invalid_argument("tril_indices_from: need 2-D");
+    return tril_indices(arr.shape[0], k, arr.shape[1]);
+  }
+
+  NP_API inline auto triu_indices_from(const ndarray<int>& arr, int k = 0)
+      -> std::pair<ndarray<int>, ndarray<int>>
+  {
+    if (arr.ndim() != 2)
+      throw std::invalid_argument("triu_indices_from: need 2-D");
+    return triu_indices(arr.shape[0], k, arr.shape[1]);
+  }
+
+  // Normal comment: mgrid / ogrid dense and sparse meshgrids
+
+  NP_API inline auto mgrid(const std::vector<std::pair<int, int>>& ranges)
+      -> std::vector<ndarray<int>>
+  {
+    std::vector<ndarray<int>> axes;
+    axes.reserve(ranges.size());
+    for (auto& r : ranges)
+      axes.push_back(arange(r.first, r.second));
+    return meshgrid(axes, "ij");
+  }
+
+  NP_API inline auto ogrid(const std::vector<std::pair<int, int>>& ranges)
+      -> std::vector<ndarray<int>>
+  {
+    std::vector<ndarray<int>> out;
+    out.reserve(ranges.size());
+    for (std::size_t i = 0; i < ranges.size(); ++i)
+    {
+      auto arr = arange(ranges[i].first, ranges[i].second);
+      std::vector<int> shape(ranges.size(), 1);
+      shape[i] = static_cast<int>(arr.size());
+      out.push_back(arr.reshape(shape));
+    }
+    return out;
+  }
+
 } // namespace np
 
 #endif // NP_CREATION_HPP
