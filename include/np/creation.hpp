@@ -21,6 +21,7 @@
 #include <concepts>
 #include <cstddef>
 #include <initializer_list>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -50,16 +51,19 @@ namespace np
 #endif
 
   template <typename T>
-  concept Fillable = std::is_copy_constructible_v<T> && std::is_default_constructible_v<T>;
+  concept Fillable =
+      std::is_copy_constructible_v<T> && std::is_default_constructible_v<T>;
 
   // Standard zeros method
   NP_API template <Fillable T = double>
   NP_NODISCARD auto zeros(const std::vector<int>& shape) -> ndarray<T>
   {
     constexpr bool is_void = (dtype_of<T> == dtype::void_);
-    static_assert(!is_void || std::is_class_v<T>,
-                  "zeros: T has no dtype mapping – will be stored as object_/void_ with sizeof(T) storage. "
-                  "Define cxx_to_np_type specialization or use dtype::object_ explicitly");
+    static_assert(
+        !is_void || std::is_class_v<T>,
+        "zeros: T has no dtype mapping – will be stored as object_/void_ with sizeof(T) "
+        "storage. "
+        "Define cxx_to_np_type specialization or use dtype::object_ explicitly");
     dtype d = (dtype_of<T> == dtype::void_ ? dtype::object_ : dtype_of<T>);
     return ndarray<T>(shape, d, T{0});
   }
@@ -99,8 +103,8 @@ namespace np
   // Compatible with every C++ array like structure
   template <typename T = double, std::ranges::input_range R>
     requires(!std::is_same_v<std::decay_t<R>, std::vector<int>>)
-          && (!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
-          && std::convertible_to<std::ranges::range_value_t<R>, int>
+      && (!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
+      && std::convertible_to<std::ranges::range_value_t<R>, int>
   NP_NODISCARD auto zeros(const R& shape) -> ndarray<T>
   {
     return __np_builtin_zeros<T>(shape);
@@ -119,8 +123,9 @@ namespace np
   NP_NODISCARD auto ones(const std::vector<int>& shape) -> ndarray<T>
   {
     constexpr bool is_void = (dtype_of<T> == dtype::void_);
-    static_assert(!is_void || std::is_class_v<T>,
-                  "ones: T has no dtype mapping – will be stored as object_/void_");
+    static_assert(
+        !is_void || std::is_class_v<T>,
+        "ones: T has no dtype mapping – will be stored as object_/void_");
     dtype d = (dtype_of<T> == dtype::void_ ? dtype::object_ : dtype_of<T>);
     return ndarray<T>(shape, d, T{1});
   }
@@ -158,8 +163,8 @@ namespace np
 
   template <typename T = double, std::ranges::input_range R>
     requires(!std::is_same_v<std::decay_t<R>, std::vector<int>>)
-          && (!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
-          && std::convertible_to<std::ranges::range_value_t<R>, int>
+      && (!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
+      && std::convertible_to<std::ranges::range_value_t<R>, int>
   NP_NODISCARD auto ones(const R& shape) -> ndarray<T>
   {
     return __np_builtin_ones<T>(shape);
@@ -179,8 +184,9 @@ namespace np
   NP_NODISCARD auto full(const std::vector<int>& shape, const T& fill_value) -> ndarray<T>
   {
     constexpr bool is_void = (dtype_of<T> == dtype::void_);
-    static_assert(!is_void || std::is_class_v<T>,
-                  "full: T has no dtype mapping – will be stored as object_/void_");
+    static_assert(
+        !is_void || std::is_class_v<T>,
+        "full: T has no dtype mapping – will be stored as object_/void_");
     dtype d = (dtype_of<T> == dtype::void_ ? dtype::object_ : dtype_of<T>);
     return ndarray<T>(shape, d, fill_value);
   }
@@ -220,8 +226,8 @@ namespace np
 
   template <typename T, std::ranges::input_range R>
     requires(!std::is_same_v<std::decay_t<R>, std::vector<int>>)
-          && (!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
-          && std::convertible_to<std::ranges::range_value_t<R>, int>
+      && (!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
+      && std::convertible_to<std::ranges::range_value_t<R>, int>
   NP_NODISCARD auto full(const R& shape, const T& fill_value) -> ndarray<T>
   {
     return __np_builtin_full(shape, fill_value);
@@ -245,8 +251,9 @@ namespace np
   NP_NODISCARD auto empty(const std::vector<int>& shape) -> ndarray<T>
   {
     constexpr bool is_void = (dtype_of<T> == dtype::void_);
-    static_assert(!is_void || std::is_class_v<T>,
-                  "empty: T has no dtype mapping – will be stored as object_/void_");
+    static_assert(
+        !is_void || std::is_class_v<T>,
+        "empty: T has no dtype mapping – will be stored as object_/void_");
     dtype d = (dtype_of<T> == dtype::void_ ? dtype::object_ : dtype_of<T>);
     return ndarray<T>(shape, d, T{});
   }
@@ -284,8 +291,8 @@ namespace np
 
   template <typename T = double, std::ranges::input_range R>
     requires(!std::is_same_v<std::decay_t<R>, std::vector<int>>)
-          && (!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
-          && std::convertible_to<std::ranges::range_value_t<R>, int>
+      && (!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
+      && std::convertible_to<std::ranges::range_value_t<R>, int>
   NP_NODISCARD auto empty(const R& shape) -> ndarray<T>
   {
     return __np_builtin_empty<T>(shape);
@@ -491,27 +498,27 @@ namespace np
    *
    * @tparam T  Element type (default: double).
    * @param n  Number of rows.
-   * @param m  Number of columns (default: n, making a square matrix).
+   * @param m  Number of columns (optional, default n – square).
    * @param k  Diagonal offset (default: 0).
    * @return   ndarray<T> of shape (n, m) with ones on the k-th diagonal.
    *
    * Reference: numpy-reference/reference/generated/numpy.eye.html
    */
   NP_API template <typename T = double>
-  NP_NODISCARD auto eye(std::size_t n, std::size_t m = 0, int k = 0) -> ndarray<T>
+  NP_NODISCARD auto
+  eye(std::size_t n, std::optional<std::size_t> m = std::nullopt, int k = 0) -> ndarray<T>
   {
-    if (m == 0)
-    {
-      m = n;
-    }
-    std::vector<int> shape = {static_cast<int>(n), static_cast<int>(m)};
+    std::size_t cols = m.has_value() ? *m : n;
+    if (cols == 0)
+      cols = n; // keep backward compat: eye(n,0) -> n x n
+    std::vector<int> shape = {static_cast<int>(n), static_cast<int>(cols)};
     ndarray<T> out(shape, dtype_of<T>, T{0});
     const std::ptrdiff_t rows = static_cast<std::ptrdiff_t>(n);
-    const std::ptrdiff_t cols = static_cast<std::ptrdiff_t>(m);
+    const std::ptrdiff_t cols_p = static_cast<std::ptrdiff_t>(cols);
     for (std::ptrdiff_t i = 0; i < rows; ++i)
     {
       const std::ptrdiff_t j = i + k;
-      if (j >= 0 && j < cols)
+      if (j >= 0 && j < cols_p)
       {
         out.set(
             std::array<std::size_t, 2>{

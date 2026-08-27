@@ -127,6 +127,11 @@
 #define NP_INLINE __forceinline
 #else
 #define NP_INLINE inline
-#endif
+#endif // __GNUC__ 
 
+#if defined(__GNUC__) | defined(__clang__) 
+#define NP_SYMBOL_VISIBILITY(V) __attribute__ ((__visibility__ (#V)))
+#else 
+#define NP_SMNP_SYMBOL_VISIBILITY(V)
+#endif // __GNUC__
 #endif // NP_API_MACROS_HPP
