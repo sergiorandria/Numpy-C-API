@@ -3,8 +3,9 @@
  * @brief Statistical functions (NumPy reference: routines.statistics).
  *
  * Provides scalar and axis-aware reductions on np::ndarray mirroring
- * numpy: median, percentile, quantile, average, ptp, corrcoef, cov,
- * histogram, bincount, digitize and the NaN-skipping nan* family
+ * numpy: mean, var, std, median, percentile, quantile, average, ptp,
+ * corrcoef, cov, histogram, histogram_bin_edges, bincount, digitize
+ * and the NaN-skipping nan* family
  * (nanmin, nanmax, nansum, nanprod, nanmean, nanvar, nanstd, nanmedian,
  * nanpercentile, nanquantile, nanargmin, nanargmax, nancumsum, nancumprod).
  *
@@ -1605,6 +1606,105 @@ NP_NODISCARD auto digitize(const ndarray<T> &arr, const ndarray<double> &bins,
     }();
     out.data()[i] =
         static_cast<std::size_t>(std::distance(sorted_bins.begin(), best));
+  }
+  return out;
+}
+
+// =================================================================
+// Free mean / var / std wrappers (numpy: mean, var, std)
+// =================================================================
+
+/** @brief Mean of all elements (free fn, mirrors ndarray::mean). */
+NP_API template <typename T>
+NP_NODISCARD auto mean(const ndarray<T> &a) ->
+    typename _mean_type<T>::type {
+  return a.mean();
+}
+
+/** @brief Mean along axis (free fn). */
+NP_API template <typename T>
+NP_NODISCARD auto mean(const ndarray<T> &a, int axis, bool keepdims = false)
+    -> ndarray<typename _mean_type<T>::type> {
+  return a.mean(axis, keepdims);
+}
+
+/** @brief Variance of all elements (population, ddof=0). */
+NP_API template <typename T>
+NP_NODISCARD auto var(const ndarray<T> &a) -> typename _mean_type<T>::type {
+  return a.var();
+}
+
+/** @brief Variance along axis. */
+NP_API template <typename T>
+NP_NODISCARD auto var(const ndarray<T> &a, int axis, bool keepdims = false)
+    -> ndarray<typename _mean_type<T>::type> {
+  return a.var(axis, keepdims);
+}
+
+/** @brief Std dev of all elements. */
+NP_API template <typename T>
+NP_NODISCARD auto std(const ndarray<T> &a) -> typename _mean_type<T>::type {
+  return a.std();
+}
+
+/** @brief Std dev along axis. */
+NP_API template <typename T>
+NP_NODISCARD auto std(const ndarray<T> &a, int axis, bool keepdims = false)
+    -> ndarray<typename _mean_type<T>::type> {
+  return a.std(axis, keepdims);
+}
+
+/** @brief Average with returned flag (numpy: average(..., returned=True)).
+ *
+ * Returns pair {mean, sum_of_weights} for the flattened case;
+ * for weighted case the second element is total weight.
+ */
+NP_API template <typename T, typename W>
+NP_NODISCARD auto average(const ndarray<T> &arr, const ndarray<W> &weights,
+                          bool returned)
+    -> std::pair<double, double> {
+  double m = average(arr, weights);
+  if (!returned) return {m, 0.0};
+  double sum_w = 0.0;
+  for (auto it = weights.begin(); it != weights.end(); ++it) sum_w += static_cast<double>(*it);
+  return {m, sum_w};
+}
+
+/** @brief Histogram bin edges (np.histogram_bin_edges).
+ *
+ * Delegates to histogram() and returns only edges.
+ */
+NP_API template <typename T>
+NP_NODISCARD auto histogram_bin_edges(const ndarray<T> &arr, int bins = 10,
+                                      std::optional<std::pair<double,double>> range = std::nullopt)
+    -> ndarray<double> {
+  return histogram(arr, bins, range).edges;
+}
+
+NP_API template <typename T>
+NP_NODISCARD auto histogram_bin_edges(const ndarray<T> &arr,
+                                      const ndarray<double> &edges)
+    -> ndarray<double> {
+  return histogram(arr, edges).edges;
+}
+
+/** @brief Correlate (1-D, mirrors np.correlate, mode valid only).
+ * Only 'valid' mode is implemented; 'full'/'same' throw.
+ */
+NP_API template <typename T, typename U>
+NP_NODISCARD auto correlate(const ndarray<T> &a, const ndarray<U> &v,
+                            const std::string &mode = "valid")
+    -> ndarray<std::common_type_t<T,U>> {
+  if (a.ndim()!=1 || v.ndim()!=1) throw std::invalid_argument("correlate: only 1-D");
+  if (mode != "valid") throw std::invalid_argument("correlate: only 'valid' mode implemented");
+  using R = std::common_type_t<T,U>;
+  if (v.size() > a.size()) return ndarray<R>(std::vector<int>{0});
+  std::size_t n = a.size() - v.size() + 1;
+  ndarray<R> out(std::vector<int>{static_cast<int>(n)});
+  for (std::size_t i=0;i<n;++i){
+    R s=0;
+    for (std::size_t j=0;j<v.size();++j) s += static_cast<R>(a.data()[a._flat_logical(i+j)]) * static_cast<R>(v.data()[v._flat_logical(j)]);
+    out.data()[i]=s;
   }
   return out;
 }
