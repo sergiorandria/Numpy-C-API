@@ -698,6 +698,103 @@ namespace np
     return a;
   }
 
+  // Normal comment: additional creation helpers
+
+  /** @brief Create array from object – alias to asarray (np.array). */
+  NP_API template <typename T>
+  NP_NODISCARD auto array(const std::vector<T>& v) -> ndarray<T>
+  {
+    return asarray(v);
+  }
+  NP_API template <typename T>
+  NP_NODISCARD auto array(const ndarray<T>& a) -> ndarray<T>
+  {
+    return a.copy();
+  }
+
+  /** @brief Deep copy (np.copy). */
+  NP_API template <typename T>
+  NP_NODISCARD auto copy(const ndarray<T>& a) -> ndarray<T>
+  {
+    return a.copy();
+  }
+
+  /** @brief Create array from iterable (np.fromiter) – copies count elements. */
+  NP_API template <typename T, typename Iter>
+  NP_NODISCARD auto fromiter(Iter begin, Iter end, int count = -1) -> ndarray<T>
+  {
+    std::vector<T> out;
+    for (auto it = begin;
+         it != end && (count < 0 || static_cast<int>(out.size()) < count);
+         ++it)
+      out.push_back(static_cast<T>(*it));
+    if (count >= 0 && static_cast<int>(out.size()) < count)
+      throw std::invalid_argument("fromiter: not enough elements");
+    int n = static_cast<int>(out.size());
+    return ndarray<T>::from_data(std::vector<int>{n}, std::move(out));
+  }
+
+  /** @brief Create array from string (np.fromstring) – splits by sep. */
+  NP_API template <typename T>
+  NP_NODISCARD auto fromstring(const std::string& s, const std::string& sep = " ")
+      -> ndarray<T>
+  {
+    std::vector<T> out;
+    if (sep == " " || sep.empty())
+    {
+      std::istringstream iss(s);
+      T v;
+      while (iss >> v)
+        out.push_back(v);
+    }
+    else
+    {
+      std::string cur;
+      for (char c : s)
+      {
+        if (sep.find(c) != std::string::npos)
+        {
+          if (!cur.empty())
+          {
+            std::istringstream iss(cur);
+            T v;
+            iss >> v;
+            out.push_back(v);
+            cur.clear();
+          }
+        }
+        else
+          cur.push_back(c);
+      }
+      if (!cur.empty())
+      {
+        std::istringstream iss(cur);
+        T v;
+        iss >> v;
+        out.push_back(v);
+      }
+    }
+    int n = static_cast<int>(out.size());
+    return ndarray<T>::from_data(std::vector<int>{n}, std::move(out));
+  }
+
+  /** @brief Check finite and convert (np.asarray_chkfinite). */
+  NP_API template <typename T>
+  NP_NODISCARD auto asarray_chkfinite(const ndarray<T>& a) -> ndarray<T>
+  {
+    for (auto v : a)
+      if (!std::isfinite(static_cast<double>(v)))
+        throw std::invalid_argument("asarray_chkfinite: non-finite value");
+    return a;
+  }
+
+  /** @brief Convert to float array (np.asfarray) – promotes to double if needed. */
+  NP_API template <typename T>
+  NP_NODISCARD auto asfarray(const ndarray<T>& a) -> ndarray<double>
+  {
+    return a.template astype<double>();
+  }
+
 } // namespace np
 
 #endif // NP_CREATION_HPP

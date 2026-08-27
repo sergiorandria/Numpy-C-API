@@ -296,8 +296,8 @@ namespace np
     return result;
   }
 
-    // Tiling Arrays
-    /**
+  // Tiling Arrays
+  /**
    * @brief Construct an array by repeating arr the number of times given by reps.
    *
    * Reference: numpy-reference/reference/generated/numpy.tile.html
@@ -366,8 +366,8 @@ namespace np
     return result;
   }
 
-    // Building Matrices
-    /**
+  // Building Matrices
+  /**
    * @brief Extract or construct a diagonal array.
    *
    * Reference: numpy-reference/reference/generated/numpy.diag.html
@@ -684,8 +684,8 @@ namespace np
     return result;
   }
 
-    // Splitting Arrays
-    /**
+  // Splitting Arrays
+  /**
    * @brief Split array into multiple sub-arrays.
    *
    * Reference: numpy-reference/reference/generated/numpy.split.html
@@ -911,8 +911,8 @@ namespace np
     return split(arr, indices_or_sections, 2);
   }
 
-    // Adding/Removing Elements
-    /**
+  // Adding/Removing Elements
+  /**
    * @brief Return a new array with sub-arrays along an axis deleted.
    *
    * Reference: numpy-reference/reference/generated/numpy.delete.html
@@ -1317,8 +1317,8 @@ namespace np
     return {result_vals, result_index, result_inverse, result_counts};
   }
 
-    // Conditional Selection
-    /**
+  // Conditional Selection
+  /**
    * @brief Return elements chosen from x or y depending on condition.
    *
    * Reference: numpy-reference/reference/generated/numpy.where.html
@@ -1687,6 +1687,46 @@ namespace np
       out.push_back(broadcast_to(arr, common));
     }
     return out;
+  }
+
+  // Normal comment: free wrappers for ndarray shape methods
+
+  NP_API template <typename T>
+  NP_NODISCARD auto reshape(const ndarray<T>& a, const std::vector<int>& shape)
+      -> ndarray<T>
+  {
+    return a.reshape(shape);
+  }
+  NP_API template <typename T>
+  NP_NODISCARD auto ravel(const ndarray<T>& a) -> ndarray<T>
+  {
+    return a.ravel();
+  }
+  NP_API template <typename T>
+  NP_NODISCARD auto squeeze(const ndarray<T>& a) -> ndarray<T>
+  {
+    return a.squeeze();
+  }
+  NP_API template <typename T>
+  NP_NODISCARD auto squeeze(const ndarray<T>& a, int axis) -> ndarray<T>
+  {
+    return a.squeeze(axis);
+  }
+  NP_API template <typename T>
+  NP_NODISCARD auto transpose(const ndarray<T>& a) -> ndarray<T>
+  {
+    return a.transpose();
+  }
+  NP_API template <typename T>
+  NP_NODISCARD auto transpose(const ndarray<T>& a, const std::vector<int>& axes)
+      -> ndarray<T>
+  {
+    return a.transpose(axes);
+  }
+  NP_API template <typename T>
+  NP_NODISCARD auto swapaxes(const ndarray<T>& a, int axis1, int axis2) -> ndarray<T>
+  {
+    return a.swapaxes(axis1, axis2);
   }
 
 } // namespace np
