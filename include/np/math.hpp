@@ -11,8 +11,9 @@
  *   Rounding: floor, ceil, trunc, rint, round, around
  *   Arithmetic: absolute, sign, maximum, minimum, fmod, fmax, fmin,
  *               copysign, divide, true_divide, floor_divide, reciprocal,
- *               positive, negative
- *   Misc: square, nan_to_num, clip, fma
+ *               positive, negative, add, subtract, multiply, float_power
+ *   Misc: square, nan_to_num, clip, fma, sinc, unwrap, angle, fix, ediff1d,
+ *         gcd, lcm, heaviside, convolve, interp, i0, signbit
  *
  * All functions return C-contiguous arrays with row-major strides.
  * Binary operations broadcast shapes according to NumPy rules
@@ -31,6 +32,7 @@
 #include <cmath>
 #include <limits>
 #include <numbers>
+#include <numeric>
 #include <type_traits>
 
 #include "api_macros.hpp"
@@ -1976,6 +1978,198 @@ NP_NODISCARD auto ediff1d(const ndarray<T> &ary) -> ndarray<T> {
   ndarray<T> out(std::vector<int>{static_cast<int>(ary.size() - 1)});
   for (std::size_t i = 0; i + 1 < ary.size(); ++i) {
     out.data()[i] = ary.data()[ary._flat_logical(i + 1)] - ary.data()[ary._flat_logical(i)];
+  }
+  return out;
+}
+
+// =================================================================
+// Additional arithmetic / utility ufuncs
+// =================================================================
+
+/** @brief Element-wise addition with broadcasting (np.add). */
+NP_API template <detail::Numeric T, detail::Numeric U>
+NP_NODISCARD auto add(const ndarray<T> &a, const ndarray<U> &b)
+    -> ndarray<std::common_type_t<T, U>> {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise(a, b, [](const T &x, const U &y) -> R { return static_cast<R>(x + y); });
+}
+NP_API template <detail::Numeric T, detail::Numeric U>
+auto add(const ndarray<T> &a, const ndarray<U> &b, ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(a, b, out, [](const T &x, const U &y) -> R { return static_cast<R>(x + y); });
+}
+
+/** @brief Element-wise subtraction (np.subtract). */
+NP_API template <detail::Numeric T, detail::Numeric U>
+NP_NODISCARD auto subtract(const ndarray<T> &a, const ndarray<U> &b)
+    -> ndarray<std::common_type_t<T, U>> {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise(a, b, [](const T &x, const U &y) -> R { return static_cast<R>(x - y); });
+}
+NP_API template <detail::Numeric T, detail::Numeric U>
+auto subtract(const ndarray<T> &a, const ndarray<U> &b, ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(a, b, out, [](const T &x, const U &y) -> R { return static_cast<R>(x - y); });
+}
+
+/** @brief Element-wise multiplication (np.multiply). */
+NP_API template <detail::Numeric T, detail::Numeric U>
+NP_NODISCARD auto multiply(const ndarray<T> &a, const ndarray<U> &b)
+    -> ndarray<std::common_type_t<T, U>> {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise(a, b, [](const T &x, const U &y) -> R { return static_cast<R>(x * y); });
+}
+NP_API template <detail::Numeric T, detail::Numeric U>
+auto multiply(const ndarray<T> &a, const ndarray<U> &b, ndarray<std::common_type_t<T, U>> &out)
+    -> ndarray<std::common_type_t<T, U>> & {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise_into(a, b, out, [](const T &x, const U &y) -> R { return static_cast<R>(x * y); });
+}
+
+/** @brief Float power – promote to floating and compute pow (np.float_power). */
+NP_API template <detail::Numeric T, detail::Numeric U>
+NP_NODISCARD auto float_power(const ndarray<T> &a, const ndarray<U> &b)
+    -> ndarray<double> {
+  return detail::elementwise(a, b, [](const T &x, const U &y) -> double {
+    return std::pow(static_cast<double>(x), static_cast<double>(y));
+  });
+}
+
+/** @brief Element-wise GCD (np.gcd) – integer only. */
+NP_API template <typename T, typename U>
+NP_NODISCARD auto gcd(const ndarray<T> &a, const ndarray<U> &b)
+    -> ndarray<std::common_type_t<T, U>> {
+  static_assert(std::is_integral_v<T> && std::is_integral_v<U>, "gcd requires integral types");
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise(a, b, [](const T &x, const U &y) -> R { return std::gcd(static_cast<R>(x), static_cast<R>(y)); });
+}
+
+/** @brief Element-wise LCM (np.lcm) – integer only. */
+NP_API template <typename T, typename U>
+NP_NODISCARD auto lcm(const ndarray<T> &a, const ndarray<U> &b)
+    -> ndarray<std::common_type_t<T, U>> {
+  static_assert(std::is_integral_v<T> && std::is_integral_v<U>, "lcm requires integral types");
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise(a, b, [](const T &x, const U &y) -> R { return std::lcm(static_cast<R>(x), static_cast<R>(y)); });
+}
+
+/** @brief Heaviside step: 0 if x<0, h0 if x==0, 1 if x>0 (np.heaviside). */
+NP_API template <detail::Numeric T, detail::Numeric U>
+NP_NODISCARD auto heaviside(const ndarray<T> &x, const ndarray<U> &h0)
+    -> ndarray<std::common_type_t<T, U>> {
+  using R = std::common_type_t<T, U>;
+  return detail::elementwise(x, h0, [](const T &v, const U &h) -> R {
+    if (v < T{0}) return R{0};
+    if (v > T{0}) return R{1};
+    return static_cast<R>(h);
+  });
+}
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto heaviside(const ndarray<T> &x, const T &h0) -> ndarray<T> {
+  return detail::ufunc_unary(x, [h0](const T &v) -> T {
+    if (v < T{0}) return T{0};
+    if (v > T{0}) return T{1};
+    return h0;
+  });
+}
+
+/** @brief 1-D convolution (np.convolve) – modes full/valid/same. */
+NP_API template <detail::Numeric T, detail::Numeric U>
+NP_NODISCARD auto convolve(const ndarray<T> &a, const ndarray<U> &v,
+                           const std::string &mode = "full")
+    -> ndarray<std::common_type_t<T, U>> {
+  if (a.ndim() != 1 || v.ndim() != 1) throw std::invalid_argument("convolve: only 1-D");
+  using R = std::common_type_t<T, U>;
+  std::size_t n = a.size(), m = v.size();
+  if (n == 0 || m == 0) return ndarray<R>(std::vector<int>{0});
+  std::size_t full = n + m - 1;
+  ndarray<R> full_arr(std::vector<int>{static_cast<int>(full)});
+  for (std::size_t k = 0; k < full; ++k) {
+    R s = R{0};
+    std::size_t j_low = (k >= m - 1) ? k - (m - 1) : 0;
+    std::size_t j_high = std::min(k, n - 1);
+    for (std::size_t j = j_low; j <= j_high; ++j) {
+      s += static_cast<R>(a.data()[a._flat_logical(j)]) *
+           static_cast<R>(v.data()[v._flat_logical(k - j)]);
+    }
+    full_arr.data()[k] = s;
+  }
+  if (mode == "full") return full_arr;
+  if (mode == "valid") {
+    if (n < m) return convolve(v, a, mode);
+    std::size_t valid = n - m + 1;
+    ndarray<R> out(std::vector<int>{static_cast<int>(valid)});
+    for (std::size_t i = 0; i < valid; ++i) out.data()[i] = full_arr.data()[i + m - 1];
+    return out;
+  }
+  if (mode == "same") {
+    std::size_t start = (full - n) / 2;
+    ndarray<R> out(std::vector<int>{static_cast<int>(n)});
+    for (std::size_t i = 0; i < n; ++i) out.data()[i] = full_arr.data()[i + start];
+    return out;
+  }
+  throw std::invalid_argument("convolve: mode must be full/valid/same");
+}
+
+/** @brief 1-D linear interpolation (np.interp). */
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto interp(const ndarray<T> &x, const ndarray<T> &xp,
+                         const ndarray<T> &fp, T left = std::numeric_limits<T>::quiet_NaN(),
+                         T right = std::numeric_limits<T>::quiet_NaN()) -> ndarray<T> {
+  if (xp.ndim() != 1 || fp.ndim() != 1 || x.ndim() != 1) throw std::invalid_argument("interp: only 1-D");
+  if (xp.size() != fp.size()) throw std::invalid_argument("interp: xp and fp size mismatch");
+  if (xp.size() == 0) throw std::invalid_argument("interp: xp empty");
+  ndarray<T> out(x.shape);
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    T xv = x.data()[x._flat_logical(i)];
+    if (xv < xp.data()[xp._flat_logical(0)]) { out.data()[i] = std::isnan(left) ? fp.data()[fp._flat_logical(0)] : left; continue; }
+    if (xv > xp.data()[xp._flat_logical(xp.size()-1)]) { out.data()[i] = std::isnan(right) ? fp.data()[fp._flat_logical(fp.size()-1)] : right; continue; }
+    // binary search
+    std::size_t lo = 0, hi = xp.size()-1;
+    while (hi - lo > 1) {
+      std::size_t mid = (lo + hi)/2;
+      if (xv < xp.data()[xp._flat_logical(mid)]) hi = mid;
+      else lo = mid;
+    }
+    if (xv == xp.data()[xp._flat_logical(lo)]) { out.data()[i] = fp.data()[fp._flat_logical(lo)]; continue; }
+    if (xv == xp.data()[xp._flat_logical(hi)]) { out.data()[i] = fp.data()[fp._flat_logical(hi)]; continue; }
+    T x0 = xp.data()[xp._flat_logical(lo)], x1 = xp.data()[xp._flat_logical(hi)];
+    T y0 = fp.data()[fp._flat_logical(lo)], y1 = fp.data()[fp._flat_logical(hi)];
+    out.data()[i] = y0 + (y1 - y0) * (xv - x0) / (x1 - x0);
+  }
+  return out;
+}
+
+/** @brief Modified Bessel I0 (np.i0). Uses std::cyl_bessel_i if available. */
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto i0(const ndarray<T> &x) -> ndarray<T> {
+  return detail::ufunc_unary(x, [](const T &v) -> T {
+#if __cpp_lib_math_special_functions >= 201603L
+    return static_cast<T>(std::cyl_bessel_i(T{0}, v));
+#else
+    // series fallback for |v| < 15 else asymptotic – simple approximation
+    T ax = std::abs(v);
+    if (ax < T{3.75}) {
+      T t = v / T{3.75}; T t2 = t*t;
+      return T{1} + t2*(T{3.5156229} + t2*(T{3.0899424} + t2*(T{1.2067492} + t2*(T{0.2659732} + t2*(T{0.0360768} + t2*T{0.0045813})))));
+    } else {
+      T t = T{3.75}/ax;
+      return (std::exp(ax)/std::sqrt(ax)) * (T{0.39894228} + t*(T{0.01328592} + t*(T{0.00225319} + t*(-T{0.00157565} + t*(T{0.00916281} + t*(-T{0.02057706} + t*(T{0.02635537} + t*(-T{0.01647633} + t*T{0.00392377}))))))));
+    }
+#endif
+  });
+}
+
+/** @brief Signbit element-wise (np.signbit). */
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto signbit(const ndarray<T> &x) -> ndarray<bool> {
+  ndarray<bool> out(x.shape);
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    T v = x.data()[x._flat_logical(i)];
+    bool b = std::signbit(static_cast<double>(v));
+    out.data()[i] = b;
   }
   return out;
 }

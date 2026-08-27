@@ -2828,6 +2828,156 @@ NP_API template <typename T> NP_NODISCARD auto transpose(const ndarray<T> &a) ->
 // Reference: numpy-reference/reference/generated/numpy.trace.html
 NP_API template <typename T> NP_NODISCARD auto trace(const ndarray<T> &a) -> T { return a.trace(); }
 
+// Kronecker product (np.kron).
+// Reference: numpy-reference/reference/generated/numpy.kron.html
+NP_API template <typename T, typename U>
+NP_NODISCARD auto kron(const ndarray<T> &a, const ndarray<U> &b)
+    -> ndarray<std::common_type_t<T, U>> {
+  using R = std::common_type_t<T, U>;
+  std::size_t na = a.ndim(), nb = b.ndim();
+  std::size_t n = std::max(na, nb);
+  std::vector<int> a_shape(n, 1), b_shape(n, 1);
+  for (std::size_t i = 0; i < na; ++i) a_shape[n - na + i] = a.shape[i];
+  for (std::size_t i = 0; i < nb; ++i) b_shape[n - nb + i] = b.shape[i];
+  std::vector<int> out_shape(n);
+  for (std::size_t i = 0; i < n; ++i) out_shape[i] = a_shape[i] * b_shape[i];
+  ndarray<R> out(out_shape);
+  np::detail::Odometer od(out_shape);
+  while (!od.done()) {
+    const auto &idx = od.idx();
+    std::vector<std::size_t> ai(n), bi(n);
+    for (std::size_t d = 0; d < n; ++d) {
+      ai[d] = idx[d] / static_cast<std::size_t>(b_shape[d]);
+      bi[d] = idx[d] % static_cast<std::size_t>(b_shape[d]);
+    }
+    // map padded ai/bi to actual a/b indices (strip leading 1s)
+    std::vector<std::size_t> a_idx, b_idx;
+    if (na > 0) { a_idx.reserve(na); for (std::size_t d = n - na; d < n; ++d) a_idx.push_back(ai[d]); }
+    if (nb > 0) { b_idx.reserve(nb); for (std::size_t d = n - nb; d < n; ++d) b_idx.push_back(bi[d]); }
+    R av = a_idx.empty() ? static_cast<R>(a.item()) : static_cast<R>(a.get(a_idx));
+    R bv = b_idx.empty() ? static_cast<R>(b.item()) : static_cast<R>(b.get(b_idx));
+    out.set(idx, av * bv);
+    od.advance();
+  }
+  return out;
+}
+
+// Vdot – flattened conjugate dot (np.vdot).
+// Reference: numpy-reference/reference/generated/numpy.vdot.html
+NP_API template <typename T, typename U>
+NP_NODISCARD auto vdot(const ndarray<T> &a, const ndarray<U> &b)
+    -> std::common_type_t<T, U> {
+  using R = std::common_type_t<T, U>;
+  if (a.size() != b.size()) throw std::invalid_argument("vdot: size mismatch");
+  R acc{};
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    R av = static_cast<R>(a.data()[a._flat_logical(i)]);
+    R bv = static_cast<R>(b.data()[b._flat_logical(i)]);
+    if constexpr (np::detail::is_complex_v<T>) av = std::conj(av);
+    acc += av * bv;
+  }
+  return acc;
+}
+
+// Einsum – Einstein summation (limited, supports explicit -> with up to 2 operands).
+// Reference: numpy-reference/reference/generated/numpy.einsum.html
+// Supported subscripts: letters a-z, comma separated inputs, arrow output e.g. "ij,jk->ik"
+// If "->" omitted, sum over repeated indices is assumed (not fully supported – requires explicit).
+NP_API template <typename T>
+NP_NODISCARD auto einsum(const std::string &subscripts,
+                         const std::vector<ndarray<T>> &operands)
+    -> ndarray<T> {
+  auto arrow = subscripts.find("->");
+  if (arrow == std::string::npos) throw std::invalid_argument("einsum: explicit -> required in this implementation");
+  std::string left = subscripts.substr(0, arrow);
+  std::string right = subscripts.substr(arrow + 2);
+  std::vector<std::string> in_subs;
+  {
+    std::string cur;
+    for (char c : left) {
+      if (c == ',') { in_subs.push_back(cur); cur.clear(); }
+      else if (c != ' ') cur.push_back(c);
+    }
+    in_subs.push_back(cur);
+  }
+  std::string out_sub;
+  for (char c : right) if (c != ' ') out_sub.push_back(c);
+  if (in_subs.size() != operands.size()) throw std::invalid_argument("einsum: operand count mismatch");
+  // label -> size
+  std::map<char, int> label_size;
+  for (std::size_t i = 0; i < operands.size(); ++i) {
+    const auto &op = operands[i];
+    const std::string &sub = in_subs[i];
+    if (sub.size() != op.ndim()) throw std::invalid_argument("einsum: subscript ndim mismatch");
+    for (std::size_t d = 0; d < sub.size(); ++d) {
+      char lab = sub[d];
+      int sz = op.shape[d];
+      auto it = label_size.find(lab);
+      if (it == label_size.end()) label_size[lab] = sz;
+      else if (it->second != sz) throw std::invalid_argument("einsum: label size mismatch");
+    }
+  }
+  // output shape
+  std::vector<int> out_shape;
+  for (char c : out_sub) {
+    auto it = label_size.find(c);
+    if (it == label_size.end()) throw std::invalid_argument("einsum: output label not in inputs");
+    out_shape.push_back(it->second);
+  }
+  ndarray<T> out(out_shape);
+  std::fill(out.data().begin(), out.data().end(), T{0});
+  // collect all labels sorted for iteration
+  std::vector<char> all_labels;
+  for (auto &kv : label_size) all_labels.push_back(kv.first);
+  std::sort(all_labels.begin(), all_labels.end());
+  std::vector<int> all_shape;
+  for (char c : all_labels) all_shape.push_back(label_size[c]);
+  // map label -> position in all_labels
+  std::map<char, std::size_t> lab_pos;
+  for (std::size_t i = 0; i < all_labels.size(); ++i) lab_pos[all_labels[i]] = i;
+  np::detail::Odometer od(all_shape);
+  while (!od.done()) {
+    const auto &idx_all = od.idx();
+    // build per-operand indices
+    T prod = T{1};
+    bool first = true;
+    for (std::size_t oi = 0; oi < operands.size(); ++oi) {
+      const auto &sub = in_subs[oi];
+      std::vector<std::size_t> op_idx(sub.size());
+      for (std::size_t d = 0; d < sub.size(); ++d) {
+        char lab = sub[d];
+        op_idx[d] = idx_all[lab_pos[lab]];
+      }
+      T v = operands[oi].get(op_idx);
+      if (first) { prod = v; first = false; }
+      else prod = prod * v;
+    }
+    if (out_sub.empty()) {
+      out.data()[out._flat(std::vector<std::size_t>{})] += prod;
+    } else {
+      std::vector<std::size_t> out_idx(out_sub.size());
+      for (std::size_t d = 0; d < out_sub.size(); ++d) out_idx[d] = idx_all[lab_pos[out_sub[d]]];
+      out.data()[out._flat(out_idx)] += prod;
+    }
+    od.advance();
+  }
+  return out;
+}
+
+// Convenience overloads
+NP_API template <typename T>
+NP_NODISCARD auto einsum(const std::string &subscripts,
+                         const ndarray<T> &a)
+    -> ndarray<T> {
+  return einsum(subscripts, std::vector<ndarray<T>>{a});
+}
+NP_API template <typename T>
+NP_NODISCARD auto einsum(const std::string &subscripts,
+                         const ndarray<T> &a, const ndarray<T> &b)
+    -> ndarray<T> {
+  return einsum(subscripts, std::vector<ndarray<T>>{a, b});
+}
+
 } // namespace np::linalg
 
 #endif // NP_LINALG_HPP
