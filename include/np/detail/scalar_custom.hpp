@@ -37,25 +37,28 @@ namespace np::detail::fixed {
  *
  * @tparam D  A np::dtype enumeration value.
  */
-template <auto D>
-struct scalar_traits<_Np_dtype::_Np_StorageClassifier<D, false>> {
-  using classifier = _Np_dtype::_Np_StorageClassifier<D, false>;
-  static constexpr bool is_custom = true;
+template <auto D> struct scalar_traits<_Np_dtype::_Np_StorageClassifier<D, false>> {
+    using classifier = _Np_dtype::_Np_StorageClassifier<D, false>;
+    static constexpr bool is_custom = true;
 
-  /** @brief Numeric core that reductions and kernels compute in. */
-  using value_type = std::remove_cv_t<typename classifier::value_type>;
+    /** @brief Numeric core that reductions and kernels compute in. */
+    using value_type = std::remove_cv_t<typename classifier::value_type>;
 
-  static constexpr const value_type &get(const classifier &v) noexcept {
-    return static_cast<const value_type &>(v.value());
-  }
-  static constexpr classifier make(const value_type &v) noexcept {
-    return classifier{v};
-  }
-  static constexpr value_type zero() noexcept { return value_type{}; }
-  static constexpr value_type one() noexcept { return value_type{1}; }
-  static constexpr bool truthy(const classifier &v) noexcept {
-    return static_cast<bool>(v.value());
-  }
+    static constexpr const value_type& get(const classifier& v) noexcept {
+        return static_cast<const value_type&>(v.value());
+    }
+    static constexpr classifier make(const value_type& v) noexcept {
+        return classifier{v};
+    }
+    static constexpr value_type zero() noexcept {
+        return value_type{};
+    }
+    static constexpr value_type one() noexcept {
+        return value_type{1};
+    }
+    static constexpr bool truthy(const classifier& v) noexcept {
+        return static_cast<bool>(v.value());
+    }
 };
 
 /**
@@ -63,25 +66,28 @@ struct scalar_traits<_Np_dtype::_Np_StorageClassifier<D, false>> {
  *
  * @tparam T  A np::dtype enumeration value (`string_` / `unicode_`).
  */
-template <auto D>
-struct scalar_traits<_Np_dtype::_Np_StorageClassifier<D, true>> {
-  using classifier = _Np_dtype::_Np_StorageClassifier<D, true>;
-  static constexpr bool is_custom = true;
+template <auto D> struct scalar_traits<_Np_dtype::_Np_StorageClassifier<D, true>> {
+    using classifier = _Np_dtype::_Np_StorageClassifier<D, true>;
+    static constexpr bool is_custom = true;
 
-  /** @brief Text core that reductions and kernels compute in. */
-  using value_type = typename classifier::value_type;
+    /** @brief Text core that reductions and kernels compute in. */
+    using value_type = typename classifier::value_type;
 
-  static constexpr const value_type &get(const classifier &v) noexcept {
-    return v.value();
-  }
-  static constexpr classifier make(const value_type &v) noexcept {
-    return classifier{v};
-  }
-  static constexpr value_type zero() noexcept { return value_type{}; }
-  static constexpr value_type one() noexcept { return value_type{}; }
-  static constexpr bool truthy(const classifier &v) noexcept {
-    return !v.value().empty();
-  }
+    static constexpr const value_type& get(const classifier& v) noexcept {
+        return v.value();
+    }
+    static constexpr classifier make(const value_type& v) noexcept {
+        return classifier{v};
+    }
+    static constexpr value_type zero() noexcept {
+        return value_type{};
+    }
+    static constexpr value_type one() noexcept {
+        return value_type{};
+    }
+    static constexpr bool truthy(const classifier& v) noexcept {
+        return !v.value().empty();
+    }
 };
 
 // ---------------------------------------------------------------------
@@ -99,65 +105,58 @@ struct scalar_traits<_Np_dtype::_Np_StorageClassifier<D, true>> {
  * the plain promoted core type, exactly like the builtin branch.
  */
 template <typename Op, typename A, typename B> struct custom_binary_value {
-  using CA = typename scalar_traits<A>::value_type;
-  using CB = typename scalar_traits<B>::value_type;
-  using Core = std::invoke_result_t<Op, CA, CB>;
+    using CA = typename scalar_traits<A>::value_type;
+    using CB = typename scalar_traits<B>::value_type;
+    using Core = std::invoke_result_t<Op, CA, CB>;
 
-  /** @brief Both handles are the same custom scalar type. */
-  static constexpr bool both_same_custom = scalar_traits<A>::is_custom &&
-                                           scalar_traits<B>::is_custom &&
-                                           std::is_same_v<A, B>;
+    /** @brief Both handles are the same custom scalar type. */
+    static constexpr bool both_same_custom =
+        scalar_traits<A>::is_custom && scalar_traits<B>::is_custom && std::is_same_v<A, B>;
 
-  /** @brief Keep the custom scalar when it can hold the core result. */
-  static constexpr bool a_holds =
-      scalar_traits<A>::is_custom && std::is_same_v<Core, CA>;
-  static constexpr bool b_holds =
-      scalar_traits<B>::is_custom && std::is_same_v<Core, CB>;
+    /** @brief Keep the custom scalar when it can hold the core result. */
+    static constexpr bool a_holds = scalar_traits<A>::is_custom && std::is_same_v<Core, CA>;
+    static constexpr bool b_holds = scalar_traits<B>::is_custom && std::is_same_v<Core, CB>;
 
-  using type = std::conditional_t<
-      std::is_same_v<Core, bool>, bool,
-      std::conditional_t<
-          both_same_custom && a_holds, A,
-          std::conditional_t<a_holds, A,
-                             std::conditional_t<b_holds, B, Core>>>>;
+    using type = std::conditional_t<
+        std::is_same_v<Core, bool>, bool,
+        std::conditional_t<both_same_custom && a_holds, A,
+                           std::conditional_t<a_holds, A, std::conditional_t<b_holds, B, Core>>>>;
 };
 
 /** @brief Result element type of a unary expression over a custom operand. */
 template <typename Op, typename A> struct custom_unary_value {
-  using CA = typename scalar_traits<A>::value_type;
-  using Core = std::invoke_result_t<Op, CA>;
+    using CA = typename scalar_traits<A>::value_type;
+    using Core = std::invoke_result_t<Op, CA>;
 
-  using type =
-      std::conditional_t<std::is_same_v<Core, bool>, bool,
-                         std::conditional_t<std::is_same_v<Core, CA>, A, Core>>;
+    using type = std::conditional_t<std::is_same_v<Core, bool>, bool,
+                                    std::conditional_t<std::is_same_v<Core, CA>, A, Core>>;
 };
 
 /** @brief Custom binary evaluation: unwrap, run the functor, re-wrap. */
-template <typename Op, typename A, typename B>
-struct binary_apply<Op, A, B, true> {
-  using type = typename custom_binary_value<Op, A, B>::type;
+template <typename Op, typename A, typename B> struct binary_apply<Op, A, B, true> {
+    using type = typename custom_binary_value<Op, A, B>::type;
 
-  static constexpr type call(const A &a, const B &b) {
-    if constexpr (std::is_same_v<type, bool>) {
-      return Op{}(scalar_traits<A>::get(a), scalar_traits<B>::get(b));
-    } else {
-      return scalar_traits<type>::make(
-          Op{}(scalar_traits<A>::get(a), scalar_traits<B>::get(b)));
+    static constexpr type call(const A& a, const B& b) {
+        if constexpr (std::is_same_v<type, bool>) {
+            return Op{}(scalar_traits<A>::get(a), scalar_traits<B>::get(b));
+        } else {
+            return scalar_traits<type>::make(
+                Op{}(scalar_traits<A>::get(a), scalar_traits<B>::get(b)));
+        }
     }
-  }
 };
 
 /** @brief Custom unary evaluation: unwrap, run the re-wrap. */
 template <typename Op, typename A> struct unary_apply<Op, A, true> {
-  using type = typename custom_unary_value<Op, A>::type;
+    using type = typename custom_unary_value<Op, A>::type;
 
-  static constexpr type call(const A &a) {
-    if constexpr (std::is_same_v<type, bool>) {
-      return Op{}(scalar_traits<A>::get(a));
-    } else {
-      return scalar_traits<type>::make(Op{}(scalar_traits<A>::get(a)));
+    static constexpr type call(const A& a) {
+        if constexpr (std::is_same_v<type, bool>) {
+            return Op{}(scalar_traits<A>::get(a));
+        } else {
+            return scalar_traits<type>::make(Op{}(scalar_traits<A>::get(a)));
+        }
     }
-  }
 };
 
 } // namespace np::detail::fixed

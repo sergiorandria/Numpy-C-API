@@ -40,17 +40,16 @@ namespace np::fft {
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.fftfreq.html
  */
 NP_API NP_NODISCARD inline auto fftfreq(int n, double d = 1.0) -> ndarray<double> {
-  if (n <= 0) {
-    throw std::invalid_argument("fftfreq: n should be positive");
-  }
-  ndarray<double> out(std::vector<int>{n});
-  const int first = (n - 1) / 2 + 1;
-  const double val = 1.0 / (static_cast<double>(n) * d);
-  for (int i = 0; i < n; ++i) {
-    out.data()[static_cast<std::size_t>(i)] =
-        static_cast<double>(i < first ? i : i - n) * val;
-  }
-  return out;
+    if (n <= 0) {
+        throw std::invalid_argument("fftfreq: n should be positive");
+    }
+    ndarray<double> out(std::vector<int>{n});
+    const int first = (n - 1) / 2 + 1;
+    const double val = 1.0 / (static_cast<double>(n) * d);
+    for (int i = 0; i < n; ++i) {
+        out.data()[static_cast<std::size_t>(i)] = static_cast<double>(i < first ? i : i - n) * val;
+    }
+    return out;
 }
 
 /**
@@ -65,36 +64,35 @@ NP_API NP_NODISCARD inline auto fftfreq(int n, double d = 1.0) -> ndarray<double
  * Reference: numpy reference/generated/numpy.fft.rfftfreq.html
  */
 NP_API NP_NODISCARD inline auto rfftfreq(int n, double d = 1.0) -> ndarray<double> {
-  if (n <= 0) {
-    throw std::invalid_argument("rfftfreq: n should be positive");
-  }
-  ndarray<double> out(std::vector<int>{n / 2 + 1});
-  const double val = 1.0 / (static_cast<double>(n) * d);
-  for (int i = 0; i < n / 2 + 1; ++i) {
-    out.data()[static_cast<std::size_t>(i)] = static_cast<double>(i) * val;
-  }
-  return out;
+    if (n <= 0) {
+        throw std::invalid_argument("rfftfreq: n should be positive");
+    }
+    ndarray<double> out(std::vector<int>{n / 2 + 1});
+    const double val = 1.0 / (static_cast<double>(n) * d);
+    for (int i = 0; i < n / 2 + 1; ++i) {
+        out.data()[static_cast<std::size_t>(i)] = static_cast<double>(i) * val;
+    }
+    return out;
 }
 
 namespace detail {
 
 /** @brief Roll every listed axis of `arr` by the given raw shift. */
 template <typename T>
-[[nodiscard]] ndarray<T> shift_roll(const ndarray<T> &arr,
-                                    const std::optional<std::vector<int>> &axes,
-                                    int sign) {
-  ndarray<T> out = arr;
-  if (axes) {
-    for (int a : *axes) {
-      int ax = normalize_axis(a, out.ndim());
-      out = np::roll(out, sign * (out.shape[ax] / 2), ax);
+[[nodiscard]] ndarray<T> shift_roll(const ndarray<T>& arr,
+                                    const std::optional<std::vector<int>>& axes, int sign) {
+    ndarray<T> out = arr;
+    if (axes) {
+        for (int a : *axes) {
+            int ax = normalize_axis(a, out.ndim());
+            out = np::roll(out, sign * (out.shape[ax] / 2), ax);
+        }
+    } else {
+        for (int a = 0; a < static_cast<int>(out.ndim()); ++a) {
+            out = np::roll(out, sign * (out.shape[a] / 2), a);
+        }
     }
-  } else {
-    for (int a = 0; a < static_cast<int>(out.ndim()); ++a) {
-      out = np::roll(out, sign * (out.shape[a] / 2), a);
-    }
-  }
-  return out;
+    return out;
 }
 
 } // namespace detail
@@ -111,10 +109,9 @@ template <typename T>
  * Reference: numpy reference/generated/numpy.fft.fftshift.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto fftshift(const ndarray<T> &x,
-                           std::optional<std::vector<int>> axes = std::nullopt)
+NP_NODISCARD auto fftshift(const ndarray<T>& x, std::optional<std::vector<int>> axes = std::nullopt)
     -> ndarray<T> {
-  return detail::shift_roll(x, axes, +1);
+    return detail::shift_roll(x, axes, +1);
 }
 
 /**
@@ -129,10 +126,9 @@ NP_NODISCARD auto fftshift(const ndarray<T> &x,
  * @see fftshift
  */
 NP_API template <typename T>
-NP_NODISCARD auto ifftshift(const ndarray<T> &x,
-                            std::optional<std::vector<int>> axes = std::nullopt)
-    -> ndarray<T> {
-  return detail::shift_roll(x, axes, -1);
+NP_NODISCARD auto ifftshift(const ndarray<T>& x,
+                            std::optional<std::vector<int>> axes = std::nullopt) -> ndarray<T> {
+    return detail::shift_roll(x, axes, -1);
 }
 
 } // namespace np::fft

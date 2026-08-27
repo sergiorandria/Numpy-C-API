@@ -21,9 +21,12 @@
 
 using Clock = std::chrono::steady_clock;
 
-template <typename Fn> double ms(Fn &&fn, int iters = 5) {
+template <typename Fn>
+double ms(Fn&& fn, int iters = 5)
+{
   double best = 1e18;
-  for (int i = 0; i < iters; ++i) {
+  for (int i = 0; i < iters; ++i)
+  {
     const auto t0 = Clock::now();
     fn();
     const auto t1 = Clock::now();
@@ -36,8 +39,9 @@ template <typename Fn> double ms(Fn &&fn, int iters = 5) {
 // Old-style ufunc_binary: recomputes index vectors per element and
 // maps through get()/set(). This mirrors the implementation that was
 // replaced by np::detail::elementwise.
-auto old_binary_max(const np::ndarray<double> &lhs,
-                    const np::ndarray<double> &rhs) -> np::ndarray<double> {
+auto old_binary_max(const np::ndarray<double>& lhs, const np::ndarray<double>& rhs)
+    -> np::ndarray<double>
+{
   using R = double;
   const auto out_shape = np::detail::broadcast_shapes(lhs.shape, rhs.shape);
   np::ndarray<double> result(out_shape, np::dtype_of<R>);
@@ -45,16 +49,20 @@ auto old_binary_max(const np::ndarray<double> &lhs,
   const auto ndim_out = out_shape.size();
   std::vector<std::size_t> idx(ndim_out, 0);
 
-  for (std::size_t i = 0; i < result.size(); ++i) {
+  for (std::size_t i = 0; i < result.size(); ++i)
+  {
     std::vector<std::size_t> idx_lhs(lhs.ndim(), 0);
     std::vector<std::size_t> idx_rhs(rhs.ndim(), 0);
 
-    for (std::size_t d = 0; d < ndim_out; ++d) {
-      if (d >= ndim_out - lhs.ndim()) {
+    for (std::size_t d = 0; d < ndim_out; ++d)
+    {
+      if (d >= ndim_out - lhs.ndim())
+      {
         const auto d_lhs = d - (ndim_out - lhs.ndim());
         idx_lhs[d_lhs] = (lhs.shape[d_lhs] == 1) ? 0 : idx[d];
       }
-      if (d >= ndim_out - rhs.ndim()) {
+      if (d >= ndim_out - rhs.ndim())
+      {
         const auto d_rhs = d - (ndim_out - rhs.ndim());
         idx_rhs[d_rhs] = (rhs.shape[d_rhs] == 1) ? 0 : idx[d];
       }
@@ -64,8 +72,10 @@ auto old_binary_max(const np::ndarray<double> &lhs,
     const double val_rhs = rhs.get(idx_rhs);
     result.set(idx, std::max(val_lhs, val_rhs));
 
-    for (std::size_t d = ndim_out; d-- > 0;) {
-      if (++idx[d] < static_cast<std::size_t>(out_shape[d])) {
+    for (std::size_t d = ndim_out; d-- > 0;)
+    {
+      if (++idx[d] < static_cast<std::size_t>(out_shape[d]))
+      {
         break;
       }
       idx[d] = 0;
@@ -74,7 +84,8 @@ auto old_binary_max(const np::ndarray<double> &lhs,
   return result;
 }
 
-int main() {
+int main()
+{
   using namespace np;
   setvbuf(stdout, nullptr, _IOLBF, 0);
   const std::size_t N = 1U << 20;
@@ -82,15 +93,17 @@ int main() {
   auto a = linspace(1.0, 2.0, static_cast<int>(N));
   auto b = linspace(0.5, 1.5, static_cast<int>(N));
 
-  std::printf("N = %zu doubles (%.1f MiB each)\n", N,
-              N * 8.0 / (1024.0 * 1024.0));
+  std::printf("N = %zu doubles (%.1f MiB each)\n", N, N * 8.0 / (1024.0 * 1024.0));
 
   // --- binary contiguous: maximum ---
   const double t_old = ms([&] { (void)old_binary_max(a, b); }, 1);
   const double t_new = ms([&] { (void)maximum(a, b); });
-  std::printf("maximum (1D, contiguous):  old ufunc_binary %7.3f ms | "
-              "elementwise %7.3f ms | %.2fx\n",
-              t_old, t_new, t_old / t_new);
+  std::printf(
+      "maximum (1D, contiguous):  old ufunc_binary %7.3f ms | "
+      "elementwise %7.3f ms | %.2fx\n",
+      t_old,
+      t_new,
+      t_old / t_new);
 
   // --- binary broadcast: maximum(a2d, row) ---
   auto a2d = linspace(1.0, 2.0, static_cast<int>(N)); // {N/2, 2}
@@ -106,10 +119,13 @@ int main() {
   // --- unary square: SIMD vs scalar ---
   const double t_simd = ms([&] { (void)square(a); });
   const double t_scalar =
-      ms([&] { (void)detail::ufunc_unary(a, [](const double &v) { return v * v; }); });
-  std::printf("square:  SIMD fast path %7.3f ms | scalar ufunc_unary %7.3f ms | "
-              "%.2fx\n",
-              t_simd, t_scalar, t_scalar / t_simd);
+      ms([&] { (void)detail::ufunc_unary(a, [](const double& v) { return v * v; }); });
+  std::printf(
+      "square:  SIMD fast path %7.3f ms | scalar ufunc_unary %7.3f ms | "
+      "%.2fx\n",
+      t_simd,
+      t_scalar,
+      t_scalar / t_simd);
 
   // --- fma (single fused pass) ---
   auto c = linspace(0.1, 0.9, static_cast<int>(N));

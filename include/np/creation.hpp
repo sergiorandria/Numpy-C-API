@@ -25,549 +25,618 @@
 #include "api_macros.hpp"
 #include "ndarray.hpp"
 
-namespace np {
+namespace np
+{
 
-/** @brief Array of zeros with the given shape.
- *
- * @tparam T  Element type (default: double).
- * @param shape  Shape vector; must have at least one element.
- * @return       ndarray<T> of the given shape, filled with T{0}.
- * @throws       std::invalid_argument if shape is empty.
- *
- * Reference: numpy-reference/reference/generated/numpy.zeros.html
- */
-NP_API template <typename T = double>
-NP_NODISCARD auto zeros(const std::vector<int> &shape) -> ndarray<T> {
-  return ndarray<T>(shape, dtype_of<T>, T{0});
-}
-
-/** @brief Array of ones with the given shape.
- *
- * @tparam T  Element type (default: double).
- * @param shape  Shape vector; must have at least one element.
- * @return       ndarray<T> of the given shape, filled with T{1}.
- * @throws       std::invalid_argument if shape is empty.
- *
- * Reference: numpy-reference/reference/generated/numpy.ones.html
- */
-NP_API template <typename T = double>
-NP_NODISCARD auto ones(const std::vector<int> &shape) -> ndarray<T> {
-  return ndarray<T>(shape, dtype_of<T>, T{1});
-}
-
-/** @brief Array filled with a constant value.
- *
- * @tparam T  Element type (deduced from fill_value).
- * @param shape      Shape vector.
- * @param fill_value Value to fill every element with.
- * @return           ndarray<T> of the given shape, filled with fill_value.
- * @throws           std::invalid_argument if shape is empty.
- *
- * Reference: numpy-reference/reference/generated/numpy.full.html
- */
-NP_API template <typename T>
-NP_NODISCARD auto full(const std::vector<int> &shape, const T &fill_value) -> ndarray<T> {
-  return ndarray<T>(shape, dtype_of<T>, fill_value);
-}
-
-/** @brief Uninitialized array (values are default-constructed in C++).
- *
- * The memory is allocated but not zeroed; elements hold their
- * default-constructed values. For scalar types this means
- * indeterminate values for built-in types (same as `new T[n]`).
- *
- * @tparam T  Element type (default: double).
- * @param shape  Shape vector.
- * @return       ndarray<T> of the given shape with default-constructed
- * elements.
- * @throws       std::invalid_argument if shape is empty.
- *
- * Reference: numpy-reference/reference/generated/numpy.empty.html
- */
-NP_API template <typename T = double>
-NP_NODISCARD auto empty(const std::vector<int> &shape) -> ndarray<T> {
-  return ndarray<T>(shape, dtype_of<T>, T{});
-}
-
-/** @brief New array with the same shape as `a` (uninitialized).
- *
- * @tparam T  Element type of `a`.
- * @param a   Source array whose shape is copied.
- * @return    ndarray<T> with the same shape as `a`, default-constructed
- * elements.
- */
-NP_API template <typename T>
-NP_NODISCARD auto empty_like(const ndarray<T> &a) -> ndarray<T> {
-  return ndarray<T>(a.shape, a.type);
-}
-
-/** @brief Zeros with the same shape as `a`.
- *
- * @tparam T  Element type of `a`.
- * @param a   Source array whose shape is copied.
- * @return    ndarray<T> with the same shape as `a`, filled with T{0}.
- */
-NP_API template <typename T>
-NP_NODISCARD auto zeros_like(const ndarray<T> &a) -> ndarray<T> {
-  return ndarray<T>(a.shape, a.type, T{0});
-}
-
-/** @brief Ones with the same shape as `a`.
- *
- * @tparam T  Element type of `a`.
- * @param a   Source array whose shape is copied.
- * @return    ndarray<T> with the same shape as `a`, filled with T{1}.
- */
-NP_API template <typename T>
-NP_NODISCARD auto ones_like(const ndarray<T> &a) -> ndarray<T> {
-  return ndarray<T>(a.shape, a.type, T{1});
-}
-
-/** @brief Filled with `fill_value` using the shape and dtype of `a`.
- *
- * @tparam T       Element type of `a` and `fill_value`.
- * @param a        Source array whose shape and dtype are copied.
- * @param fill_value Value to fill every element with.
- * @return         ndarray<T> with the shape and dtype of `a`, filled with
- * fill_value.
- */
-NP_API template <typename T>
-NP_NODISCARD auto full_like(const ndarray<T> &a, const T &fill_value) -> ndarray<T> {
-  return ndarray<T>(a.shape, a.type, fill_value);
-}
-
-/** @brief Values evenly spaced from start (inclusive) to stop (exclusive).
- *
- * Computes the number of elements as ceil((stop - start) / step),
- * then generates start + step * i for i in [0, n). If step > 0 and
- * stop <= start, returns a 1-D array of size 0. If step < 0 and
- * stop >= start, returns a 1-D array of size 0.
- *
- * @tparam T  Element type (deduced from arguments).
- * @param start  Start value (inclusive).
- * @param stop   Stop value (exclusive).
- * @param step   Step size (default: T{1}); must not be zero.
- * @return       1-D ndarray<T> of the computed length.
- * @throws       std::invalid_argument if step is zero.
- *
- * Reference: numpy-reference/reference/generated/numpy.arange.html
- */
-NP_API template <typename T>
-NP_NODISCARD auto arange(T start, T stop, T step = T{1}) -> ndarray<T> {
-  if (step == T{0}) {
-    throw std::invalid_argument("arange step cannot be zero");
+  /** @brief Array of zeros with the given shape.
+   *
+   * @tparam T  Element type (default: double).
+   * @param shape  Shape vector; must have at least one element.
+   * @return       ndarray<T> of the given shape, filled with T{0}.
+   * @throws       std::invalid_argument if shape is empty.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.zeros.html
+   */
+  NP_API template <typename T = double>
+  NP_NODISCARD auto zeros(const std::vector<int>& shape) -> ndarray<T>
+  {
+    return ndarray<T>(shape, dtype_of<T>, T{0});
   }
-  std::vector<T> out;
-  if (step > T{0}) {
-    if (stop <= start) {
-      return ndarray<T>({0}, dtype_of<T>, T{});
+
+  /** @brief Array of ones with the given shape.
+   *
+   * @tparam T  Element type (default: double).
+   * @param shape  Shape vector; must have at least one element.
+   * @return       ndarray<T> of the given shape, filled with T{1}.
+   * @throws       std::invalid_argument if shape is empty.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.ones.html
+   */
+  NP_API template <typename T = double>
+  NP_NODISCARD auto ones(const std::vector<int>& shape) -> ndarray<T>
+  {
+    return ndarray<T>(shape, dtype_of<T>, T{1});
+  }
+
+  /** @brief Array filled with a constant value.
+   *
+   * @tparam T  Element type (deduced from fill_value).
+   * @param shape      Shape vector.
+   * @param fill_value Value to fill every element with.
+   * @return           ndarray<T> of the given shape, filled with fill_value.
+   * @throws           std::invalid_argument if shape is empty.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.full.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto full(const std::vector<int>& shape, const T& fill_value) -> ndarray<T>
+  {
+    return ndarray<T>(shape, dtype_of<T>, fill_value);
+  }
+
+  /** @brief Uninitialized array (values are default-constructed in C++).
+   *
+   * The memory is allocated but not zeroed; elements hold their
+   * default-constructed values. For scalar types this means
+   * indeterminate values for built-in types (same as `new T[n]`).
+   *
+   * @tparam T  Element type (default: double).
+   * @param shape  Shape vector.
+   * @return       ndarray<T> of the given shape with default-constructed
+   * elements.
+   * @throws       std::invalid_argument if shape is empty.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.empty.html
+   */
+  NP_API template <typename T = double>
+  NP_NODISCARD auto empty(const std::vector<int>& shape) -> ndarray<T>
+  {
+    return ndarray<T>(shape, dtype_of<T>, T{});
+  }
+
+  /** @brief New array with the same shape as `a` (uninitialized).
+   *
+   * @tparam T  Element type of `a`.
+   * @param a   Source array whose shape is copied.
+   * @return    ndarray<T> with the same shape as `a`, default-constructed
+   * elements.
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto empty_like(const ndarray<T>& a) -> ndarray<T>
+  {
+    return ndarray<T>(a.shape, a.type);
+  }
+
+  /** @brief Zeros with the same shape as `a`.
+   *
+   * @tparam T  Element type of `a`.
+   * @param a   Source array whose shape is copied.
+   * @return    ndarray<T> with the same shape as `a`, filled with T{0}.
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto zeros_like(const ndarray<T>& a) -> ndarray<T>
+  {
+    return ndarray<T>(a.shape, a.type, T{0});
+  }
+
+  /** @brief Ones with the same shape as `a`.
+   *
+   * @tparam T  Element type of `a`.
+   * @param a   Source array whose shape is copied.
+   * @return    ndarray<T> with the same shape as `a`, filled with T{1}.
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto ones_like(const ndarray<T>& a) -> ndarray<T>
+  {
+    return ndarray<T>(a.shape, a.type, T{1});
+  }
+
+  /** @brief Filled with `fill_value` using the shape and dtype of `a`.
+   *
+   * @tparam T       Element type of `a` and `fill_value`.
+   * @param a        Source array whose shape and dtype are copied.
+   * @param fill_value Value to fill every element with.
+   * @return         ndarray<T> with the shape and dtype of `a`, filled with
+   * fill_value.
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto full_like(const ndarray<T>& a, const T& fill_value) -> ndarray<T>
+  {
+    return ndarray<T>(a.shape, a.type, fill_value);
+  }
+
+  /** @brief Values evenly spaced from start (inclusive) to stop (exclusive).
+   *
+   * Computes the number of elements as ceil((stop - start) / step),
+   * then generates start + step * i for i in [0, n). If step > 0 and
+   * stop <= start, returns a 1-D array of size 0. If step < 0 and
+   * stop >= start, returns a 1-D array of size 0.
+   *
+   * @tparam T  Element type (deduced from arguments).
+   * @param start  Start value (inclusive).
+   * @param stop   Stop value (exclusive).
+   * @param step   Step size (default: T{1}); must not be zero.
+   * @return       1-D ndarray<T> of the computed length.
+   * @throws       std::invalid_argument if step is zero.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.arange.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto arange(T start, T stop, T step = T{1}) -> ndarray<T>
+  {
+    if (step == T{0})
+    {
+      throw std::invalid_argument("arange step cannot be zero");
     }
-    const std::size_t n = static_cast<std::size_t>(
-        std::ceil((static_cast<double>(stop) - static_cast<double>(start)) /
-                  static_cast<double>(step)));
-    out.reserve(n);
-    for (std::size_t i = 0; i < n; ++i) {
-      out.push_back(start + step * static_cast<T>(i));
-    }
-  } else {
-    if (stop >= start) {
-      return ndarray<T>({0}, dtype_of<T>, T{});
-    }
-    const std::size_t n = static_cast<std::size_t>(
-        std::ceil((static_cast<double>(stop) - static_cast<double>(start)) /
-                  static_cast<double>(step)));
-    out.reserve(n);
-    for (std::size_t i = 0; i < n; ++i) {
-      out.push_back(start + step * static_cast<T>(i));
-    }
-  }
-  const int n_elems = static_cast<int>(out.size());
-  return ndarray<T>::from_data(std::vector<int>{n_elems}, std::move(out));
-}
-
-/** @brief Values from 0 to stop (exclusive).
- *
- * Equivalent to arange(T{0}, stop, T{1}).
- *
- * @tparam T  Element type (deduced from stop).
- * @param stop  Exclusive upper bound.
- * @return      1-D ndarray<T> of length max(0, ceil(stop)).
- */
-NP_API template <typename T>
-NP_NODISCARD auto arange(T stop) -> ndarray<T> {
-  return arange(T{0}, stop, T{1});
-}
-
-/** @brief num evenly spaced values from start to stop (inclusive).
- *
- * When endpoint is true (default), the sequence includes stop.
- * When endpoint is false, stop is excluded and the step is
- * (stop - start) / num. Integer inputs are promoted to double.
- *
- * @tparam T  Element type (deduced from start/stop).
- * @param start    Start value (inclusive).
- * @param stop     Stop value (inclusive when endpoint is true).
- * @param num      Number of samples (default: 50); must be > 0.
- * @param endpoint Whether to include stop in the sequence.
- * @return         1-D ndarray<R> where R is double if T is integral,
- *                 otherwise T.
- *
- * Reference: numpy-reference/reference/generated/numpy.linspace.html
- */
-NP_API template <typename T>
-NP_NODISCARD auto linspace(T start, T stop, std::size_t num = 50, bool endpoint = true)
-    -> ndarray<std::conditional_t<std::is_floating_point_v<T>, T, double>> {
-  using R = std::conditional_t<std::is_floating_point_v<T>, T, double>;
-  if (num == 0) {
-    return ndarray<R>(std::vector<int>{0});
-  }
-  std::vector<R> out;
-  out.reserve(num);
-  if (num == 1) {
-    out.push_back(static_cast<R>(start));
-    return ndarray<R>::from_data(std::vector<int>{1}, std::move(out));
-  }
-  const R delta = endpoint ? (static_cast<R>(stop) - static_cast<R>(start)) /
-                                 static_cast<R>(num - 1)
-                           : (static_cast<R>(stop) - static_cast<R>(start)) /
-                                 static_cast<R>(num);
-  for (std::size_t i = 0; i < num; ++i) {
-    out.push_back(static_cast<R>(start) + delta * static_cast<R>(i));
-  }
-  return ndarray<R>::from_data(std::vector<int>{static_cast<int>(num)},
-                               std::move(out));
-}
-
-/** @brief Logarithmically spaced values from base^start to base^stop.
- *
- * Uses linspace internally to generate the exponent values, then
- * applies std::pow(base, exponent) element-wise.
- *
- * @tparam T  Element type (deduced from start/stop).
- * @param start  Start exponent (inclusive).
- * @param stop   Stop exponent (inclusive).
- * @param num    Number of samples (default: 50).
- * @param base   The base of the logarithm (default: T{10}).
- * @return       1-D ndarray<double> of num elements.
- *
- * Reference: numpy-reference/reference/generated/numpy.logspace.html
- */
-NP_API template <typename T>
-NP_NODISCARD auto logspace(T start, T stop, std::size_t num = 50, T base = T{10})
-    -> ndarray<double> {
-  auto powers = linspace(start, stop, num);
-  ndarray<double> out(std::vector<int>{static_cast<int>(num)});
-  for (std::size_t i = 0; i < num; ++i) {
-    out.data()[i] = std::pow(static_cast<double>(base),
-                             static_cast<double>(powers.data()[i]));
-  }
-  return out;
-}
-
-/** @brief Identity matrix of size n x n with optional offset k.
- *
- * The diagonal at offset k is set to T{1}. k > 0 places the
- * diagonal above the main diagonal; k < 0 below it.
- *
- * @tparam T  Element type (default: double).
- * @param n  Number of rows.
- * @param m  Number of columns (default: n, making a square matrix).
- * @param k  Diagonal offset (default: 0).
- * @return   ndarray<T> of shape (n, m) with ones on the k-th diagonal.
- *
- * Reference: numpy-reference/reference/generated/numpy.eye.html
- */
-NP_API template <typename T = double>
-NP_NODISCARD auto eye(std::size_t n, std::size_t m = 0, int k = 0) -> ndarray<T> {
-  if (m == 0) {
-    m = n;
-  }
-  std::vector<int> shape = {static_cast<int>(n), static_cast<int>(m)};
-  ndarray<T> out(shape, dtype_of<T>, T{0});
-  const std::ptrdiff_t rows = static_cast<std::ptrdiff_t>(n);
-  const std::ptrdiff_t cols = static_cast<std::ptrdiff_t>(m);
-  for (std::ptrdiff_t i = 0; i < rows; ++i) {
-    const std::ptrdiff_t j = i + k;
-    if (j >= 0 && j < cols) {
-      out.set(std::array<std::size_t, 2>{static_cast<std::size_t>(i),
-                                         static_cast<std::size_t>(j)},
-              T{1});
-    }
-  }
-  return out;
-}
-
-/** @brief Identity matrix of size n x n.
- *
- * Equivalent to eye<T>(n, n, 0).
- *
- * @tparam T  Element type (default: double).
- * @param n  Size of the square matrix.
- * @return   ndarray<T> of shape (n, n) with ones on the main diagonal.
- *
- * Reference: numpy-reference/reference/generated/numpy.identity.html
- */
-NP_API template <typename T = double>
-NP_NODISCARD auto identity(std::size_t n) -> ndarray<T> {
-  return eye<T>(n, n, 0);
-}
-
-/** @brief 1D array from a std::vector (copies).
- *
- * @tparam T  Element type.
- * @param values  Source vector (copied).
- * @return        1-D ndarray<T> with the same elements as values.
- */
-NP_API template <typename T>
-NP_NODISCARD auto asarray(const std::vector<T> &values) -> ndarray<T> {
-  return ndarray<T>::from_data(
-      std::vector<int>{static_cast<int>(values.size())},
-      std::vector<T>(values));
-}
-
-/** @brief 1D array from a std::array (copies).
- *
- * @tparam T  Element type.
- * @tparam N  Size of the source array.
- * @param values  Source std::array (copied).
- * @return        1-D ndarray<T> with the same elements.
- */
-NP_API template <typename T, std::size_t N>
-NP_NODISCARD auto asarray(const std::array<T, N> &values) -> ndarray<T> {
-  return ndarray<T>::from_data(std::vector<int>{static_cast<int>(N)},
-                               std::vector<T>(values.begin(), values.end()));
-}
-
-/** @brief Array of the given shape from a contiguous std::vector.
- *
- * The total number of elements in values must equal the product
- * of the shape dimensions. The data is copied.
- *
- * @tparam T  Element type.
- * @param values  Source vector (copied).
- * @param shape   Target shape; must have at least one element.
- * @return        ndarray<T> of the given shape.
- * @throws        std::invalid_argument if sizes do not match.
- *
- * Reference: numpy-reference/reference/generated/numpy.asarray.html
- */
-NP_API template <typename T>
-NP_NODISCARD auto asarray(const std::vector<T> &values, const std::vector<int> &shape)
-    -> ndarray<T> {
-  return ndarray<T>::from_data(shape, std::vector<T>(values));
-}
-
-/** @brief Geometrically spaced values (log-spaced between start and stop).
- *
- * Equivalent to `np.geomspace` with base 10 geometric progression.
- * For integer inputs the result is double. Requires start and stop
- * non-zero and with the same sign; otherwise std::invalid_argument
- * is thrown (mirrors NumPy's behaviour for negative inputs when
- * num samples would cross zero via log).
- *
- * @tparam T Element type (floating-point promoted to double for integers).
- * @param start Start value (inclusive, non-zero).
- * @param stop Stop value (inclusive, non-zero).
- * @param num Number of samples (default 50).
- * @param endpoint Whether to include stop.
- * @return 1-D ndarray<double> of num elements.
- *
- * Reference: numpy-reference/reference/generated/numpy.geomspace.html
- */
-NP_API template <typename T>
-NP_NODISCARD auto geomspace(T start, T stop, std::size_t num = 50, bool endpoint = true)
-    -> ndarray<double> {
-  if (num == 0) {
-    return ndarray<double>(std::vector<int>{0});
-  }
-  double s = static_cast<double>(start);
-  double e = static_cast<double>(stop);
-  if (s == 0.0 || e == 0.0) {
-    throw std::invalid_argument("geomspace: start and stop must be non-zero");
-  }
-  // Numpy allows negative start/stop only if they share the sign
-  if ((s < 0) != (e < 0)) {
-    throw std::invalid_argument("geomspace: start and stop must have same sign");
-  }
-  bool neg = s < 0;
-  double ls = std::log10(std::abs(s));
-  double le = std::log10(std::abs(e));
-  auto p = linspace(ls, le, num, endpoint);
-  ndarray<double> out(std::vector<int>{static_cast<int>(num)});
-  for (std::size_t i = 0; i < num; ++i) {
-    double v = std::pow(10.0, p.data()[i]);
-    out.data()[i] = neg ? -v : v;
-  }
-  return out;
-}
-
-/** @brief Indices of an N-dimensional array.
- *
- * Returns an array of shape (ndim, dim0, dim1, ...) where
- * result(0, ...) contains row indices, result(1, ...) column, etc.
- * Mirrors `np.indices`.
- *
- * @param dimensions Shape of the desired index grid.
- * @param dtype Ignored – always int.
- * @return ndarray<int> with ndim leading dimension.
- *
- * Reference: numpy-reference/reference/generated/numpy.indices.html
- */
-NP_API inline auto indices(const std::vector<int> &dimensions) -> ndarray<int> {
-  if (dimensions.empty()) {
-    throw std::invalid_argument("indices: dimensions must be non-empty");
-  }
-  std::vector<int> out_shape;
-  out_shape.push_back(static_cast<int>(dimensions.size()));
-  out_shape.insert(out_shape.end(), dimensions.begin(), dimensions.end());
-  ndarray<int> out(out_shape);
-  // Fill using odometer
-  std::vector<std::size_t> idx(dimensions.size(), 0);
-  // Iterate over all positions in the grid
-  detail::Odometer od(dimensions);
-  while (!od.done()) {
-    const auto &pos = od.idx();
-    for (std::size_t d = 0; d < dimensions.size(); ++d) {
-      std::vector<std::size_t> full(dimensions.size() + 1, 0);
-      full[0] = d;
-      for (std::size_t k = 0; k < dimensions.size(); ++k) full[k + 1] = pos[k];
-      out.set(full, static_cast<int>(pos[d]));
-    }
-    od.advance();
-  }
-  return out;
-}
-
-/** @brief Construct an array from a function over indices.
- *
- * Calls `func` for every index tuple and stores the result.
- * The callable receives `std::vector<std::size_t>` of length
- * `shape.size()` and returns T.
- *
- * @tparam T Element type.
- * @tparam Fn Callable `T(const std::vector<std::size_t>&)`.
- * @param shape Desired shape.
- * @param func Function generating elements.
- * @return ndarray<T> filled via func.
- *
- * Reference: numpy-reference/reference/generated/numpy.fromfunction.html
- */
-NP_API template <typename T, typename Fn>
-NP_NODISCARD auto fromfunction(const std::vector<int> &shape, Fn &&func) -> ndarray<T> {
-  ndarray<T> out(shape);
-  detail::Odometer od(shape);
-  while (!od.done()) {
-    const auto &pos = od.idx();
-    out.set(pos, func(pos));
-    od.advance();
-  }
-  return out;
-}
-
-/** @brief Meshgrid for 1-D coordinate vectors.
- *
- * Supports 2-input Cartesian meshgrids (the most common NumPy use).
- * indexing='ij' (matrix) gives shape (len(x), len(y)) transposed,
- * indexing='xy' (default, Cartesian) gives shape (len(y), len(x)).
- * For N>2 use the vector overload below.
- *
- * @tparam T Element type (common type of inputs).
- * @param x First coordinate vector (1-D).
- * @param y Second coordinate vector (1-D).
- * @param indexing 'xy' or 'ij' (default 'xy').
- * @return Pair {X, Y} broadcast grids.
- *
- * Reference: numpy-reference/reference/generated/numpy.meshgrid.html
- */
-NP_API template <typename T>
-NP_NODISCARD auto meshgrid(const ndarray<T> &x, const ndarray<T> &y,
-                           const std::string &indexing = "xy")
-    -> std::pair<ndarray<T>, ndarray<T>> {
-  if (x.ndim() != 1 || y.ndim() != 1) {
-    throw std::invalid_argument("meshgrid: inputs must be 1-D");
-  }
-  if (indexing != "xy" && indexing != "ij") {
-    throw std::invalid_argument("meshgrid: indexing must be 'xy' or 'ij'");
-  }
-  std::size_t nx = x.size();
-  std::size_t ny = y.size();
-  ndarray<T> X, Y;
-  if (indexing == "xy") {
-    X = ndarray<T>(std::vector<int>{static_cast<int>(ny), static_cast<int>(nx)});
-    Y = ndarray<T>(std::vector<int>{static_cast<int>(ny), static_cast<int>(nx)});
-    for (std::size_t i = 0; i < ny; ++i) {
-      for (std::size_t j = 0; j < nx; ++j) {
-        X.at(i, j) = x.at(j);
-        Y.at(i, j) = y.at(i);
+    std::vector<T> out;
+    if (step > T{0})
+    {
+      if (stop <= start)
+      {
+        return ndarray<T>({0}, dtype_of<T>, T{});
+      }
+      const std::size_t n = static_cast<std::size_t>(std::ceil(
+          (static_cast<double>(stop) - static_cast<double>(start))
+          / static_cast<double>(step)));
+      out.reserve(n);
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        out.push_back(start + step * static_cast<T>(i));
       }
     }
-  } else {
-    X = ndarray<T>(std::vector<int>{static_cast<int>(nx), static_cast<int>(ny)});
-    Y = ndarray<T>(std::vector<int>{static_cast<int>(nx), static_cast<int>(ny)});
-    for (std::size_t i = 0; i < nx; ++i) {
-      for (std::size_t j = 0; j < ny; ++j) {
-        X.at(i, j) = x.at(i);
-        Y.at(i, j) = y.at(j);
+    else
+    {
+      if (stop >= start)
+      {
+        return ndarray<T>({0}, dtype_of<T>, T{});
+      }
+      const std::size_t n = static_cast<std::size_t>(std::ceil(
+          (static_cast<double>(stop) - static_cast<double>(start))
+          / static_cast<double>(step)));
+      out.reserve(n);
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        out.push_back(start + step * static_cast<T>(i));
       }
     }
+    const int n_elems = static_cast<int>(out.size());
+    return ndarray<T>::from_data(std::vector<int>{n_elems}, std::move(out));
   }
-  return {X, Y};
-}
 
-/** @brief N-dimensional meshgrid (vector version).
- *
- * @tparam T Element type.
- * @param arrays Vector of 1-D coordinate arrays.
- * @param indexing 'xy' or 'ij'.
- * @return Vector of N broadcast grids, each with shape
- *         (len0, len1, ...) with xy swap on first two axes when
- *         indexing=='xy'.
- *
- * Reference: numpy-reference/reference/generated/numpy.meshgrid.html
- */
-NP_API template <typename T>
-NP_NODISCARD auto meshgrid(const std::vector<ndarray<T>> &arrays,
-                           const std::string &indexing = "xy")
-    -> std::vector<ndarray<T>> {
-  if (arrays.empty()) {
-    throw std::invalid_argument("meshgrid: at least one array required");
+  /** @brief Values from 0 to stop (exclusive).
+   *
+   * Equivalent to arange(T{0}, stop, T{1}).
+   *
+   * @tparam T  Element type (deduced from stop).
+   * @param stop  Exclusive upper bound.
+   * @return      1-D ndarray<T> of length max(0, ceil(stop)).
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto arange(T stop) -> ndarray<T>
+  {
+    return arange(T{0}, stop, T{1});
   }
-  for (auto &a : arrays) {
-    if (a.ndim() != 1) throw std::invalid_argument("meshgrid: inputs must be 1-D");
-  }
-  std::size_t N = arrays.size();
-  // Build shape: lens in order, swapping first two when xy and N>=2
-  std::vector<int> base_shape;
-  base_shape.reserve(N);
-  for (auto &a : arrays) base_shape.push_back(static_cast<int>(a.size()));
-  std::vector<int> out_shape = base_shape;
-  if (indexing == "xy" && N >= 2) std::swap(out_shape[0], out_shape[1]);
 
-  std::vector<ndarray<T>> grids;
-  grids.reserve(N);
-  for (std::size_t n = 0; n < N; ++n) {
-    grids.emplace_back(out_shape);
-  }
-  // For each output position, source index per grid is position mapped
-  // through shape permutation.
-  detail::Odometer od(out_shape);
-  while (!od.done()) {
-    const auto &pos = od.idx();
-    for (std::size_t n = 0; n < N; ++n) {
-      std::size_t src;
-      if (indexing == "xy" && N >= 2) {
-        if (n == 0) src = pos[1];
-        else if (n == 1) src = pos[0];
-        else src = pos[n];
-      } else {
-        src = pos[n];
-      }
-      grids[n].set(pos, arrays[n].at(src));
+  /** @brief num evenly spaced values from start to stop (inclusive).
+   *
+   * When endpoint is true (default), the sequence includes stop.
+   * When endpoint is false, stop is excluded and the step is
+   * (stop - start) / num. Integer inputs are promoted to double.
+   *
+   * @tparam T  Element type (deduced from start/stop).
+   * @param start    Start value (inclusive).
+   * @param stop     Stop value (inclusive when endpoint is true).
+   * @param num      Number of samples (default: 50); must be > 0.
+   * @param endpoint Whether to include stop in the sequence.
+   * @return         1-D ndarray<R> where R is double if T is integral,
+   *                 otherwise T.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.linspace.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto linspace(T start, T stop, std::size_t num = 50, bool endpoint = true)
+      -> ndarray<std::conditional_t<std::is_floating_point_v<T>, T, double>>
+  {
+    using R = std::conditional_t<std::is_floating_point_v<T>, T, double>;
+    if (num == 0)
+    {
+      return ndarray<R>(std::vector<int>{0});
     }
-    od.advance();
+    std::vector<R> out;
+    out.reserve(num);
+    if (num == 1)
+    {
+      out.push_back(static_cast<R>(start));
+      return ndarray<R>::from_data(std::vector<int>{1}, std::move(out));
+    }
+    const R delta = endpoint
+        ? (static_cast<R>(stop) - static_cast<R>(start)) / static_cast<R>(num - 1)
+        : (static_cast<R>(stop) - static_cast<R>(start)) / static_cast<R>(num);
+    for (std::size_t i = 0; i < num; ++i)
+    {
+      out.push_back(static_cast<R>(start) + delta * static_cast<R>(i));
+    }
+    return ndarray<R>::from_data(std::vector<int>{static_cast<int>(num)}, std::move(out));
   }
-  return grids;
-}
+
+  /** @brief Logarithmically spaced values from base^start to base^stop.
+   *
+   * Uses linspace internally to generate the exponent values, then
+   * applies std::pow(base, exponent) element-wise.
+   *
+   * @tparam T  Element type (deduced from start/stop).
+   * @param start  Start exponent (inclusive).
+   * @param stop   Stop exponent (inclusive).
+   * @param num    Number of samples (default: 50).
+   * @param base   The base of the logarithm (default: T{10}).
+   * @return       1-D ndarray<double> of num elements.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.logspace.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto logspace(T start, T stop, std::size_t num = 50, T base = T{10})
+      -> ndarray<double>
+  {
+    auto powers = linspace(start, stop, num);
+    ndarray<double> out(std::vector<int>{static_cast<int>(num)});
+    for (std::size_t i = 0; i < num; ++i)
+    {
+      out.data()[i] =
+          std::pow(static_cast<double>(base), static_cast<double>(powers.data()[i]));
+    }
+    return out;
+  }
+
+  /** @brief Identity matrix of size n x n with optional offset k.
+   *
+   * The diagonal at offset k is set to T{1}. k > 0 places the
+   * diagonal above the main diagonal; k < 0 below it.
+   *
+   * @tparam T  Element type (default: double).
+   * @param n  Number of rows.
+   * @param m  Number of columns (default: n, making a square matrix).
+   * @param k  Diagonal offset (default: 0).
+   * @return   ndarray<T> of shape (n, m) with ones on the k-th diagonal.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.eye.html
+   */
+  NP_API template <typename T = double>
+  NP_NODISCARD auto eye(std::size_t n, std::size_t m = 0, int k = 0) -> ndarray<T>
+  {
+    if (m == 0)
+    {
+      m = n;
+    }
+    std::vector<int> shape = {static_cast<int>(n), static_cast<int>(m)};
+    ndarray<T> out(shape, dtype_of<T>, T{0});
+    const std::ptrdiff_t rows = static_cast<std::ptrdiff_t>(n);
+    const std::ptrdiff_t cols = static_cast<std::ptrdiff_t>(m);
+    for (std::ptrdiff_t i = 0; i < rows; ++i)
+    {
+      const std::ptrdiff_t j = i + k;
+      if (j >= 0 && j < cols)
+      {
+        out.set(
+            std::array<std::size_t, 2>{
+                static_cast<std::size_t>(i), static_cast<std::size_t>(j)},
+            T{1});
+      }
+    }
+    return out;
+  }
+
+  /** @brief Identity matrix of size n x n.
+   *
+   * Equivalent to eye<T>(n, n, 0).
+   *
+   * @tparam T  Element type (default: double).
+   * @param n  Size of the square matrix.
+   * @return   ndarray<T> of shape (n, n) with ones on the main diagonal.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.identity.html
+   */
+  NP_API template <typename T = double>
+  NP_NODISCARD auto identity(std::size_t n) -> ndarray<T>
+  {
+    return eye<T>(n, n, 0);
+  }
+
+  /** @brief 1D array from a std::vector (copies).
+   *
+   * @tparam T  Element type.
+   * @param values  Source vector (copied).
+   * @return        1-D ndarray<T> with the same elements as values.
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto asarray(const std::vector<T>& values) -> ndarray<T>
+  {
+    return ndarray<T>::from_data(
+        std::vector<int>{static_cast<int>(values.size())}, std::vector<T>(values));
+  }
+
+  /** @brief 1D array from a std::array (copies).
+   *
+   * @tparam T  Element type.
+   * @tparam N  Size of the source array.
+   * @param values  Source std::array (copied).
+   * @return        1-D ndarray<T> with the same elements.
+   */
+  NP_API template <typename T, std::size_t N>
+  NP_NODISCARD auto asarray(const std::array<T, N>& values) -> ndarray<T>
+  {
+    return ndarray<T>::from_data(
+        std::vector<int>{static_cast<int>(N)},
+        std::vector<T>(values.begin(), values.end()));
+  }
+
+  /** @brief Array of the given shape from a contiguous std::vector.
+   *
+   * The total number of elements in values must equal the product
+   * of the shape dimensions. The data is copied.
+   *
+   * @tparam T  Element type.
+   * @param values  Source vector (copied).
+   * @param shape   Target shape; must have at least one element.
+   * @return        ndarray<T> of the given shape.
+   * @throws        std::invalid_argument if sizes do not match.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.asarray.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto asarray(const std::vector<T>& values, const std::vector<int>& shape)
+      -> ndarray<T>
+  {
+    return ndarray<T>::from_data(shape, std::vector<T>(values));
+  }
+
+  /** @brief Geometrically spaced values (log-spaced between start and stop).
+   *
+   * Equivalent to `np.geomspace` with base 10 geometric progression.
+   * For integer inputs the result is double. Requires start and stop
+   * non-zero and with the same sign; otherwise std::invalid_argument
+   * is thrown (mirrors NumPy's behaviour for negative inputs when
+   * num samples would cross zero via log).
+   *
+   * @tparam T Element type (floating-point promoted to double for integers).
+   * @param start Start value (inclusive, non-zero).
+   * @param stop Stop value (inclusive, non-zero).
+   * @param num Number of samples (default 50).
+   * @param endpoint Whether to include stop.
+   * @return 1-D ndarray<double> of num elements.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.geomspace.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto geomspace(T start, T stop, std::size_t num = 50, bool endpoint = true)
+      -> ndarray<double>
+  {
+    if (num == 0)
+    {
+      return ndarray<double>(std::vector<int>{0});
+    }
+    double s = static_cast<double>(start);
+    double e = static_cast<double>(stop);
+    if (s == 0.0 || e == 0.0)
+    {
+      throw std::invalid_argument("geomspace: start and stop must be non-zero");
+    }
+    // Numpy allows negative start/stop only if they share the sign
+    if ((s < 0) != (e < 0))
+    {
+      throw std::invalid_argument("geomspace: start and stop must have same sign");
+    }
+    bool neg = s < 0;
+    double ls = std::log10(std::abs(s));
+    double le = std::log10(std::abs(e));
+    auto p = linspace(ls, le, num, endpoint);
+    ndarray<double> out(std::vector<int>{static_cast<int>(num)});
+    for (std::size_t i = 0; i < num; ++i)
+    {
+      double v = std::pow(10.0, p.data()[i]);
+      out.data()[i] = neg ? -v : v;
+    }
+    return out;
+  }
+
+  /** @brief Indices of an N-dimensional array.
+   *
+   * Returns an array of shape (ndim, dim0, dim1, ...) where
+   * result(0, ...) contains row indices, result(1, ...) column, etc.
+   * Mirrors `np.indices`.
+   *
+   * @param dimensions Shape of the desired index grid.
+   * @param dtype Ignored – always int.
+   * @return ndarray<int> with ndim leading dimension.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.indices.html
+   */
+  NP_API inline auto indices(const std::vector<int>& dimensions) -> ndarray<int>
+  {
+    if (dimensions.empty())
+    {
+      throw std::invalid_argument("indices: dimensions must be non-empty");
+    }
+    std::vector<int> out_shape;
+    out_shape.push_back(static_cast<int>(dimensions.size()));
+    out_shape.insert(out_shape.end(), dimensions.begin(), dimensions.end());
+    ndarray<int> out(out_shape);
+    // Fill using odometer
+    std::vector<std::size_t> idx(dimensions.size(), 0);
+    // Iterate over all positions in the grid
+    detail::Odometer od(dimensions);
+    while (!od.done())
+    {
+      const auto& pos = od.idx();
+      for (std::size_t d = 0; d < dimensions.size(); ++d)
+      {
+        std::vector<std::size_t> full(dimensions.size() + 1, 0);
+        full[0] = d;
+        for (std::size_t k = 0; k < dimensions.size(); ++k)
+          full[k + 1] = pos[k];
+        out.set(full, static_cast<int>(pos[d]));
+      }
+      od.advance();
+    }
+    return out;
+  }
+
+  /** @brief Construct an array from a function over indices.
+   *
+   * Calls `func` for every index tuple and stores the result.
+   * The callable receives `std::vector<std::size_t>` of length
+   * `shape.size()` and returns T.
+   *
+   * @tparam T Element type.
+   * @tparam Fn Callable `T(const std::vector<std::size_t>&)`.
+   * @param shape Desired shape.
+   * @param func Function generating elements.
+   * @return ndarray<T> filled via func.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.fromfunction.html
+   */
+  NP_API template <typename T, typename Fn>
+  NP_NODISCARD auto fromfunction(const std::vector<int>& shape, Fn&& func) -> ndarray<T>
+  {
+    ndarray<T> out(shape);
+    detail::Odometer od(shape);
+    while (!od.done())
+    {
+      const auto& pos = od.idx();
+      out.set(pos, func(pos));
+      od.advance();
+    }
+    return out;
+  }
+
+  /** @brief Meshgrid for 1-D coordinate vectors.
+   *
+   * Supports 2-input Cartesian meshgrids (the most common NumPy use).
+   * indexing='ij' (matrix) gives shape (len(x), len(y)) transposed,
+   * indexing='xy' (default, Cartesian) gives shape (len(y), len(x)).
+   * For N>2 use the vector overload below.
+   *
+   * @tparam T Element type (common type of inputs).
+   * @param x First coordinate vector (1-D).
+   * @param y Second coordinate vector (1-D).
+   * @param indexing 'xy' or 'ij' (default 'xy').
+   * @return Pair {X, Y} broadcast grids.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.meshgrid.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto
+  meshgrid(const ndarray<T>& x, const ndarray<T>& y, const std::string& indexing = "xy")
+      -> std::pair<ndarray<T>, ndarray<T>>
+  {
+    if (x.ndim() != 1 || y.ndim() != 1)
+    {
+      throw std::invalid_argument("meshgrid: inputs must be 1-D");
+    }
+    if (indexing != "xy" && indexing != "ij")
+    {
+      throw std::invalid_argument("meshgrid: indexing must be 'xy' or 'ij'");
+    }
+    std::size_t nx = x.size();
+    std::size_t ny = y.size();
+    ndarray<T> X, Y;
+    if (indexing == "xy")
+    {
+      X = ndarray<T>(std::vector<int>{static_cast<int>(ny), static_cast<int>(nx)});
+      Y = ndarray<T>(std::vector<int>{static_cast<int>(ny), static_cast<int>(nx)});
+      for (std::size_t i = 0; i < ny; ++i)
+      {
+        for (std::size_t j = 0; j < nx; ++j)
+        {
+          X.at(i, j) = x.at(j);
+          Y.at(i, j) = y.at(i);
+        }
+      }
+    }
+    else
+    {
+      X = ndarray<T>(std::vector<int>{static_cast<int>(nx), static_cast<int>(ny)});
+      Y = ndarray<T>(std::vector<int>{static_cast<int>(nx), static_cast<int>(ny)});
+      for (std::size_t i = 0; i < nx; ++i)
+      {
+        for (std::size_t j = 0; j < ny; ++j)
+        {
+          X.at(i, j) = x.at(i);
+          Y.at(i, j) = y.at(j);
+        }
+      }
+    }
+    return {X, Y};
+  }
+
+  /** @brief N-dimensional meshgrid (vector version).
+   *
+   * @tparam T Element type.
+   * @param arrays Vector of 1-D coordinate arrays.
+   * @param indexing 'xy' or 'ij'.
+   * @return Vector of N broadcast grids, each with shape
+   *         (len0, len1, ...) with xy swap on first two axes when
+   *         indexing=='xy'.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.meshgrid.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto
+  meshgrid(const std::vector<ndarray<T>>& arrays, const std::string& indexing = "xy")
+      -> std::vector<ndarray<T>>
+  {
+    if (arrays.empty())
+    {
+      throw std::invalid_argument("meshgrid: at least one array required");
+    }
+    for (auto& a : arrays)
+    {
+      if (a.ndim() != 1)
+        throw std::invalid_argument("meshgrid: inputs must be 1-D");
+    }
+    std::size_t N = arrays.size();
+    // Build shape: lens in order, swapping first two when xy and N>=2
+    std::vector<int> base_shape;
+    base_shape.reserve(N);
+    for (auto& a : arrays)
+      base_shape.push_back(static_cast<int>(a.size()));
+    std::vector<int> out_shape = base_shape;
+    if (indexing == "xy" && N >= 2)
+      std::swap(out_shape[0], out_shape[1]);
+
+    std::vector<ndarray<T>> grids;
+    grids.reserve(N);
+    for (std::size_t n = 0; n < N; ++n)
+    {
+      grids.emplace_back(out_shape);
+    }
+    // For each output position, source index per grid is position mapped
+    // through shape permutation.
+    detail::Odometer od(out_shape);
+    while (!od.done())
+    {
+      const auto& pos = od.idx();
+      for (std::size_t n = 0; n < N; ++n)
+      {
+        std::size_t src;
+        if (indexing == "xy" && N >= 2)
+        {
+          if (n == 0)
+            src = pos[1];
+          else if (n == 1)
+            src = pos[0];
+          else
+            src = pos[n];
+        }
+        else
+        {
+          src = pos[n];
+        }
+        grids[n].set(pos, arrays[n].at(src));
+      }
+      od.advance();
+    }
+    return grids;
+  }
 
 } // namespace np
 

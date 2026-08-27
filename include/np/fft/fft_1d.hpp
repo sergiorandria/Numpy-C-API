@@ -36,18 +36,17 @@ inline constexpr bool is_transform_element_v =
 namespace detail {
 
 /** @brief Resolve the transform length, rejecting 0 (NumPy ValueError). */
-[[nodiscard]] inline std::size_t deduced_len(bool has_n, std::size_t n,
-                                             std::size_t axis_len) {
-  return has_n ? check_len(n) : check_len(axis_len);
+[[nodiscard]] inline std::size_t deduced_len(bool has_n, std::size_t n, std::size_t axis_len) {
+    return has_n ? check_len(n) : check_len(axis_len);
 }
 
 /** @brief Default output length for the inverse real transforms
  *         (2*(m-1), throwing when m < 2). */
 [[nodiscard]] inline std::size_t inverse_real_len(std::size_t axis_len) {
-  if (axis_len < 2) {
-    throw std::invalid_argument("Invalid number of FFT data points (0).");
-  }
-  return (axis_len - 1) * 2;
+    if (axis_len < 2) {
+        throw std::invalid_argument("Invalid number of FFT data points (0).");
+    }
+    return (axis_len - 1) * 2;
 }
 
 } // namespace detail
@@ -56,23 +55,20 @@ namespace detail {
  *
  * Reference: numpy-reference/reference/generated/numpy.fft.fft.html
  */
-NP_API NP_NODISCARD inline auto
-fft(const std::vector<Cplx> &x) -> std::vector<Cplx> {
-  std::vector<Cplx> out(x);
-  detail::transform(out, false, 1.0, detail::twiddle_cache());
-  return out;
+NP_API NP_NODISCARD inline auto fft(const std::vector<Cplx>& x) -> std::vector<Cplx> {
+    std::vector<Cplx> out(x);
+    detail::transform(out, false, 1.0, detail::twiddle_cache());
+    return out;
 }
 
 /** @brief 1-D inverse discrete Fourier transform of a complex sequence.
  *
  * Reference: numpy-reference/reference/generated/numpy.fft.ifft.html
  */
-NP_API NP_NODISCARD inline auto
-ifft(const std::vector<Cplx> &x) -> std::vector<Cplx> {
-  std::vector<Cplx> out(x);
-  detail::transform(out, true, 1.0 / static_cast<double>(out.size()),
-                    detail::twiddle_cache());
-  return out;
+NP_API NP_NODISCARD inline auto ifft(const std::vector<Cplx>& x) -> std::vector<Cplx> {
+    std::vector<Cplx> out(x);
+    detail::transform(out, true, 1.0 / static_cast<double>(out.size()), detail::twiddle_cache());
+    return out;
 }
 
 /**
@@ -89,22 +85,20 @@ ifft(const std::vector<Cplx> &x) -> std::vector<Cplx> {
  * Reference: numpy-reference/reference/generated/numpy.fft.fft.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto fft(const ndarray<T> &x,
-                      std::optional<std::size_t> n = std::nullopt,
+NP_NODISCARD auto fft(const ndarray<T>& x, std::optional<std::size_t> n = std::nullopt,
                       int axis = -1, Norm norm = Norm::Backward) -> ndarray<Cplx> {
-  static_assert(is_transform_element_v<T>,
-                "np::fft requires arithmetic or std::complex element types");
-  if (x.ndim() == 0) {
-    throw std::invalid_argument("fft: input must have at least one dimension");
-  }
-  const int ax = detail::normalize_axis(axis, x.ndim());
-  const std::size_t len = detail::deduced_len(
-      n.has_value(), n.value_or(0), static_cast<std::size_t>(x.shape[ax]));
-  ndarray<Cplx> out(detail::with_axis_len(x.shape, ax, len));
-  detail::transform_lines(x, ax, len, out, false,
-                          detail::scale_factor(norm, len, false),
-                          detail::twiddle_cache());
-  return out;
+    static_assert(is_transform_element_v<T>,
+                  "np::fft requires arithmetic or std::complex element types");
+    if (x.ndim() == 0) {
+        throw std::invalid_argument("fft: input must have at least one dimension");
+    }
+    const int ax = detail::normalize_axis(axis, x.ndim());
+    const std::size_t len =
+        detail::deduced_len(n.has_value(), n.value_or(0), static_cast<std::size_t>(x.shape[ax]));
+    ndarray<Cplx> out(detail::with_axis_len(x.shape, ax, len));
+    detail::transform_lines(x, ax, len, out, false, detail::scale_factor(norm, len, false),
+                            detail::twiddle_cache());
+    return out;
 }
 
 /**
@@ -113,22 +107,20 @@ NP_NODISCARD auto fft(const ndarray<T> &x,
  * Reference: numpy-reference/reference/generated/numpy.fft.ifft.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto ifft(const ndarray<T> &x,
-                       std::optional<std::size_t> n = std::nullopt,
+NP_NODISCARD auto ifft(const ndarray<T>& x, std::optional<std::size_t> n = std::nullopt,
                        int axis = -1, Norm norm = Norm::Backward) -> ndarray<Cplx> {
-  static_assert(is_transform_element_v<T>,
-                "np::fft requires arithmetic or std::complex element types");
-  if (x.ndim() == 0) {
-    throw std::invalid_argument("ifft: input must have at least one dimension");
-  }
-  const int ax = detail::normalize_axis(axis, x.ndim());
-  const std::size_t len = detail::deduced_len(
-      n.has_value(), n.value_or(0), static_cast<std::size_t>(x.shape[ax]));
-  ndarray<Cplx> out(detail::with_axis_len(x.shape, ax, len));
-  detail::transform_lines(x, ax, len, out, true,
-                          detail::scale_factor(norm, len, true),
-                          detail::twiddle_cache());
-  return out;
+    static_assert(is_transform_element_v<T>,
+                  "np::fft requires arithmetic or std::complex element types");
+    if (x.ndim() == 0) {
+        throw std::invalid_argument("ifft: input must have at least one dimension");
+    }
+    const int ax = detail::normalize_axis(axis, x.ndim());
+    const std::size_t len =
+        detail::deduced_len(n.has_value(), n.value_or(0), static_cast<std::size_t>(x.shape[ax]));
+    ndarray<Cplx> out(detail::with_axis_len(x.shape, ax, len));
+    detail::transform_lines(x, ax, len, out, true, detail::scale_factor(norm, len, true),
+                            detail::twiddle_cache());
+    return out;
 }
 
 /**
@@ -140,21 +132,20 @@ NP_NODISCARD auto ifft(const ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto rfft(const ndarray<T> &x,
-                       std::optional<std::size_t> n = std::nullopt,
+NP_NODISCARD auto rfft(const ndarray<T>& x, std::optional<std::size_t> n = std::nullopt,
                        int axis = -1, Norm norm = Norm::Backward) -> ndarray<Cplx> {
-  static_assert(is_transform_element_v<T>,
-                "np::fft requires arithmetic or std::complex element types");
-  if (x.ndim() == 0) {
-    throw std::invalid_argument("rfft: input must have at least one dimension");
-  }
-  const int ax = detail::normalize_axis(axis, x.ndim());
-  const std::size_t len = detail::deduced_len(
-      n.has_value(), n.value_or(0), static_cast<std::size_t>(x.shape[ax]));
-  ndarray<Cplx> out(detail::with_axis_len(x.shape, ax, len / 2 + 1));
-  detail::rfft_lines(x, ax, len, out, detail::scale_factor(norm, len, false),
-                     detail::twiddle_cache());
-  return out;
+    static_assert(is_transform_element_v<T>,
+                  "np::fft requires arithmetic or std::complex element types");
+    if (x.ndim() == 0) {
+        throw std::invalid_argument("rfft: input must have at least one dimension");
+    }
+    const int ax = detail::normalize_axis(axis, x.ndim());
+    const std::size_t len =
+        detail::deduced_len(n.has_value(), n.value_or(0), static_cast<std::size_t>(x.shape[ax]));
+    ndarray<Cplx> out(detail::with_axis_len(x.shape, ax, len / 2 + 1));
+    detail::rfft_lines(x, ax, len, out, detail::scale_factor(norm, len, false),
+                       detail::twiddle_cache());
+    return out;
 }
 
 /**
@@ -167,23 +158,21 @@ NP_NODISCARD auto rfft(const ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.irfft.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto irfft(const ndarray<T> &x,
-                        std::optional<std::size_t> n = std::nullopt,
+NP_NODISCARD auto irfft(const ndarray<T>& x, std::optional<std::size_t> n = std::nullopt,
                         int axis = -1, Norm norm = Norm::Backward) -> ndarray<double> {
-  static_assert(is_transform_element_v<T>,
-                "np::fft requires arithmetic or std::complex element types");
-  if (x.ndim() == 0) {
-    throw std::invalid_argument("irfft: input must have at least one dimension");
-  }
-  const int ax = detail::normalize_axis(axis, x.ndim());
-  const std::size_t m = static_cast<std::size_t>(x.shape[ax]);
-  const std::size_t len =
-      n.has_value() ? detail::check_len(*n) : detail::inverse_real_len(m);
-  ndarray<double> out(detail::with_axis_len(x.shape, ax, len));
-  ndarray<Cplx> cx = detail::to_complex(x);
-  detail::irfft_lines(cx, ax, len, out, detail::scale_factor(norm, len, true),
-                      detail::twiddle_cache());
-  return out;
+    static_assert(is_transform_element_v<T>,
+                  "np::fft requires arithmetic or std::complex element types");
+    if (x.ndim() == 0) {
+        throw std::invalid_argument("irfft: input must have at least one dimension");
+    }
+    const int ax = detail::normalize_axis(axis, x.ndim());
+    const std::size_t m = static_cast<std::size_t>(x.shape[ax]);
+    const std::size_t len = n.has_value() ? detail::check_len(*n) : detail::inverse_real_len(m);
+    ndarray<double> out(detail::with_axis_len(x.shape, ax, len));
+    ndarray<Cplx> cx = detail::to_complex(x);
+    detail::irfft_lines(cx, ax, len, out, detail::scale_factor(norm, len, true),
+                        detail::twiddle_cache());
+    return out;
 }
 
 /**
@@ -196,13 +185,12 @@ NP_NODISCARD auto irfft(const ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.hfft.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto hfft(const ndarray<T> &x,
-                       std::optional<std::size_t> n = std::nullopt,
+NP_NODISCARD auto hfft(const ndarray<T>& x, std::optional<std::size_t> n = std::nullopt,
                        int axis = -1, Norm norm = Norm::Backward) -> ndarray<double> {
-  static_assert(is_transform_element_v<T>,
-                "np::fft requires arithmetic or std::complex element types");
-  ndarray<Cplx> cx = detail::conjugate_copy(x);
-  return irfft(cx, n, axis, detail::swapped(norm));
+    static_assert(is_transform_element_v<T>,
+                  "np::fft requires arithmetic or std::complex element types");
+    ndarray<Cplx> cx = detail::conjugate_copy(x);
+    return irfft(cx, n, axis, detail::swapped(norm));
 }
 
 /**
@@ -216,14 +204,13 @@ NP_NODISCARD auto hfft(const ndarray<T> &x,
  * Reference: https://numpy.org/doc/stable/reference/generated/numpy.fft.ihfft.html
  */
 NP_API template <typename T>
-NP_NODISCARD auto ihfft(const ndarray<T> &x,
-                        std::optional<std::size_t> n = std::nullopt,
+NP_NODISCARD auto ihfft(const ndarray<T>& x, std::optional<std::size_t> n = std::nullopt,
                         int axis = -1, Norm norm = Norm::Backward) -> ndarray<Cplx> {
-  static_assert(is_transform_element_v<T>,
-                "np::fft requires arithmetic or std::complex element types");
-  ndarray<Cplx> out = rfft(x, n, axis, detail::swapped(norm));
-  detail::conjugate_inplace(out);
-  return out;
+    static_assert(is_transform_element_v<T>,
+                  "np::fft requires arithmetic or std::complex element types");
+    ndarray<Cplx> out = rfft(x, n, axis, detail::swapped(norm));
+    detail::conjugate_inplace(out);
+    return out;
 }
 
 } // namespace np::fft

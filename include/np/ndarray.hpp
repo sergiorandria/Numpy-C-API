@@ -41,4931 +41,5524 @@
 #include "dtype.hpp"
 #include "exceptions.hpp"
 
-namespace np {
-namespace matrix {
-/**
- * @brief Memory layout order.
- */
-enum class Order : std::uint8_t {
-  C, // Row-major (C style)
-  F  // Column-major (Fortran style)
-};
-} // namespace matrix
+namespace np
+{
+  namespace matrix
+  {
+    /**
+     * @brief Memory layout order.
+     */
+    enum class Order : std::uint8_t
+    {
+      C, // Row-major (C style)
+      F  // Column-major (Fortran style)
+    };
+  } // namespace matrix
 
-namespace detail {
+  namespace detail
+  {
 
 #if __cpp_initializer_lists >= 200806L
-// True when _ElementType is a std::initializer_list instantiation.
-// Most of the time, when _ElementType will be range, the user automatically
-// uses std::initializer_list without noticing the default type of braces
-// initializer list in __cplusplus >= 11
+    // True when _ElementType is a std::initializer_list instantiation.
+    // Most of the time, when _ElementType will be range, the user automatically
+    // uses std::initializer_list without noticing the default type of braces
+    // initializer list in __cplusplus >= 11
 
-template <typename _ElementType>
-NP_INTERNAL struct _Np_is_init_list : std::false_type {};
+    template <typename _ElementType>
+    NP_INTERNAL struct _Np_is_init_list : std::false_type
+    {
+    };
 
-template <typename _ElementType>
-NP_INTERNAL struct _Np_is_init_list<std::initializer_list<_ElementType>>
-    : std::true_type {};
+    template <typename _ElementType>
+    NP_INTERNAL struct _Np_is_init_list<std::initializer_list<_ElementType>>
+        : std::true_type
+    {
+    };
 #endif
 
-// The real element type of a (possibly complex) scalar type.
-// For std::complex<_ElementType> this is _ElementType,
-// for everything else the type itself (used by real()/imag()).
-template <typename _ElementType> struct _Np_real_of {
-  using type = _ElementType;
-};
-template <typename _ElementType>
-struct _Np_real_of<std::complex<_ElementType>> {
-  using type = _ElementType;
-};
+    // The real element type of a (possibly complex) scalar type.
+    // For std::complex<_ElementType> this is _ElementType,
+    // for everything else the type itself (used by real()/imag()).
+    template <typename _ElementType>
+    struct _Np_real_of
+    {
+      using type = _ElementType;
+    };
+    template <typename _ElementType>
+    struct _Np_real_of<std::complex<_ElementType>>
+    {
+      using type = _ElementType;
+    };
 
-/**
- * @brief NumPy `%` (mod): remainder with the sign of the divisor
- *        (complementary to floor division). C's `%` truncates toward
- *        zero, so this adjusts when the signs differ.
- */
-template <typename A, typename B>
-inline auto floored_mod(A a, B b) -> std::common_type_t<A, B> {
-  using R = std::common_type_t<A, B>;
-  const R x = static_cast<R>(a);
-  const R y = static_cast<R>(b);
-  R m;
-  if constexpr (std::is_floating_point_v<R>) {
-    m = std::fmod(x, y);
-  } else {
-    m = x % y;
-  }
-  if (m != R{0} && ((m < R{0}) != (y < R{0}))) {
-    m += y;
-  }
-  return m;
-}
-
-/**
- * @brief NumPy `//` (floor_divide): largest integer <= x / y, and the
- *        floor for floating point (y = floor(x1 / x2)).
- */
-template <typename A, typename B>
-inline auto floored_div(A a, B b) -> std::common_type_t<A, B> {
-  using R = std::common_type_t<A, B>;
-  const R x = static_cast<R>(a);
-  const R y = static_cast<R>(b);
-  if constexpr (std::is_floating_point_v<R>) {
-    return std::floor(x / y);
-  } else {
-    R q = x / y;
-    if ((x % y) != R{0} && ((x < R{0}) != (y < R{0}))) {
-      q -= R{1};
+    /**
+     * @brief NumPy `%` (mod): remainder with the sign of the divisor
+     *        (complementary to floor division). C's `%` truncates toward
+     *        zero, so this adjusts when the signs differ.
+     */
+    template <typename A, typename B>
+    inline auto floored_mod(A a, B b) -> std::common_type_t<A, B>
+    {
+      using R = std::common_type_t<A, B>;
+      const R x = static_cast<R>(a);
+      const R y = static_cast<R>(b);
+      R m;
+      if constexpr (std::is_floating_point_v<R>)
+      {
+        m = std::fmod(x, y);
+      }
+      else
+      {
+        m = x % y;
+      }
+      if (m != R{0} && ((m < R{0}) != (y < R{0})))
+      {
+        m += y;
+      }
+      return m;
     }
-    return q;
-  }
-}
 
-/**
- * @brief NumPy `**` (power): integer exponentiation when both
- *        operands are integral and the exponent is non-negative,
- *        otherwise a floating-point std::pow promoted back.
- */
-template <typename A, typename B>
-inline auto power_elem(A a, B b) -> std::common_type_t<A, B> {
-  using R = std::common_type_t<A, B>;
-  if constexpr (std::is_integral_v<R> && std::is_integral_v<B>) {
-    if (b < 0) {
-      return static_cast<R>(
-          std::pow(static_cast<double>(a), static_cast<double>(b)));
+    /**
+     * @brief NumPy `//` (floor_divide): largest integer <= x / y, and the
+     *        floor for floating point (y = floor(x1 / x2)).
+     */
+    template <typename A, typename B>
+    inline auto floored_div(A a, B b) -> std::common_type_t<A, B>
+    {
+      using R = std::common_type_t<A, B>;
+      const R x = static_cast<R>(a);
+      const R y = static_cast<R>(b);
+      if constexpr (std::is_floating_point_v<R>)
+      {
+        return std::floor(x / y);
+      }
+      else
+      {
+        R q = x / y;
+        if ((x % y) != R{0} && ((x < R{0}) != (y < R{0})))
+        {
+          q -= R{1};
+        }
+        return q;
+      }
     }
-    R result = R{1};
-    B e = b;
-    while (e > 0) {
-      result *= static_cast<R>(a);
-      --e;
+
+    /**
+     * @brief NumPy `**` (power): integer exponentiation when both
+     *        operands are integral and the exponent is non-negative,
+     *        otherwise a floating-point std::pow promoted back.
+     */
+    template <typename A, typename B>
+    inline auto power_elem(A a, B b) -> std::common_type_t<A, B>
+    {
+      using R = std::common_type_t<A, B>;
+      if constexpr (std::is_integral_v<R> && std::is_integral_v<B>)
+      {
+        if (b < 0)
+        {
+          return static_cast<R>(std::pow(static_cast<double>(a), static_cast<double>(b)));
+        }
+        R result = R{1};
+        B e = b;
+        while (e > 0)
+        {
+          result *= static_cast<R>(a);
+          --e;
+        }
+        return result;
+      }
+      else
+      {
+        return static_cast<R>(std::pow(static_cast<double>(a), static_cast<double>(b)));
+      }
     }
-    return result;
-  } else {
-    return static_cast<R>(
-        std::pow(static_cast<double>(a), static_cast<double>(b)));
-  }
-}
 
-} // namespace detail
-
-/**
- * @brief Result type of mean/var/std reductions.
- *
- * Floating and complex inputs keep their type; integer and boolean
- * inputs promote to double (NumPy semantics).
- */
-template <typename T> struct _mean_type {
-  using type =
-      std::conditional_t<std::is_floating_point_v<T> || detail::is_complex_v<T>,
-                         T, double>;
-};
-
-template <typename T> class Matrix;
-
-// ---------------------------------------------------------------------
-// Logical iterator (stride-aware, correct for views)
-// ---------------------------------------------------------------------
-
-/**
- * @brief Forward iterator visiting array elements in logical (C) order.
- *
- * Iterates over the logical (row-major) element order, correctly
- * handling views with non-trivial strides.
- *
- * @tparam T Element type; instantiate with `const T` for read-only access.
- * @complexity O(1) per increment, O(n) total for a full traversal.
- */
-template <typename T> class ndarray_iterator {
-public:
-  using iterator_category = std::forward_iterator_tag;
-  using value_type = std::remove_const_t<T>;
-  using difference_type = std::ptrdiff_t;
-  using pointer = T *;
-  using reference = T &;
+  } // namespace detail
 
   /**
-   * @brief Constructs an iterator.
-   * @param base Pointer to the start of the data buffer.
-   * @param shape Logical shape of the array.
-   * @param strides Stride vector in elements.
-   * @param at_end If true, constructs the end sentinel.
-   */
-  ndarray_iterator(T *base, std::vector<std::size_t> shape,
-                   std::vector<std::size_t> strides, bool at_end)
-      : base_(base), shape_(std::move(shape)), strides_(std::move(strides)),
-        idx_(shape_.size(), 0), done_(at_end) {}
-
-  /**
-   * @brief Dereference: returns the element at the current logical position.
-   * @return Reference to the element.
-   */
-  [[nodiscard]] reference operator*() const {
-    return base_[detail::flat_index(idx_, strides_, 0)];
-  }
-
-  /**
-   * @brief Member access: returns a pointer to the current element.
-   * @return Pointer to the element.
-   */
-  [[nodiscard]] pointer operator->() const {
-    return &base_[detail::flat_index(idx_, strides_, 0)];
-  }
-
-  /**
-   * @brief Pre-increment: advances to the next logical element.
-   * @return Reference to this iterator.
-   * @complexity O(1) amortised.
-   */
-  ndarray_iterator &operator++() {
-    _advance();
-    return *this;
-  }
-
-  /**
-   * @brief Post-increment: advances to the next logical element.
-   * @return Copy of the iterator before incrementing.
-   * @complexity O(1) amortised.
-   */
-  ndarray_iterator operator++(int) {
-    auto tmp = *this;
-    ++*this;
-    return tmp;
-  }
-
-  /**
-   * @brief Equality comparison.
-   * @param o Other iterator.
-   * @return true if both iterators refer to the same position.
-   */
-  [[nodiscard]] bool operator==(const ndarray_iterator &o) const noexcept {
-    if (base_ != o.base_ || done_ != o.done_) {
-      return false;
-    }
-    return done_ || idx_ == o.idx_;
-  }
-
-  /**
-   * @brief Inequality comparison.
-   * @param o Other iterator.
-   * @return true if the iterators refer to different positions.
-   */
-  [[nodiscard]] bool operator!=(const ndarray_iterator &o) const noexcept {
-    return !(*this == o);
-  }
-
-private:
-  /**
-   * @brief Advances the multi-index by one position in C order.
+   * @brief Result type of mean/var/std reductions.
    *
-   * Carries across dimensions like an odometer. Sets `done_` when
-   * the index overflows all dimensions.
-   * @complexity O(ndim) worst case, O(1) amortised.
+   * Floating and complex inputs keep their type; integer and boolean
+   * inputs promote to double (NumPy semantics).
    */
-  void _advance() noexcept {
-    if (shape_.empty()) {
-      done_ = true;
-      return;
+  template <typename T>
+  struct _mean_type
+  {
+    using type = std::
+        conditional_t<std::is_floating_point_v<T> || detail::is_complex_v<T>, T, double>;
+  };
+
+  template <typename T>
+  class Matrix;
+
+  // ---------------------------------------------------------------------
+  // Logical iterator (stride-aware, correct for views)
+  // ---------------------------------------------------------------------
+
+  /**
+   * @brief Forward iterator visiting array elements in logical (C) order.
+   *
+   * Iterates over the logical (row-major) element order, correctly
+   * handling views with non-trivial strides.
+   *
+   * @tparam T Element type; instantiate with `const T` for read-only access.
+   * @complexity O(1) per increment, O(n) total for a full traversal.
+   */
+  template <typename T>
+  class ndarray_iterator
+  {
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = std::remove_const_t<T>;
+    using difference_type = std::ptrdiff_t;
+    using pointer = T*;
+    using reference = T&;
+
+    /**
+     * @brief Constructs an iterator.
+     * @param base Pointer to the start of the data buffer.
+     * @param shape Logical shape of the array.
+     * @param strides Stride vector in elements.
+     * @param at_end If true, constructs the end sentinel.
+     */
+    ndarray_iterator(
+        T* base,
+        std::vector<std::size_t> shape,
+        std::vector<std::size_t> strides,
+        bool at_end)
+        : base_(base), shape_(std::move(shape)), strides_(std::move(strides)),
+          idx_(shape_.size(), 0), done_(at_end)
+    {
     }
-    for (std::size_t d = shape_.size(); d-- > 0;) {
-      if (++idx_[d] < shape_[d]) {
+
+    /**
+     * @brief Dereference: returns the element at the current logical position.
+     * @return Reference to the element.
+     */
+    [[nodiscard]] reference operator*() const
+    {
+      return base_[detail::flat_index(idx_, strides_, 0)];
+    }
+
+    /**
+     * @brief Member access: returns a pointer to the current element.
+     * @return Pointer to the element.
+     */
+    [[nodiscard]] pointer operator->() const
+    {
+      return &base_[detail::flat_index(idx_, strides_, 0)];
+    }
+
+    /**
+     * @brief Pre-increment: advances to the next logical element.
+     * @return Reference to this iterator.
+     * @complexity O(1) amortised.
+     */
+    ndarray_iterator& operator++()
+    {
+      _advance();
+      return *this;
+    }
+
+    /**
+     * @brief Post-increment: advances to the next logical element.
+     * @return Copy of the iterator before incrementing.
+     * @complexity O(1) amortised.
+     */
+    ndarray_iterator operator++(int)
+    {
+      auto tmp = *this;
+      ++*this;
+      return tmp;
+    }
+
+    /**
+     * @brief Equality comparison.
+     * @param o Other iterator.
+     * @return true if both iterators refer to the same position.
+     */
+    [[nodiscard]] bool operator==(const ndarray_iterator& o) const noexcept
+    {
+      if (base_ != o.base_ || done_ != o.done_)
+      {
+        return false;
+      }
+      return done_ || idx_ == o.idx_;
+    }
+
+    /**
+     * @brief Inequality comparison.
+     * @param o Other iterator.
+     * @return true if the iterators refer to different positions.
+     */
+    [[nodiscard]] bool operator!=(const ndarray_iterator& o) const noexcept
+    {
+      return !(*this == o);
+    }
+
+  private:
+    /**
+     * @brief Advances the multi-index by one position in C order.
+     *
+     * Carries across dimensions like an odometer. Sets `done_` when
+     * the index overflows all dimensions.
+     * @complexity O(ndim) worst case, O(1) amortised.
+     */
+    void _advance() noexcept
+    {
+      if (shape_.empty())
+      {
+        done_ = true;
         return;
       }
-      idx_[d] = 0;
+      for (std::size_t d = shape_.size(); d-- > 0;)
+      {
+        if (++idx_[d] < shape_[d])
+        {
+          return;
+        }
+        idx_[d] = 0;
+      }
+      done_ = true;
     }
-    done_ = true;
+
+    T* base_;
+    std::vector<std::size_t> shape_;
+    std::vector<std::size_t> strides_;
+    std::vector<std::size_t> idx_;
+    bool done_;
+  };
+
+  // ---------------------------------------------------------------------
+  // ndarray
+  // ---------------------------------------------------------------------
+
+  /**
+   * @brief A NumPy-style multidimensional array container.
+   *
+   * Stores elements in a shared `std::vector<T>` buffer, enabling
+   * zero-copy views (transpose, swapaxes, squeeze, reshape) that
+   * share storage with the parent array.
+   *
+   * @tparam T Element type (numeric or `std::complex`).
+   * @note Memory ownership is reference-counted via `std::shared_ptr`.
+   *       Views set `is_view_ = true` and hold a pointer to the parent's
+   *       buffer; `base()` returns the parent's `shared_ptr` raw pointer.
+   * @note Strides are always in *elements*, not bytes.
+   */
+  template <typename T = double>
+  class ndarray
+  {
+  public:
+    using value_type = T;
+    using size_type = std::size_t;
+    using iterator = ndarray_iterator<T>;
+    using const_iterator = ndarray_iterator<const T>;
+    /**
+     * @brief Reference type returned by non-const element accessors.
+     *
+     * `std::vector<bool>` is specialised, so its element access yields a
+     * proxy type rather than `bool&`; this alias keeps the `ndarray` API
+     * uniform for `bool` arrays.
+     */
+    using reference =
+        std::conditional_t<std::is_same_v<T, bool>, std::vector<bool>::reference, T&>;
+
+    // --- attributes (mirror ndarray.shape / strides / dtype / order) ---
+    std::vector<int> shape;                 ///< Dimensions of the array
+    std::vector<std::size_t> strides;       ///< Strides in elements
+    np::dtype type = dtype::void_;          ///< Data type
+    matrix::Order order = matrix::Order::C; ///< Memory layout
+    std::size_t offset = 0;                 ///< Element offset into storage (views)
+
+    // =================================================================
+    // Construction
+    // =================================================================
+
+    /**
+     * @brief Default constructor: empty 0-dimensional array.
+     */
+    ndarray() = default;
+
+    /**
+     * @brief Constructs an array of the given shape, filled with `fill`.
+     *
+     * @param shape Dimensions of the new array.
+     * @param type Data type (default `dtype::void_`, deduced from `T`).
+     * @param fill Initial value for every element.
+     * @post `this->shape == shape` and `this->size() == product(shape)`.
+     */
+    explicit ndarray(
+        const std::vector<int>& shape,
+        np::dtype type = dtype::void_,
+        const T& fill = T{});
+
+    /**
+     * @brief Builds an array from an owned data buffer.
+     *
+     * Provided as a static factory (instead of a constructor) so that
+     * nested-brace construction like `ndarray<int> a{{1,2},{3,4}}`
+     * unambiguously selects the nested initializer-list constructor.
+     *
+     * @param shape Dimensions of the new array.
+     * @param data Owned element data; moved into the array's buffer.
+     * @return New `ndarray` with the given shape and data.
+     * @throws std::invalid_argument if `data.size() != product(shape)`.
+     */
+    static ndarray from_data(const std::vector<int>& shape, std::vector<T> data);
+
+    /**
+     * @brief 1D construction from a flat initializer list.
+     * @param list Flat list of elements; length becomes `shape[0]`.
+     */
+    ndarray(std::initializer_list<T> list);
+
+    /**
+     * @brief 2D construction from nested initializer lists, e.g.
+     *        `ndarray<int> a{{1, 2}, {3, 4}}`.
+     * @tparam U Element type of the inner lists (deduced).
+     * @param rows Nested initializer list; all rows must have the same
+     *        length, otherwise `std::invalid_argument` is thrown.
+     * @throws std::invalid_argument on ragged (inconsistent) rows.
+     */
+    template <typename U>
+    ndarray(std::initializer_list<std::initializer_list<U>> rows);
+
+    /**
+     * @brief Deep-copying copy constructor (value semantics).
+     * @param other Array to copy.
+     * @post `this` owns a separate copy of `other`'s data.
+     */
+    ndarray(const ndarray& other);
+
+    /** @brief Move constructor: transfers storage in O(1). */
+    ndarray(ndarray&&) noexcept = default;
+
+    /**
+     * @brief Deep-copying copy assignment (value semantics).
+     * @param other Array to copy.
+     * @return Reference to `*this`.
+     * @post `this` owns a separate copy of `other`'s data.
+     */
+    ndarray& operator=(const ndarray& other);
+
+    /** @brief Move assignment: transfers storage in O(1). */
+    ndarray& operator=(ndarray&&) noexcept = default;
+
+    // =================================================================
+    // Attributes
+    // =================================================================
+
+    /**
+     * @brief Total number of elements.
+     * @return `product(shape)`.
+     * @complexity O(ndim).
+     */
+    [[nodiscard]] std::size_t size() const noexcept;
+
+    /**
+     * @brief Number of dimensions.
+     * @return `shape.size()`.
+     * @complexity O(1).
+     */
+    [[nodiscard]] std::size_t ndim() const noexcept;
+
+    /**
+     * @brief Bytes per element.
+     * @return `sizeof(T)`.
+     * @complexity O(1).
+     */
+    [[nodiscard]] std::size_t itemsize() const noexcept;
+
+    /**
+     * @brief Total bytes consumed by the logical elements.
+     * @return `size() * sizeof(T)`.
+     * @complexity O(1).
+     */
+    [[nodiscard]] std::size_t nbytes() const noexcept;
+
+    /**
+     * @brief True if the array has no elements.
+     * @return `size() == 0`.
+     * @complexity O(1).
+     */
+    [[nodiscard]] bool empty() const noexcept;
+
+    /**
+     * @brief True when the logical elements are laid out contiguously
+     *        in C (row-major) order.
+     * @return true if strides match C-order strides for the shape and
+     *         `offset == 0`.
+     * @complexity O(ndim).
+     */
+    [[nodiscard]] bool is_contiguous() const noexcept;
+
+    /**
+     * @brief True when the logical elements are laid out
+     *        column-major (Fortran) contiguously.
+     * @return true if strides match F-order strides for the shape and
+     *         `offset == 0`.
+     * @complexity O(ndim).
+     */
+    [[nodiscard]] bool is_f_contiguous() const noexcept;
+
+    /**
+     * @brief Writable access to the underlying storage buffer.
+     *
+     * Lazily allocates the buffer if it is empty.
+     * @return Reference to the internal `std::vector<T>`.
+     */
+    std::vector<T>& data();
+
+    /**
+     * @brief Read-only access to the underlying storage buffer.
+     * @return Const reference to the internal `std::vector<T>`.
+     * @throws std::runtime_error if the array has no data buffer.
+     */
+    [[nodiscard]] const std::vector<T>& data() const;
+
+    /**
+     * @brief Product of the shape (total element count).
+     * @return `size()`.
+     * @complexity O(ndim).
+     */
+    [[nodiscard]] std::size_t _numel() const noexcept;
+
+    /**
+     * @brief Flat logical offset of a multi-index.
+     * @param idx Multi-dimensional index; size must equal `ndim()`.
+     * @return Linear offset into the storage buffer (accounting for
+     *         strides and `offset`).
+     * @complexity O(ndim).
+     */
+    [[nodiscard]] std::size_t _flat(const std::vector<std::size_t>& idx) const noexcept;
+
+    /**
+     * @brief Physical storage offset of flat logical position `i`.
+     * @param i Flat logical index (C-order).
+     * @return Physical offset into the storage buffer.
+     * @complexity O(ndim).
+     */
+    [[nodiscard]] std::size_t _flat_logical(std::size_t i) const noexcept;
+
+    // =================================================================
+    // Iterators
+    // =================================================================
+
+    /**
+     * @brief Returns a mutable iterator to the first element.
+     * @return Iterator pointing to the first logical element.
+     */
+    iterator begin();
+
+    /**
+     * @brief Returns a mutable iterator past the last element.
+     * @return Iterator pointing one past the last logical element.
+     */
+    iterator end();
+
+    /**
+     * @brief Returns a const iterator to the first element.
+     * @return Const iterator pointing to the first logical element.
+     */
+    const_iterator begin() const;
+
+    /**
+     * @brief Returns a const iterator past the last element.
+     * @return Const iterator pointing one past the last logical element.
+     */
+    const_iterator end() const;
+
+    /** @brief Const iterator to the first element. */
+    const_iterator cbegin() const
+    {
+      return begin();
+    }
+
+    /** @brief Const iterator past the last element. */
+    const_iterator cend() const
+    {
+      return end();
+    }
+
+    // =================================================================
+    // Element access
+    // =================================================================
+
+    /**
+     * @brief Chained subscript access (read/write).
+     *
+     * Each call reduces one dimension; e.g. `a[i][j]` for a 2-D
+     * array returns a reference to the element at `(i, j)`.
+     * @param index Index into the first (outermost) dimension.
+     * @return A `Proxy<T>` that can be further subscripted or
+     *         implicitly converted to a reference.
+     */
+    auto operator[](std::size_t index) -> Proxy<T>;
+
+    /**
+     * @brief Chained subscript access (read-only).
+     * @param index Index into the first (outermost) dimension.
+     * @return A `ConstProxy<T>` that can be further subscripted.
+     */
+    auto operator[](std::size_t index) const -> ConstProxy<T>;
+
+    /**
+     * @brief Compile-time-size index access (reference).
+     * @tparam N Number of dimensions (deduced from the array).
+     * @param idx Fixed-size array of indices, one per dimension.
+     * @return Reference to the element at `idx`.
+     * @throws std::invalid_argument if `N != ndim()`.
+     * @throws std::out_of_range if any index is out of bounds.
+     */
+    template <std::size_t N>
+    auto get(const std::array<std::size_t, N>& idx) -> reference;
+
+    /**
+     * @brief Compile-time-size index access (const reference).
+     * @tparam N Number of dimensions.
+     * @param idx Fixed-size array of indices.
+     * @return Const reference to the element at `idx`.
+     * @throws std::invalid_argument if `N != ndim()`.
+     * @throws std::out_of_range if any index is out of bounds.
+     */
+    template <std::size_t N>
+    auto get(const std::array<std::size_t, N>& idx) const -> const T&;
+
+    /**
+     * @brief Runtime index container access (by value).
+     * @tparam Container Type of the index container (e.g.
+     *         `std::vector<std::size_t>`).
+     * @param idx Index container; size must equal `ndim()`.
+     * @return Element value at `idx`.
+     * @throws std::invalid_argument if `idx.size() != ndim()`.
+     * @throws std::out_of_range if any index is out of bounds.
+     */
+    template <typename Container>
+    auto get(const Container& idx) const -> T;
+
+    /**
+     * @brief Write a value at runtime index container position.
+     * @tparam Container Type of the index container.
+     * @param idx Index container; size must equal `ndim()`.
+     * @param value Value to write.
+     * @throws std::invalid_argument if `idx.size() != ndim()`.
+     * @throws std::out_of_range if any index is out of bounds.
+     */
+    template <typename Container>
+    void set(const Container& idx, const T& value);
+
+    /**
+     * @brief 1D bounds-checked access.
+     * @param i Row index.
+     * @return Reference to the element.
+     * @throws std::invalid_argument if `ndim() != 1`.
+     * @throws std::out_of_range if `i >= shape[0]`.
+     */
+    auto at(std::size_t i) -> reference;
+
+    /**
+     * @brief 1D bounds-checked access (const).
+     * @param i Row index.
+     * @return Const reference to the element.
+     * @throws std::invalid_argument if `ndim() != 1`.
+     * @throws std::out_of_range if `i >= shape[0]`.
+     */
+    auto at(std::size_t i) const -> const T&;
+
+    /**
+     * @brief Single-index access for 1D arrays (read/write).
+     * @param i Element index.
+     * @return Reference to the element.
+     * @throws std::invalid_argument if `ndim() != 1`.
+     */
+    auto operator()(std::size_t i) -> reference;
+
+    /**
+     * @brief Single-index access for 1D arrays (const).
+     * @param i Element index.
+     * @return Const reference to the element.
+     * @throws std::invalid_argument if `ndim() != 1`.
+     */
+    auto operator()(std::size_t i) const -> const T&;
+
+    /**
+     * @brief 2D index access (read/write).
+     * @param i Row index.
+     * @param j Column index.
+     * @return Reference to the element.
+     * @throws std::invalid_argument if `ndim() != 2`.
+     */
+    auto operator()(std::size_t i, std::size_t j) -> reference;
+
+    /**
+     * @brief 2D index access (const).
+     * @param i Row index.
+     * @param j Column index.
+     * @return Const reference to the element.
+     * @throws std::invalid_argument if `ndim() != 2`.
+     */
+    auto operator()(std::size_t i, std::size_t j) const -> const T&;
+
+    /**
+     * @brief 2D bounds-checked access.
+     * @param i Row index.
+     * @param j Column index.
+     * @return Reference to the element.
+     * @throws std::invalid_argument if `ndim() != 2`.
+     * @throws std::out_of_range if either index is out of bounds.
+     */
+    auto at(std::size_t i, std::size_t j) -> reference;
+
+    /**
+     * @brief 2D bounds-checked access (const).
+     * @param i Row index.
+     * @param j Column index.
+     * @return Const reference to the element.
+     * @throws std::invalid_argument if `ndim() != 2`.
+     * @throws std::out_of_range if either index is out of bounds.
+     */
+    auto at(std::size_t i, std::size_t j) const -> const T&;
+
+    /**
+     * @brief Returns the single element of a 0-d/1-element array.
+     * @return The single element value.
+     * @throws std::invalid_argument if `size() != 1`.
+     */
+    T item() const;
+
+    /**
+     * @brief Scalar conversion for single-element arrays (numpy `bool()`).
+     * @return `true` if the single element is non-zero.
+     * @throws std::invalid_argument if `size() != 1`.
+     */
+    explicit operator bool() const;
+
+    /**
+     * @brief Scalar conversion for single-element arrays (numpy `int()`).
+     * @return The element cast to `long long`.
+     * @throws std::invalid_argument if `size() != 1`.
+     */
+    explicit operator long long() const;
+
+    /**
+     * @brief Scalar conversion for single-element arrays (numpy `float()`).
+     * @return The element cast to `double`.
+     * @throws std::invalid_argument if `size() != 1`.
+     */
+    explicit operator double() const;
+
+    /**
+     * @brief Scalar conversion for single-element arrays (numpy `complex()`).
+     * @return The element as `std::complex<double>`.
+     * @throws std::invalid_argument if `size() != 1`.
+     */
+    explicit operator std::complex<double>() const;
+
+    // =================================================================
+    // Reductions
+    // =================================================================
+
+    /**
+     * @brief Sum over all elements.
+     * @return Sum of all elements. For `bool` arrays the return type
+     *         is `std::int64_t` (NumPy semantics).
+     * @complexity O(n), where n = size().
+     */
+    auto sum() const -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+
+    /**
+     * @brief Sum along an axis.
+     * @tparam Acc Accumulator type (default: element type, or `int64_t`
+     *         for `bool`).
+     * @param axis Axis along which to reduce. Negative indices count
+     *        from the last axis.
+     * @param keepdims If true, the reduced axis is retained with size 1.
+     * @return Array with one fewer dimension (or same rank if
+     *         `keepdims`).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n), where n = size().
+     */
+    template <typename Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+    auto sum(int axis, bool keepdims = false) const -> ndarray<Acc>;
+
+    /**
+     * @brief Product over all elements.
+     * @return Product of all elements. For `bool` arrays the return
+     *         type is `std::int64_t`.
+     * @complexity O(n), where n = size().
+     */
+    auto prod() const -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+
+    /**
+     * @brief Product along an axis.
+     * @tparam Acc Accumulator type.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, the reduced axis is retained with size 1.
+     * @return Array with one fewer dimension (or same rank if
+     *         `keepdims`).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    template <typename Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+    auto prod(int axis, bool keepdims = false) const -> ndarray<Acc>;
+
+    /**
+     * @brief Minimum over all elements.
+     * @return Smallest element.
+     * @throws std::runtime_error if the array is empty.
+     * @complexity O(n).
+     */
+    T min() const;
+
+    /**
+     * @brief Minimum along an axis.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, the reduced axis is retained with size 1.
+     * @return Array with one fewer dimension (or same rank if
+     *         `keepdims`).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto min(int axis, bool keepdims = false) const -> ndarray<T>;
+
+    /**
+     * @brief Maximum over all elements.
+     * @return Largest element.
+     * @throws std::runtime_error if the array is empty.
+     * @complexity O(n).
+     */
+    T max() const;
+
+    /**
+     * @brief Maximum along an axis.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, the reduced axis is retained with size 1.
+     * @return Array with one fewer dimension (or same rank if
+     *         `keepdims`).
+     * @return Array with one fewer dimension (or same rank if
+     *         `keepdims`).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto max(int axis, bool keepdims = false) const -> ndarray<T>;
+
+    /**
+     * @brief Peak-to-peak (max - min) over all elements.
+     * @return `max() - min()`.
+     * @throws std::runtime_error if the array is empty.
+     * @complexity O(n).
+     */
+    T ptp() const;
+
+    /**
+     * @brief Peak-to-peak (max - min) along an axis.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, the reduced axis is retained with size 1.
+     * @return Array with one fewer dimension (or same rank if
+     *         `keepdims`).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto ptp(int axis, bool keepdims = false) const -> ndarray<T>;
+
+    /**
+     * @brief Arithmetic mean over all elements.
+     * @return Mean value. Integer and boolean inputs promote to
+     *         `double`; floating-point and complex inputs keep
+     *         their type (NumPy semantics).
+     * @throws std::runtime_error if the array is empty.
+     * @complexity O(n).
+     */
+    auto mean() const -> typename _mean_type<T>::type;
+
+    /**
+     * @brief Arithmetic mean along an axis.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, the reduced axis is retained with size 1.
+     * @return Array with one fewer dimension (or same rank if
+     *         `keepdims`).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto mean(int axis, bool keepdims = false) const
+        -> ndarray<typename _mean_type<T>::type>;
+
+    /**
+     * @brief Population variance over all elements.
+     * @return Variance. Uses Welford's online algorithm for numerical
+     *         stability.
+     * @throws std::runtime_error if the array is empty.
+     * @complexity O(n).
+     */
+    auto var() const -> typename _mean_type<T>::type;
+
+    /**
+     * @brief Population variance along an axis.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, the reduced axis is retained with size 1.
+     * @return Array with one fewer dimension (or same rank if
+     *         `keepdims`).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto var(int axis, bool keepdims = false) const
+        -> ndarray<typename _mean_type<T>::type>;
+
+    /**
+     * @brief Population standard deviation over all elements.
+     * @return Standard deviation (`sqrt(var())`).
+     * @complexity O(n).
+     */
+    auto std() const -> typename _mean_type<T>::type;
+
+    /**
+     * @brief Population standard deviation along an axis.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, the reduced axis is retained with size 1.
+     * @return Array with one fewer dimension (or same rank if
+     *         `keepdims`).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto std(int axis, bool keepdims = false) const
+        -> ndarray<typename _mean_type<T>::type>;
+
+    /**
+     * @brief True when every element is non-zero.
+     * @return true if all elements are truthy.
+     * @complexity O(n).
+     */
+    bool all() const;
+
+    /**
+     * @brief All along an axis.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, the reduced axis is retained with size 1.
+     * @return Boolean array with one fewer dimension (or same rank if
+     *         `keepdims`).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto all(int axis, bool keepdims = false) const -> ndarray<bool>;
+
+    /**
+     * @brief True when any element is non-zero.
+     * @return true if any element is truthy.
+     * @complexity O(n).
+     */
+    bool any() const;
+
+    /**
+     * @brief Any along an axis.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, the reduced axis is retained with size 1.
+     * @return Boolean array with one fewer dimension (or same rank if
+     *         `keepdims`).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto any(int axis, bool keepdims = false) const -> ndarray<bool>;
+
+    /**
+     * @brief Flat logical index of the maximum element.
+     * @return Linear index of the first occurrence of the maximum.
+     * @throws std::runtime_error if the array is empty.
+     * @complexity O(n).
+     */
+    std::size_t argmax() const;
+
+    /**
+     * @brief Indices of maxima along an axis.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, the reduced axis is retained with size 1.
+     * @return Array of indices with one fewer dimension (or same rank
+     *         if `keepdims`).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto argmax(int axis, bool keepdims = false) const -> ndarray<std::size_t>;
+
+    /**
+     * @brief Flat logical index of the minimum element.
+     * @return Linear index of the first occurrence of the minimum.
+     * @throws std::runtime_error if the array is empty.
+     * @complexity O(n).
+     */
+    std::size_t argmin() const;
+
+    /**
+     * @brief Indices of minima along an axis.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, the reduced axis is retained with size 1.
+     * @return Array of indices with one fewer dimension (or same rank
+     *         if `keepdims`).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto argmin(int axis, bool keepdims = false) const -> ndarray<std::size_t>;
+
+    /**
+     * @brief Cumulative sum (flattened when no axis is given).
+     * @return 1-D array of cumulative sums.
+     * @complexity O(n).
+     */
+    auto cumsum() const
+        -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
+
+    /**
+     * @brief Cumulative sum along an axis.
+     * @param axis Axis along which to accumulate.
+     * @return Array of the same shape with cumulative sums.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto cumsum(int axis) const
+        -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
+
+    /**
+     * @brief Cumulative product (flattened when no axis is given).
+     * @return 1-D array of cumulative products.
+     * @complexity O(n).
+     */
+    auto cumprod() const
+        -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
+
+    /**
+     * @brief Cumulative product along an axis.
+     * @param axis Axis along which to accumulate.
+     * @return Array of the same shape with cumulative products.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto cumprod(int axis) const
+        -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
+
+    // =================================================================
+    // Sorting / searching
+    // =================================================================
+
+    /**
+     * @brief In-place sort along an axis (default: last axis).
+     * @param axis Axis along which to sort. Negative indices
+     *        count from the last axis.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n log n) per slice, where n is the axis
+     *         length.
+     */
+    void sort(int axis = -1);
+
+    /**
+     * @brief Sorted copy of the array along an axis (default: last).
+     * @param axis Axis along which to sort.
+     * @return A new sorted array.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n log n).
+     */
+    auto sorted(int axis = -1) const -> ndarray<T>;
+
+    /**
+     * @brief Indices that would sort the array along an axis.
+     * @param axis Axis along which to sort.
+     * @return Array of indices that would sort this array along
+     *         the given axis.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n log n).
+     */
+    auto argsort(int axis = -1) const -> ndarray<std::size_t>;
+
+    /**
+     * @brief Indices that would partition at position k along
+     *        an axis.
+     * @param kth Partition index; the element at position k
+     *        will be in its final sorted position.
+     * @param axis Axis along which to partition.
+     * @return Array of partition indices.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @throws std::out_of_range if `kth >= axis_len`.
+     * @complexity O(n) average (introselect).
+     */
+    auto argpartition(std::size_t kth, int axis = -1) const -> ndarray<std::size_t>;
+
+    /**
+     * @brief Binary search for a value in a sorted 1D array.
+     * @param value Value to search for.
+     * @param side_right If true, return the rightmost
+     *        insertion point; otherwise the leftmost.
+     * @return Index where `value` would be inserted.
+     * @throws std::invalid_argument if the array is not 1-D.
+     * @complexity O(log n).
+     */
+    std::size_t searchsorted(const T& value, bool side_right = false) const;
+
+    /**
+     * @brief Searchsorted applied to every element of `values`.
+     * @param values 1-D array of search values.
+     * @return Array of insertion indices.
+     * @throws std::invalid_argument if the array is not 1-D.
+     * @complexity O(m log n), where m = values.size().
+     */
+    auto searchsorted(const ndarray<int>& values) const -> ndarray<std::size_t>;
+
+    // =================================================================
+    // Shape manipulation
+    // =================================================================
+
+    /**
+     * @brief View (when contiguous) or copy with a new shape.
+     *
+     * If the array is C-contiguous, returns a view sharing
+     * storage. Otherwise, returns a copy. At most one
+     * dimension may be `-1`, in which case it is inferred.
+     * @param shape New shape; at most one dimension may be -1.
+     * @return Reshaped array (view or copy).
+     * @throws std::invalid_argument if the total element count
+     *         does not match, or if more than one dimension is -1.
+     * @complexity O(n) for the copy path, O(ndim) for the view path.
+     */
+    auto reshape(const std::vector<int>& shape) const -> ndarray;
+
+    /**
+     * @brief View with reversed dimensions.
+     * @return Array with shape and strides reversed.
+     * @complexity O(ndim).
+     */
+    auto transpose() const -> ndarray;
+
+    /**
+     * @brief View with a permutation of the dimensions.
+     * @param perm Permutation of axis indices; length must
+     *        equal `ndim()`.
+     * @return Array with axes reordered.
+     * @throws std::invalid_argument if `perm` is not a valid
+     *         permutation of `[0, ndim())`.
+     * @complexity O(ndim).
+     */
+    auto transpose(const std::vector<int>& perm) const -> ndarray;
+
+    /**
+     * @brief View with two axes swapped.
+     * @param axis1 First axis index.
+     * @param axis2 Second axis index.
+     * @return Array with the two axes swapped.
+     * @throws np::AxisError if either axis is out of bounds.
+     * @complexity O(ndim).
+     */
+    auto swapaxes(int axis1, int axis2) const -> ndarray;
+
+    /**
+     * @brief View removing all size-1 dimensions.
+     * @return Array with all singleton dimensions removed.
+     * @complexity O(ndim).
+     */
+    auto squeeze() const -> ndarray;
+
+    /**
+     * @brief View removing a specific dimension.
+     * @param axis Axis to remove; must have extent 1.
+     * @return Array with the specified axis removed.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @throws std::invalid_argument if `shape[axis] != 1`.
+     * @complexity O(ndim).
+     */
+    auto squeeze(int axis) const -> ndarray;
+
+    /**
+     * @brief View (contiguous) or copy flattened in C order.
+     * @return 1-D array containing all logical elements.
+     * @complexity O(n) for the copy path, O(ndim) for the view path.
+     */
+    auto ravel() const -> ndarray;
+
+    /**
+     * @brief Copy flattened in C order.
+     * @return 1-D copy of all elements.
+     * @complexity O(n).
+     */
+    auto flatten() const -> ndarray;
+
+    /**
+     * @brief Resize in place to a new total number of elements.
+     *
+     * Truncates or pads with default-constructed values.
+     * @param new_shape New shape; total element count may
+     *        differ from the current size.
+     * @complexity O(n).
+     */
+    void resize(const std::vector<int>& new_shape);
+
+    // =================================================================
+    // Manipulation
+    // =================================================================
+
+    /**
+     * @brief Fill every element with a value.
+     * @param value Value to fill with.
+     * @complexity O(n).
+     */
+    void fill(const T& value);
+
+    /**
+     * @brief Deep copy of the array.
+     * @return New array with the same data and shape.
+     * @complexity O(n).
+     */
+    auto copy() const -> ndarray;
+
+    /**
+     * @brief View sharing the same storage.
+     * @return New array that shares `data_` with `*this`.
+     * @complexity O(ndim).
+     */
+    auto view() const -> ndarray;
+
+    /**
+     * @brief Element-wise conversion to another type.
+     * @tparam U Target element type.
+     * @return New array with elements cast to `U`.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto astype() const -> ndarray<U>;
+
+    /**
+     * @brief Gather elements along an axis (default: flattened).
+     * @param indices Indices to gather.
+     * @param axis Axis along which to gather (default: 0).
+     * @return New array with gathered elements.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @throws std::out_of_range if any index is out of bounds.
+     * @complexity O(n).
+     */
+    auto take(const std::vector<std::size_t>& indices, int axis = 0) const -> ndarray;
+
+    /**
+     * @brief Set elements at flat logical positions.
+     * @param indices Flat logical positions to write to.
+     * @param values Values to write (cycled if shorter than
+     *        `indices`).
+     * @param mode `'r'` raise on out-of-bounds (default),
+     *        `'w'` wrap, `'c'` clip.
+     * @throws std::out_of_range if an index is out of bounds
+     *         and `mode == 'r'`.
+     * @complexity O(indices.size()).
+     */
+    void
+    put(const std::vector<std::size_t>& indices,
+        const std::vector<T>& values,
+        char mode = 'r');
+
+    /**
+     * @brief Repeat elements (flattened when no axis given).
+     * @param repeats Number of repetitions per element.
+     * @return Array with repeated elements.
+     * @complexity O(n * repeats).
+     */
+    auto repeat(std::size_t repeats) const -> ndarray;
+
+    /**
+     * @brief Repeat elements along an axis.
+     * @param repeats Number of repetitions per element.
+     * @param axis Axis along which to repeat.
+     * @return Array with repeated elements along the axis.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n * repeats).
+     */
+    auto repeat(std::size_t repeats, int axis) const -> ndarray;
+
+    /**
+     * @brief Clip values into [min_value, max_value].
+     * @param min_value Lower bound.
+     * @param max_value Upper bound.
+     * @return New array with clipped values.
+     * @complexity O(n).
+     */
+    auto clip(const T& min_value, const T& max_value) const -> ndarray;
+
+    /**
+     * @brief Round to `decimals` places.
+     * @param decimals Number of decimal places (default: 0).
+     * @return New array with rounded values.
+     * @note Only affects floating-point element types; integer
+     *       arrays are returned unchanged.
+     * @complexity O(n).
+     */
+    auto round(int decimals = 0) const -> ndarray;
+
+    /**
+     * @brief Diagonal of a 2D+ array.
+     * @param offset Diagonal offset (0 = main diagonal,
+     *        positive = above, negative = below).
+     * @return 1-D array of diagonal elements.
+     * @throws np::AxisError if `ndim() < 2`.
+     * @complexity O(min(shape[0], shape[1])).
+     */
+    auto diagonal(int offset = 0) const -> ndarray;
+
+    /**
+     * @brief Sum along the diagonal.
+     * @param offset Diagonal offset.
+     * @return Sum of diagonal elements.
+     * @throws np::AxisError if `ndim() < 2`.
+     * @complexity O(min(shape[0], shape[1])).
+     */
+    T trace(int offset = 0) const;
+
+    /**
+     * @brief Indices of non-zero elements (one array per dimension).
+     * @return Vector of 1-D arrays, one per dimension.
+     * @complexity O(n).
+     */
+    auto nonzero() const -> std::vector<ndarray<std::size_t>>;
+
+    /**
+     * @brief Element-wise complex conjugate.
+     * @return New array with conjugated elements.
+     * @complexity O(n).
+     */
+    auto conj() const -> ndarray;
+
+    /**
+     * @brief Swap the byte order of every element, in place.
+     * @complexity O(n).
+     */
+    void byteswap();
+
+    // =================================================================
+    // Selection / manipulation (numpy.ndarray.choose / compress / ...)
+    // =================================================================
+
+    /**
+     * @brief Element-wise absolute value.
+     * @return New array with absolute values.
+     * @complexity O(n).
+     */
+    auto abs() const -> ndarray;
+
+    /**
+     * @brief Alias of conj() (numpy.ndarray.conjugate).
+     * @return New array with conjugated elements.
+     * @complexity O(n).
+     */
+    auto conjugate() const -> ndarray;
+
+    /**
+     * @brief Build an array from an index array and a list of
+     *        choices.
+     *
+     * The i-th output element is `choices[a[i]][i]` with
+     * broadcast indexing.
+     * @tparam U Element type of the choice arrays.
+     * @param choices Choice arrays; all must be broadcastable
+     *        to the same shape.
+     * @param mode `'r'` raise (default), `'w'` wrap,
+     *        `'c'` clip.
+     * @return New array assembled from the choices.
+     * @throws std::invalid_argument if `choices` is empty or
+     *         if an out-of-range index is encountered with
+     *         `mode == 'r'`.
+     * @complexity O(n * choices.size()).
+     */
+    template <typename U>
+    auto choose(const std::vector<ndarray<U>>& choices, char mode = 'r') const
+        -> ndarray<U>;
+
+    /**
+     * @brief Return selected slices along an axis.
+     *
+     * When `condition` is a 1-D bool array whose length
+     * matches the axis length, the matching slices are kept.
+     * A `nullopt` axis works on the flattened array (numpy
+     * default).
+     * @param condition 1-D bool array of selectors.
+     * @param axis Axis along which to filter (default:
+     *        flattened).
+     * @return New array with selected slices.
+     * @throws std::invalid_argument if `condition` is not 1-D
+     *         or if its length does not match the axis length.
+     * @complexity O(n).
+     */
+    auto
+    compress(const ndarray<bool>& condition, std::optional<int> axis = std::nullopt) const
+        -> ndarray;
+
+    /**
+     * @brief Matrix product (delegates to np::dot).
+     * @tparam U Right-hand operand element type.
+     * @param b Right-hand operand.
+     * @return Result of the matrix product.
+     * @see np::linalg::dot
+     * @complexity O(n^3) for 2-D arrays (standard matrix
+     *         multiplication).
+     */
+    template <typename U>
+    auto dot(const ndarray<U>& b) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Matrix multiply (numpy `@`, delegates to np::matmul).
+     * @tparam U Right-hand operand element type.
+     * @param b Right-hand operand.
+     * @return Result of the matrix multiplication.
+     * @see np::linalg::matmul
+     * @complexity O(n^3) for 2-D arrays.
+     */
+    template <typename U>
+    auto matmul(const ndarray<U>& b) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief In-place partial sort so that a[kth] is in its
+     *        sorted position along an axis.
+     * @param kth Partition index.
+     * @param axis Axis along which to partition (default: last).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @throws std::out_of_range if `kth >= axis_len`.
+     * @complexity O(n) average (introselect).
+     */
+    void partition(std::size_t kth, int axis = -1);
+
+    /**
+     * @brief Real part: for complex element types the extracted
+     *        real components; for real types a view of the array
+     *        itself.
+     * @return New array of real components, or a view for real
+     *         types.
+     * @complexity O(n).
+     */
+    auto real() const -> ndarray<typename detail::_Np_real_of<T>::type>;
+
+    /**
+     * @brief Imaginary part: for complex element types the
+     *        extracted imaginary components; for real types an
+     *        all-zero array.
+     * @return New array of imaginary components, or a zero array
+     *         for real types.
+     * @complexity O(n).
+     */
+    auto imag() const -> ndarray<typename detail::_Np_real_of<T>::type>;
+
+    /**
+     * @brief View transposing the last two dimensions
+     *        (ndim >= 2).
+     * @return Array with the last two axes swapped.
+     * @throws np::AxisError if `ndim() < 2`.
+     * @complexity O(ndim).
+     */
+    auto mT() const -> ndarray;
+
+    /**
+     * @brief Set the WRITEABLE flag (numpy.ndarray.setflags).
+     * @param writeable If false, the array becomes read-only.
+     */
+    void setflags(bool writeable);
+
+    /**
+     * @brief Current WRITEABLE flag.
+     * @return true if the array is writable.
+     */
+    [[nodiscard]] bool writeable() const noexcept;
+
+    /**
+     * @brief Base storage pointer when the array borrows memory
+     *        from a parent view, nullptr when it owns its data
+     *        (numpy.ndarray.base).
+     * @return Raw pointer to the parent's data buffer, or
+     *         nullptr if this array owns its data.
+     */
+    [[nodiscard]] const void* base() const noexcept;
+
+    /**
+     * @brief True when the array owns its own data buffer.
+     * @return true if `data_` is owned exclusively.
+     */
+    [[nodiscard]] bool owns_data() const noexcept;
+
+    /**
+     * @brief True when the array shares storage with a parent
+     *        view.
+     * @return true if this is a view.
+     */
+    [[nodiscard]] bool is_view() const noexcept;
+
+    /**
+     * @brief 1-D view of the logical elements (numpy.ndarray.flat).
+     * @return 1-D array of all logical elements.
+     */
+    auto flat() const -> ndarray;
+
+    /**
+     * @brief Size of the first axis (numpy `__len__`).
+     * @return `shape[0]`.
+     * @throws std::invalid_argument if the array is 0-D.
+     */
+    [[nodiscard]] std::size_t len() const;
+
+    /**
+     * @brief True when any element equals `value` (numpy `in`).
+     * @param value Value to search for.
+     * @return true if `value` is found.
+     * @complexity O(n).
+     */
+    [[nodiscard]] bool contains(const T& value) const;
+
+    /**
+     * @brief Element-wise floor division (numpy `//`).
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand array.
+     * @return Array of floored division results.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto floordiv(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise floor division by a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Divisor.
+     * @return Array of floored division results.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto floordiv(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief (floor_divide, remainder) pair (numpy `divmod`).
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand array.
+     * @return Pair of (floordiv, remainder) arrays.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto divmod(const ndarray<U>& rhs) const -> std::
+        pair<ndarray<std::common_type_t<T, U>>, ndarray<std::common_type_t<T, U>>>;
+
+    /**
+     * @brief (floor_divide, remainder) pair by a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Divisor.
+     * @return Pair of (floordiv, remainder) arrays.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto divmod(const U& scalar) const -> std::
+        pair<ndarray<std::common_type_t<T, U>>, ndarray<std::common_type_t<T, U>>>;
+
+    /**
+     * @brief Element-wise power (numpy `**`).
+     * @tparam U Right-hand operand element type.
+     * @param rhs Exponent array.
+     * @return Array of element-wise powers.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto pow(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise power by a scalar.
+     * @tparam U Scalar exponent type.
+     * @param scalar Exponent.
+     * @return Array of element-wise powers.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto pow(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
+
+    // =================================================================
+    // Conversions / IO
+    // =================================================================
+
+    /**
+     * @brief Flat logical elements as a std::vector.
+     * @return Vector of all logical elements in C order.
+     * @complexity O(n).
+     */
+    auto tolist() const -> std::vector<T>;
+
+    /**
+     * @brief Native-endian byte dump of the logical elements.
+     * @return Byte vector of all elements in native endianness.
+     * @complexity O(n * sizeof(T)).
+     */
+    auto tobytes() const -> std::vector<std::uint8_t>;
+
+    /**
+     * @brief Write the raw bytes to a binary file.
+     * @param filename Output file path.
+     * @throws std::runtime_error if the file cannot be opened.
+     * @complexity O(n * sizeof(T)).
+     */
+    void tofile(const std::string& filename) const;
+
+    /**
+     * @brief Write the raw bytes to an output stream.
+     * @param os Output stream.
+     * @complexity O(n * sizeof(T)).
+     */
+    void tofile(std::ostream& os) const;
+
+    /**
+     * @brief Human-readable representation to stdout.
+     * @param os Output stream (default: `std::cout`).
+     * @complexity O(n).
+     */
+    void print(std::ostream& os = std::cout) const;
+
+    // =================================================================
+    // Element-wise arithmetic (broadcasting)
+    // =================================================================
+
+    /**
+     * @brief Element-wise addition with another array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Broadcast sum.
+     * @complexity O(n), where n = broadcast size.
+     */
+    template <typename U>
+    auto operator+(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise subtraction with another array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Broadcast difference.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator-(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise multiplication with another array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Broadcast product.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator*(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise division with another array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Broadcast quotient.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator/(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise addition with a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar value.
+     * @return Array with each element incremented.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator+(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise subtraction of a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar value.
+     * @return Array with each element decremented.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator-(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise multiplication by a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar value.
+     * @return Array with each element scaled.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator*(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise division by a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar divisor.
+     * @return Array with each element divided.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator/(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Unary negation (element-wise).
+     * @return Array with negated elements.
+     * @complexity O(n).
+     */
+    auto operator-() const -> ndarray;
+
+    /**
+     * @brief Unary plus (numpy `+a`): identity copy.
+     * @return Copy of the array.
+     * @complexity O(n).
+     */
+    auto operator+() const -> ndarray;
+
+    // Element-wise floored remainder (numpy `%`)
+
+    /**
+     * @brief Element-wise floored remainder with an array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Array of floored remainders.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator%(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise floored remainder by a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar divisor.
+     * @return Array of floored remainders.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator%(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
+
+    // Bitwise ops (integral/bool element types only, numpy semantics)
+
+    /**
+     * @brief Element-wise bitwise AND with an array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Bitwise AND result.
+     * @pre Both element types must be integral or bool.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator&(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise bitwise AND with a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar value.
+     * @return Bitwise AND result.
+     * @pre Both element types must be integral or bool.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator&(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise bitwise OR with an array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Bitwise OR result.
+     * @pre Both element types must be integral or bool.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator|(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise bitwise OR with a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar value.
+     * @return Bitwise OR result.
+     * @pre Both element types must be integral or bool.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator|(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise bitwise XOR with an array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Bitwise XOR result.
+     * @pre Both element types must be integral or bool.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator^(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise bitwise XOR with a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar value.
+     * @return Bitwise XOR result.
+     * @pre Both element types must be integral or bool.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator^(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise bitwise NOT (numpy `~`).
+     * @return Bitwise complement of each element.
+     * @pre Element type must be integral.
+     * @complexity O(n).
+     */
+    auto operator~() const -> ndarray;
+
+    // Element-wise shifts (integral element types only)
+
+    /**
+     * @brief Element-wise left shift with an array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Shift amounts.
+     * @return Left-shifted result.
+     * @pre Both element types must be integral.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator<<(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise left shift by a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Shift amount.
+     * @return Left-shifted result.
+     * @pre Both element types must be integral.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator<<(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise right shift with an array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Shift amounts.
+     * @return Right-shifted result.
+     * @pre Both element types must be integral.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator>>(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Element-wise right shift by a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Shift amount.
+     * @return Right-shifted result.
+     * @pre Both element types must be integral.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator>>(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
+
+    // Comparisons (element-wise, NumPy semantics)
+
+    /**
+     * @brief Element-wise equality with an array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Boolean array of element-wise equality.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator==(const ndarray<U>& rhs) const -> ndarray<bool>;
+
+    /**
+     * @brief Element-wise inequality with an array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Boolean array of element-wise inequality.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator!=(const ndarray<U>& rhs) const -> ndarray<bool>;
+
+    /**
+     * @brief Element-wise less-than with an array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Boolean array of element-wise comparisons.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator<(const ndarray<U>& rhs) const -> ndarray<bool>;
+
+    /**
+     * @brief Element-wise less-than-or-equal with an array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Boolean array of element-wise comparisons.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator<=(const ndarray<U>& rhs) const -> ndarray<bool>;
+
+    /**
+     * @brief Element-wise greater-than with an array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Boolean array of element-wise comparisons.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator>(const ndarray<U>& rhs) const -> ndarray<bool>;
+
+    /**
+     * @brief Element-wise greater-than-or-equal with an array.
+     * @tparam U Right-hand operand element type.
+     * @param rhs Right-hand operand.
+     * @return Boolean array of element-wise comparisons.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator>=(const ndarray<U>& rhs) const -> ndarray<bool>;
+
+    /**
+     * @brief Element-wise equality with a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar value.
+     * @return Boolean array of element-wise comparisons.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator==(const U& scalar) const -> ndarray<bool>;
+
+    /**
+     * @brief Element-wise inequality with a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar value.
+     * @return Boolean array of element-wise comparisons.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator!=(const U& scalar) const -> ndarray<bool>;
+
+    /**
+     * @brief Element-wise less-than with a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar value.
+     * @return Boolean array of element-wise comparisons.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator<(const U& scalar) const -> ndarray<bool>;
+
+    /**
+     * @brief Element-wise less-than-or-equal with a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar value.
+     * @return Boolean array of element-wise comparisons.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator<=(const U& scalar) const -> ndarray<bool>;
+
+    /**
+     * @brief Element-wise greater-than with a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar value.
+     * @return Boolean array of element-wise comparisons.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator>(const U& scalar) const -> ndarray<bool>;
+
+    /**
+     * @brief Element-wise greater-than-or-equal with a scalar.
+     * @tparam U Scalar type.
+     * @param scalar Scalar value.
+     * @return Boolean array of element-wise comparisons.
+     * @complexity O(n).
+     */
+    template <typename U>
+    auto operator>=(const U& scalar) const -> ndarray<bool>;
+
+    /**
+     * @brief True if same shape and all elements equal.
+     * @param other Array to compare against.
+     * @return true if shapes match and all elements are equal.
+     * @complexity O(n).
+     */
+    bool all_equal(const ndarray& other) const noexcept;
+
+    /**
+     * @brief True if all elements equal the given value.
+     * @param value Value to compare against.
+     * @return true if every element equals `value`.
+     * @complexity O(n).
+     */
+    bool all_equal(const T& value) const noexcept;
+
+    // In-place arithmetic (same shape, or broadcast for += etc.)
+
+    /**
+     * @brief In-place element-wise addition with an array.
+     * @param rhs Right-hand operand.
+     * @return Reference to `*this`.
+     * @complexity O(n).
+     */
+    ndarray& operator+=(const ndarray& rhs);
+
+    /**
+     * @brief In-place element-wise subtraction with an array.
+     * @param rhs Right-hand operand.
+     * @return Reference to `*this`.
+     * @complexity O(n).
+     */
+    ndarray& operator-=(const ndarray& rhs);
+
+    /**
+     * @brief In-place element-wise multiplication with an array.
+     * @param rhs Right-hand operand.
+     * @return Reference to `*this`.
+     * @complexity O(n).
+     */
+    ndarray& operator*=(const ndarray& rhs);
+
+    /**
+     * @brief In-place element-wise division with an array.
+     * @param rhs Right-hand operand.
+     * @return Reference to `*this`.
+     * @complexity O(n).
+     */
+    ndarray& operator/=(const ndarray& rhs);
+
+    /**
+     * @brief In-place addition of a scalar.
+     * @param scalar Scalar value.
+     * @return Reference to `*this`.
+     * @complexity O(n).
+     */
+    ndarray& operator+=(const T& scalar);
+
+    /**
+     * @brief In-place subtraction of a scalar.
+     * @param scalar Scalar value.
+     * @return Reference to `*this`.
+     * @complexity O(n).
+     */
+    ndarray& operator-=(const T& scalar);
+
+    /**
+     * @brief In-place multiplication by a scalar.
+     * @param scalar Scalar value.
+     * @return Reference to `*this`.
+     * @complexity O(n).
+     */
+    ndarray& operator*=(const T& scalar);
+
+    /**
+     * @brief In-place division by a scalar.
+     * @param scalar Scalar divisor.
+     * @return Reference to `*this`.
+     * @complexity O(n).
+     */
+    ndarray& operator/=(const T& scalar);
+
+    // In-place floored remainder / bitwise / shifts
+
+    /** @brief In-place floored remainder with an array. */
+    ndarray& operator%=(const ndarray& rhs);
+    /** @brief In-place floored remainder by a scalar. */
+    ndarray& operator%=(const T& scalar);
+    /** @brief In-place bitwise AND with an array. */
+    ndarray& operator&=(const ndarray& rhs);
+    /** @brief In-place bitwise AND with a scalar. */
+    ndarray& operator&=(const T& scalar);
+    /** @brief In-place bitwise OR with an array. */
+    ndarray& operator|=(const ndarray& rhs);
+    /** @brief In-place bitwise OR with a scalar. */
+    ndarray& operator|=(const T& scalar);
+    /** @brief In-place bitwise XOR with an array. */
+    ndarray& operator^=(const ndarray& rhs);
+    /** @brief In-place bitwise XOR with a scalar. */
+    ndarray& operator^=(const T& scalar);
+    /** @brief In-place left shift with an array. */
+    ndarray& operator<<=(const ndarray& rhs);
+    /** @brief In-place left shift by a scalar. */
+    ndarray& operator<<=(const T& scalar);
+    /** @brief In-place right shift with an array. */
+    ndarray& operator>>=(const ndarray& rhs);
+    /** @brief In-place right shift by a scalar. */
+    ndarray& operator>>=(const T& scalar);
+
+    // In-place floor division / power (no C++ operator spelling)
+
+    /** @brief In-place floored division by an array. */
+    ndarray& floordiv_eq(const ndarray& rhs);
+    /** @brief In-place floored division by a scalar. */
+    ndarray& floordiv_eq(const T& scalar);
+    /** @brief In-place element-wise power by an array. */
+    ndarray& pow_eq(const ndarray& rhs);
+    /** @brief In-place element-wise power by a scalar. */
+    ndarray& pow_eq(const T& scalar);
+
+    // Scalar-on-the-left friends
+
+    /**
+     * @brief Scalar + array (commutative with array + scalar).
+     * @tparam U Scalar type.
+     * @param scalar Left-hand scalar operand.
+     * @param arr Right-hand array operand.
+     * @return Broadcast sum.
+     * @complexity O(n).
+     */
+    template <typename U>
+    friend auto operator+(const U& scalar, const ndarray& arr)
+        -> ndarray<std::common_type_t<U, T>>
+    {
+      return arr + scalar;
+    }
+
+    /**
+     * @brief Scalar - array (non-commutative).
+     * @tparam U Scalar type.
+     * @param scalar Left-hand scalar operand.
+     * @param arr Right-hand array operand.
+     * @return Broadcast difference.
+     * @complexity O(n).
+     */
+    template <typename U>
+    friend auto operator-(const U& scalar, const ndarray& arr)
+        -> ndarray<std::common_type_t<U, T>>
+    {
+      return arr._scalar_left_op(scalar, [](const U& a, const T& b) { return a - b; });
+    }
+
+    /**
+     * @brief Scalar * array (commutative with array * scalar).
+     * @tparam U Scalar type.
+     * @param scalar Left-hand scalar operand.
+     * @param arr Right-hand array operand.
+     * @return Broadcast product.
+     * @complexity O(n).
+     */
+    template <typename U>
+    friend auto operator*(const U& scalar, const ndarray& arr)
+        -> ndarray<std::common_type_t<U, T>>
+    {
+      return arr._scalar_left_op(scalar, [](const U& a, const T& b) { return a * b; });
+    }
+
+    /**
+     * @brief Scalar / array (non-commutative).
+     * @tparam U Scalar type.
+     * @param scalar Left-hand scalar operand.
+     * @param arr Right-hand array operand.
+     * @return Broadcast quotient.
+     * @complexity O(n).
+     */
+    template <typename U>
+    friend auto operator/(const U& scalar, const ndarray& arr)
+        -> ndarray<std::common_type_t<U, T>>
+    {
+      return arr._scalar_left_op(scalar, [](const U& a, const T& b) { return a / b; });
+    }
+
+    /**
+     * @brief Scalar % array (non-commutative).
+     * @tparam U Scalar type.
+     * @param scalar Left-hand scalar operand.
+     * @param arr Right-hand array operand.
+     * @return Broadcast floored remainder.
+     * @complexity O(n).
+     */
+    template <typename U>
+    friend auto operator%(const U& scalar, const ndarray& arr)
+        -> ndarray<std::common_type_t<U, T>>
+    {
+      return arr._scalar_left_op(
+          scalar, [](const U& a, const T& b) { return detail::floored_mod(a, b); });
+    }
+
+    /**
+     * @brief Scalar & array (bitwise AND).
+     * @tparam U Scalar type.
+     * @param scalar Left-hand scalar operand.
+     * @param arr Right-hand array operand.
+     * @return Broadcast bitwise AND.
+     * @pre Both types must be integral.
+     * @complexity O(n).
+     */
+    template <typename U>
+    friend auto operator&(const U& scalar, const ndarray& arr)
+        -> ndarray<std::common_type_t<U, T>>
+    {
+      return arr._scalar_left_op(scalar, [](const U& a, const T& b) { return a & b; });
+    }
+
+    /**
+     * @brief Scalar | array (bitwise OR).
+     * @tparam U Scalar type.
+     * @param scalar Left-hand scalar operand.
+     * @param arr Right-hand array operand.
+     * @return Broadcast bitwise OR.
+     * @pre Both types must be integral.
+     * @complexity O(n).
+     */
+    template <typename U>
+    friend auto operator|(const U& scalar, const ndarray& arr)
+        -> ndarray<std::common_type_t<U, T>>
+    {
+      return arr._scalar_left_op(scalar, [](const U& a, const T& b) { return a | b; });
+    }
+
+    /**
+     * @brief Scalar ^ array (bitwise XOR).
+     * @tparam U Scalar type.
+     * @param scalar Left-hand scalar operand.
+     * @param arr Right-hand array operand.
+     * @return Broadcast bitwise XOR.
+     * @pre Both types must be integral.
+     * @complexity O(n).
+     */
+    template <typename U>
+    friend auto operator^(const U& scalar, const ndarray& arr)
+        -> ndarray<std::common_type_t<U, T>>
+    {
+      return arr._scalar_left_op(scalar, [](const U& a, const T& b) { return a ^ b; });
+    }
+
+    /**
+     * @brief Scalar << array (left shift).
+     * @tparam U Scalar type.
+     * @param scalar Left-hand scalar operand.
+     * @param arr Right-hand array operand.
+     * @return Broadcast left shift.
+     * @pre Both types must be integral.
+     * @complexity O(n).
+     */
+    template <typename U>
+    friend auto operator<<(const U& scalar, const ndarray& arr)
+        -> ndarray<std::common_type_t<U, T>>
+    {
+      return arr._scalar_left_op(scalar, [](const U& a, const T& b) { return a << b; });
+    }
+
+    /**
+     * @brief Scalar >> array (right shift).
+     * @tparam U Scalar type.
+     * @param scalar Left-hand scalar operand.
+     * @param arr Right-hand array operand.
+     * @return Broadcast right shift.
+     * @pre Both types must be integral.
+     * @complexity O(n).
+     */
+    template <typename U>
+    friend auto operator>>(const U& scalar, const ndarray& arr)
+        -> ndarray<std::common_type_t<U, T>>
+    {
+      return arr._scalar_left_op(scalar, [](const U& a, const T& b) { return a >> b; });
+    }
+
+    /**
+     * @brief Stream output in NumPy repr style.
+     * @param os Output stream.
+     * @param arr Array to output.
+     * @return Reference to `os`.
+     * @complexity O(n).
+     */
+    friend auto operator<<(std::ostream& os, const ndarray& arr) -> std::ostream&
+    {
+      arr._print_to(os);
+      return os;
+    }
+
+  private:
+    // -----------------------------------------------------------------
+    // Internals
+    // -----------------------------------------------------------------
+
+    template <typename U>
+    friend class ndarray;
+
+    std::shared_ptr<std::vector<T>> data_; ///< Shared storage (enables views)
+
+    /** WRITEABLE flag (numpy.ndarray.setflags). */
+    bool writeable_ = true;
+
+    /** True when this array shares storage with a parent view. */
+    bool is_view_ = false;
+
+    /**
+     * @brief View constructor (shares storage).
+     * @param data Shared data buffer.
+     * @param shape Dimensions.
+     * @param strides Stride vector in elements.
+     * @param type Data type.
+     * @param order Memory layout.
+     * @param offset Element offset into storage.
+     */
+    ndarray(
+        std::shared_ptr<std::vector<T>> data,
+        std::vector<int> shape,
+        std::vector<std::size_t> strides,
+        np::dtype type,
+        matrix::Order order,
+        std::size_t offset);
+
+    /**
+     * @brief C-order strides for a shape.
+     * @param shape Shape vector.
+     * @return Stride vector in elements for C-order layout.
+     * @complexity O(ndim).
+     */
+    [[nodiscard]] static std::vector<std::size_t>
+    _c_strides(const std::vector<int>& shape) noexcept;
+
+    /**
+     * @brief Validate that every shape dimension is non-negative.
+     * @param s Shape to validate.
+     * @throws std::invalid_argument if any dimension is negative.
+     * @note A negative dimension would otherwise silently wrap to a huge
+     *       (or, for certain combinations, incorrectly small) value when
+     *       cast to `std::size_t` in `_numel()`/`_c_strides()`, producing
+     *       a buffer/stride mismatch and out-of-bounds access.
+     */
+    static void _validate_shape(const std::vector<int>& s);
+
+    /**
+     * @brief Validated element count: throws before any allocation if
+     *        `s` contains a negative dimension.
+     * @param s Shape to measure.
+     * @return `product(s)`.
+     * @throws std::invalid_argument if any dimension is negative.
+     */
+    [[nodiscard]] static std::size_t _checked_numel(const std::vector<int>& s);
+
+    /**
+     * @brief shape as std::size_t vector.
+     * @return Shape converted to `std::size_t`.
+     * @complexity O(ndim).
+     */
+    [[nodiscard]] std::vector<std::size_t> _shape_u() const noexcept;
+
+    /**
+     * @brief Normalize a possibly negative axis.
+     * @param axis Axis index (may be negative).
+     * @return Normalized axis in [0, ndim()).
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(1).
+     */
+    [[nodiscard]] int _normalize_axis(int axis) const;
+
+    /**
+     * @brief Visit every logical element.
+     * @tparam Fn Callable accepting `const T&`.
+     * @param fn Function to call for each element.
+     * @complexity O(n).
+     */
+    template <typename Fn>
+    void _for_each_logical(Fn&& fn) const;
+
+    /**
+     * @brief Visit every logical element with its multi-index.
+     * @tparam Fn Callable accepting `(const std::vector<std::size_t>&, const
+     * T&)`.
+     * @param fn Function to call for each element.
+     * @complexity O(n).
+     */
+    template <typename Fn>
+    void _for_each_indexed(Fn&& fn) const;
+
+    /**
+     * @brief Generic axis reduction.
+     * @tparam Acc Accumulator type.
+     * @tparam StepFn Callable accepting `(Acc&, const T&)`.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, retain the reduced axis with size 1.
+     * @param seed Optional initial accumulator value.
+     * @param step Reduction step function.
+     * @return Reduced array.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    template <typename Acc, typename StepFn>
+    auto
+    _reduce_axis(int axis, bool keepdims, std::optional<Acc> seed, StepFn&& step) const
+        -> ndarray<Acc>;
+
+    /**
+     * @brief Welford-based variance along an axis.
+     * @tparam MeanT Accumulator/promoted type.
+     * @param axis Axis along which to compute variance.
+     * @param keepdims If true, retain the reduced axis with size 1.
+     * @return Variance array.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    template <typename MeanT>
+    auto _var_axis(int axis, bool keepdims) const -> ndarray<MeanT>;
+
+    /**
+     * @brief Generic extrema/arg reduction along an axis.
+     * @tparam Cmp Comparison callable returning bool.
+     * @param axis Axis along which to reduce.
+     * @param keepdims If true, retain the reduced axis with size 1.
+     * @param cmp Comparison function (returns true if first arg is
+     *        "better").
+     * @return Array of indices of the extrema along the axis.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    template <typename Cmp>
+    auto _arg_reduce_axis(int axis, bool keepdims, Cmp&& cmp) const
+        -> ndarray<std::size_t>;
+
+    /**
+     * @brief Internal flat write used by cumsum/cumprod.
+     * @tparam Acc Accumulator type.
+     * @tparam Fn Reduction callable.
+     * @param axis Axis along which to accumulate.
+     * @param fn Accumulation function.
+     * @return Array of accumulated values.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    template <typename Acc, typename Fn>
+    auto _cum_axis(int axis, Fn&& fn) const -> ndarray<Acc>;
+
+    /**
+     * @brief Scalar element-wise operation over own shape.
+     * @tparam U Scalar type.
+     * @tparam Fn Binary operation callable.
+     * @param scalar Scalar operand.
+     * @param fn Operation `(T, U) -> R`.
+     * @return Result array.
+     * @complexity O(n).
+     */
+    template <typename U, typename Fn>
+    auto _scalar_op(const U& scalar, Fn&& fn) const -> ndarray<std::common_type_t<T, U>>;
+
+    /**
+     * @brief Scalar on the left (a op b[i] with a first).
+     * @tparam U Scalar type.
+     * @tparam Fn Binary operation callable.
+     * @param scalar Left scalar operand.
+     * @param fn Operation `(U, T) -> R`.
+     * @return Result array.
+     * @complexity O(n).
+     */
+    template <typename U, typename Fn>
+    auto _scalar_left_op(const U& scalar, Fn&& fn) const
+        -> ndarray<std::common_type_t<U, T>>;
+
+    /**
+     * @brief Scalar comparison producing a bool array.
+     * @tparam U Scalar type.
+     * @tparam Fn Comparison callable.
+     * @param scalar Scalar operand.
+     * @param fn Comparison `(T, U) -> bool`.
+     * @return Boolean result array.
+     * @complexity O(n).
+     */
+    template <typename U, typename Fn>
+    auto _cmp_scalar(const U& scalar, Fn&& fn) const -> ndarray<bool>;
+
+    /**
+     * @brief Recursive printing helper.
+     * @param dim Current dimension depth.
+     * @param flat_offset Flat offset into the data buffer.
+     * @param os Output stream.
+     */
+    void
+    _print_recursive(std::size_t dim, std::size_t flat_offset, std::ostream& os) const;
+
+    /**
+     * @brief Full repr: `array(..., dtype=...)`.
+     * @param os Output stream.
+     */
+    void _print_to(std::ostream& os) const;
+
+    /**
+     * @brief Storage pointer for iterators.
+     * @return Raw pointer to the data buffer + offset.
+     */
+    T* _raw_ptr() noexcept;
+
+    /**
+     * @brief Const storage pointer for iterators.
+     * @return Const raw pointer to the data buffer + offset.
+     */
+    const T* _raw_ptr() const noexcept;
+
+    /**
+     * @brief Finalize strides/type after construction.
+     *
+     * Computes C-order strides, allocates the data buffer
+     * if empty, and deduces the dtype from `T` if unset.
+     */
+    void _finalize();
+
+    /**
+     * @brief Valid scalar type constraint.
+     * @tparam U Type to check.
+     */
+    template <typename U>
+    static constexpr bool _is_valid_scalar =
+        std::is_arithmetic_v<U> || detail::is_complex_v<U>;
+  };
+
+  // Forward declarations so ndarray<T>::dot/matmul can delegate to the
+  // free functions defined in linalg.hpp (which includes this header).
+  namespace linalg
+  {
+    template <typename T, typename U>
+    auto dot(const ndarray<T>& a, const ndarray<U>& b)
+        -> ndarray<std::common_type_t<T, U>>;
+    template <typename T, typename U>
+    auto matmul(const ndarray<T>& a, const ndarray<U>& b)
+        -> ndarray<std::common_type_t<T, U>>;
+  } // namespace linalg
+
+  // =====================================================================
+  // Broadcasting helpers
+  // =====================================================================
+
+  namespace detail
+  {
+
+    /**
+     * @brief NumPy-style broadcast of two shapes.
+     *
+     * Aligns shapes from the right and expands dimensions
+     * of size 1 to match the other shape.
+     * @param a First shape.
+     * @param b Second shape.
+     * @return Broadcast shape.
+     * @throws std::invalid_argument if the shapes cannot be
+     *         broadcast together.
+     * @complexity O(max(a.size(), b.size())).
+     */
+    [[nodiscard]] inline std::vector<int>
+    broadcast_shapes(const std::vector<int>& a, const std::vector<int>& b)
+    {
+      const int na = static_cast<int>(a.size());
+      const int nb = static_cast<int>(b.size());
+      const int nr = std::max(na, nb);
+      std::vector<int> r(nr);
+      for (int d = 0; d < nr; ++d)
+      {
+        const int ia = na - nr + d;
+        const int ib = nb - nr + d;
+        const int sa = ia < 0 ? 1 : a[ia];
+        const int sb = ib < 0 ? 1 : b[ib];
+        if (sa == sb)
+        {
+          r[d] = sa;
+        }
+        else if (sa == 1)
+        {
+          r[d] = sb;
+        }
+        else if (sb == 1)
+        {
+          r[d] = sa;
+        }
+        else
+        {
+          throw std::invalid_argument("operands could not be broadcast together");
+        }
+      }
+      return r;
+    }
+
+    /**
+     * @brief Element-wise operation with broadcasting.
+     *
+     * Computes the broadcast shape, then iterates over
+     * every logical element applying `fn(a[i], b[i])`.
+     * @tparam R Element type of `a`.
+     * @tparam S Element type of `b`.
+     * @tparam Fn Callable accepting `(const R&, const S&)`
+     *        and returning the output type.
+     * @param a First operand.
+     * @param b Second operand.
+     * @param fn Element-wise operation.
+     * @return New array with the broadcast shape and
+     *         element-wise results.
+     * @throws std::invalid_argument if shapes cannot be
+     *         broadcast.
+     * @complexity O(n), where n = broadcast size.
+     */
+    template <typename R, typename S, typename Fn>
+    auto elementwise(const ndarray<R>& a, const ndarray<S>& b, Fn&& fn)
+    {
+      using OutT = std::invoke_result_t<Fn, R, S>;
+      const std::vector<int> out_shape = broadcast_shapes(a.shape, b.shape);
+      ndarray<OutT> out(out_shape);
+
+      const int nr = static_cast<int>(out_shape.size());
+      const int shift_a = nr - static_cast<int>(a.shape.size());
+      const int shift_b = nr - static_cast<int>(b.shape.size());
+
+      std::vector<std::size_t> adj_a(nr), adj_b(nr);
+      for (int d = 0; d < nr; ++d)
+      {
+        const int ka = d - shift_a;
+        const int kb = d - shift_b;
+        adj_a[d] = (ka < 0 || a.shape[ka] == 1) ? 0 : a.strides[ka];
+        adj_b[d] = (kb < 0 || b.shape[kb] == 1) ? 0 : b.strides[kb];
+      }
+
+      Odometer od(out_shape);
+      while (!od.done())
+      {
+        const auto& idx = od.idx();
+        std::size_t fa = a.offset, fb = b.offset, fo = 0;
+        for (int d = 0; d < nr; ++d)
+        {
+          fa += idx[d] * adj_a[d];
+          fb += idx[d] * adj_b[d];
+          fo += idx[d] * out.strides[d];
+        }
+        out.data()[fo] = fn(a.data()[fa], b.data()[fb]);
+        od.advance();
+      }
+      return out;
+    }
+
+    /**
+     * @brief Flat offset of array element at a broadcast
+     *        position.
+     *
+     * Computes the physical storage offset for element
+     * `idx` of array `a` when `a` is broadcast to
+     * `out_shape`.
+     * @tparam R Element type of the source array.
+     * @param a Source array.
+     * @param out_shape Broadcast shape (rank >= a's rank).
+     * @param idx Multi-index into the broadcast shape.
+     * @return Physical flat offset into `a`'s storage.
+     * @complexity O(out_shape.size()).
+     */
+    template <typename R>
+    [[nodiscard]] inline std::size_t broadcast_offset(
+        const ndarray<R>& a,
+        const std::vector<int>& out_shape,
+        const std::vector<std::size_t>& idx)
+    {
+      const int nr = static_cast<int>(out_shape.size());
+      const int shift = nr - static_cast<int>(a.shape.size());
+      std::size_t f = a.offset;
+      for (int d = 0; d < nr; ++d)
+      {
+        const int ka = d - shift;
+        if (ka < 0 || a.shape[ka] == 1)
+        {
+          continue;
+        }
+        f += idx[d] * a.strides[ka];
+      }
+      return f;
+    }
+
+  } // namespace detail
+
+  // =====================================================================
+  // Implementation
+  // =====================================================================
+
+  template <typename T>
+  ndarray<T>::ndarray(const std::vector<int>& shape, np::dtype type, const T& fill)
+      : shape(shape), type(type),
+        data_(std::make_shared<std::vector<T>>(_checked_numel(shape), fill))
+  {
+    _finalize();
   }
 
-  T *base_;
-  std::vector<std::size_t> shape_;
-  std::vector<std::size_t> strides_;
-  std::vector<std::size_t> idx_;
-  bool done_;
-};
+  template <typename T>
+  auto ndarray<T>::from_data(const std::vector<int>& shape, std::vector<T> data)
+      -> ndarray
+  {
+    _validate_shape(shape);
+    ndarray out;
+    out.shape = shape;
+    out.data_ = std::make_shared<std::vector<T>>(std::move(data));
+    if (out.data_->size() != out._numel())
+    {
+      throw std::invalid_argument("data size does not match the array shape");
+    }
+    out._finalize();
+    return out;
+  }
 
-// ---------------------------------------------------------------------
-// ndarray
-// ---------------------------------------------------------------------
+  template <typename T>
+  ndarray<T>::ndarray(std::initializer_list<T> list)
+      : data_(std::make_shared<std::vector<T>>(list.begin(), list.end()))
+  {
+    shape = {static_cast<int>(list.size())};
+    _finalize();
+  }
 
-/**
- * @brief A NumPy-style multidimensional array container.
- *
- * Stores elements in a shared `std::vector<T>` buffer, enabling
- * zero-copy views (transpose, swapaxes, squeeze, reshape) that
- * share storage with the parent array.
- *
- * @tparam T Element type (numeric or `std::complex`).
- * @note Memory ownership is reference-counted via `std::shared_ptr`.
- *       Views set `is_view_ = true` and hold a pointer to the parent's
- *       buffer; `base()` returns the parent's `shared_ptr` raw pointer.
- * @note Strides are always in *elements*, not bytes.
- */
-template <typename T = double> class ndarray {
-public:
-  using value_type = T;
-  using size_type = std::size_t;
-  using iterator = ndarray_iterator<T>;
-  using const_iterator = ndarray_iterator<const T>;
-  /**
-   * @brief Reference type returned by non-const element accessors.
-   *
-   * `std::vector<bool>` is specialised, so its element access yields a
-   * proxy type rather than `bool&`; this alias keeps the `ndarray` API
-   * uniform for `bool` arrays.
-   */
-  using reference = std::conditional_t<std::is_same_v<T, bool>,
-                                       std::vector<bool>::reference, T &>;
-
-  // --- attributes (mirror ndarray.shape / strides / dtype / order) ---
-  std::vector<int> shape;                 ///< Dimensions of the array
-  std::vector<std::size_t> strides;       ///< Strides in elements
-  np::dtype type = dtype::void_;          ///< Data type
-  matrix::Order order = matrix::Order::C; ///< Memory layout
-  std::size_t offset = 0; ///< Element offset into storage (views)
-
-  // =================================================================
-  // Construction
-  // =================================================================
-
-  /**
-   * @brief Default constructor: empty 0-dimensional array.
-   */
-  ndarray() = default;
-
-  /**
-   * @brief Constructs an array of the given shape, filled with `fill`.
-   *
-   * @param shape Dimensions of the new array.
-   * @param type Data type (default `dtype::void_`, deduced from `T`).
-   * @param fill Initial value for every element.
-   * @post `this->shape == shape` and `this->size() == product(shape)`.
-   */
-  explicit ndarray(const std::vector<int> &shape, np::dtype type = dtype::void_,
-                   const T &fill = T{});
-
-  /**
-   * @brief Builds an array from an owned data buffer.
-   *
-   * Provided as a static factory (instead of a constructor) so that
-   * nested-brace construction like `ndarray<int> a{{1,2},{3,4}}`
-   * unambiguously selects the nested initializer-list constructor.
-   *
-   * @param shape Dimensions of the new array.
-   * @param data Owned element data; moved into the array's buffer.
-   * @return New `ndarray` with the given shape and data.
-   * @throws std::invalid_argument if `data.size() != product(shape)`.
-   */
-  static ndarray from_data(const std::vector<int> &shape, std::vector<T> data);
-
-  /**
-   * @brief 1D construction from a flat initializer list.
-   * @param list Flat list of elements; length becomes `shape[0]`.
-   */
-  ndarray(std::initializer_list<T> list);
-
-  /**
-   * @brief 2D construction from nested initializer lists, e.g.
-   *        `ndarray<int> a{{1, 2}, {3, 4}}`.
-   * @tparam U Element type of the inner lists (deduced).
-   * @param rows Nested initializer list; all rows must have the same
-   *        length, otherwise `std::invalid_argument` is thrown.
-   * @throws std::invalid_argument on ragged (inconsistent) rows.
-   */
+  template <typename T>
   template <typename U>
-  ndarray(std::initializer_list<std::initializer_list<U>> rows);
+  ndarray<T>::ndarray(std::initializer_list<std::initializer_list<U>> rows)
+  {
+    const int n_rows = static_cast<int>(rows.size());
+    const int n_cols = n_rows > 0 ? static_cast<int>(rows.begin()->size()) : 0;
+    shape = {n_rows, n_cols};
+    data_ = std::make_shared<std::vector<T>>(_numel(), T{});
+    std::size_t k = 0;
+    for (const auto& row : rows)
+    {
+      if (static_cast<int>(row.size()) != n_cols)
+      {
+        throw std::invalid_argument("ragged rows in nested initializer list");
+      }
+      for (const U& v : row)
+      {
+        (*data_)[k++] = static_cast<T>(v);
+      }
+    }
+    _finalize();
+  }
 
-  /**
-   * @brief Deep-copying copy constructor (value semantics).
-   * @param other Array to copy.
-   * @post `this` owns a separate copy of `other`'s data.
-   */
-  ndarray(const ndarray &other);
+  template <typename T>
+  ndarray<T>::ndarray(const ndarray& other)
+      : shape(other.shape), strides(other.strides), type(other.type), order(other.order),
+        offset(other.offset), writeable_(other.writeable_), is_view_(false)
+  {
+    if (other.data_)
+    {
+      data_ = std::make_shared<std::vector<T>>(*other.data_);
+    }
+  }
 
-  /** @brief Move constructor: transfers storage in O(1). */
-  ndarray(ndarray &&) noexcept = default;
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator=(const ndarray& other)
+  {
+    if (this != &other)
+    {
+      shape = other.shape;
+      strides = other.strides;
+      type = other.type;
+      order = other.order;
+      offset = other.offset;
+      writeable_ = other.writeable_;
+      is_view_ = false;
+      data_ = other.data_ ? std::make_shared<std::vector<T>>(*other.data_) : nullptr;
+    }
+    return *this;
+  }
 
-  /**
-   * @brief Deep-copying copy assignment (value semantics).
-   * @param other Array to copy.
-   * @return Reference to `*this`.
-   * @post `this` owns a separate copy of `other`'s data.
-   */
-  ndarray &operator=(const ndarray &other);
+  template <typename T>
+  ndarray<T>::ndarray(
+      std::shared_ptr<std::vector<T>> data,
+      std::vector<int> shape,
+      std::vector<std::size_t> strides,
+      np::dtype type,
+      matrix::Order order,
+      std::size_t offset)
+      : shape(std::move(shape)), strides(std::move(strides)), type(type), order(order),
+        offset(offset), data_(std::move(data)), is_view_(true)
+  {
+  }
 
-  /** @brief Move assignment: transfers storage in O(1). */
-  ndarray &operator=(ndarray &&) noexcept = default;
-
-  // =================================================================
+  // ---------------------------------------------------------------------
   // Attributes
-  // =================================================================
-
-  /**
-   * @brief Total number of elements.
-   * @return `product(shape)`.
-   * @complexity O(ndim).
-   */
-  [[nodiscard]] std::size_t size() const noexcept;
-
-  /**
-   * @brief Number of dimensions.
-   * @return `shape.size()`.
-   * @complexity O(1).
-   */
-  [[nodiscard]] std::size_t ndim() const noexcept;
-
-  /**
-   * @brief Bytes per element.
-   * @return `sizeof(T)`.
-   * @complexity O(1).
-   */
-  [[nodiscard]] std::size_t itemsize() const noexcept;
-
-  /**
-   * @brief Total bytes consumed by the logical elements.
-   * @return `size() * sizeof(T)`.
-   * @complexity O(1).
-   */
-  [[nodiscard]] std::size_t nbytes() const noexcept;
-
-  /**
-   * @brief True if the array has no elements.
-   * @return `size() == 0`.
-   * @complexity O(1).
-   */
-  [[nodiscard]] bool empty() const noexcept;
-
-  /**
-   * @brief True when the logical elements are laid out contiguously
-   *        in C (row-major) order.
-   * @return true if strides match C-order strides for the shape and
-   *         `offset == 0`.
-   * @complexity O(ndim).
-   */
-  [[nodiscard]] bool is_contiguous() const noexcept;
-
-  /**
-   * @brief True when the logical elements are laid out
-   *        column-major (Fortran) contiguously.
-   * @return true if strides match F-order strides for the shape and
-   *         `offset == 0`.
-   * @complexity O(ndim).
-   */
-  [[nodiscard]] bool is_f_contiguous() const noexcept;
-
-  /**
-   * @brief Writable access to the underlying storage buffer.
-   *
-   * Lazily allocates the buffer if it is empty.
-   * @return Reference to the internal `std::vector<T>`.
-   */
-  std::vector<T> &data();
-
-  /**
-   * @brief Read-only access to the underlying storage buffer.
-   * @return Const reference to the internal `std::vector<T>`.
-   * @throws std::runtime_error if the array has no data buffer.
-   */
-  [[nodiscard]] const std::vector<T> &data() const;
-
-  /**
-   * @brief Product of the shape (total element count).
-   * @return `size()`.
-   * @complexity O(ndim).
-   */
-  [[nodiscard]] std::size_t _numel() const noexcept;
-
-  /**
-   * @brief Flat logical offset of a multi-index.
-   * @param idx Multi-dimensional index; size must equal `ndim()`.
-   * @return Linear offset into the storage buffer (accounting for
-   *         strides and `offset`).
-   * @complexity O(ndim).
-   */
-  [[nodiscard]] std::size_t
-  _flat(const std::vector<std::size_t> &idx) const noexcept;
-
-  /**
-   * @brief Physical storage offset of flat logical position `i`.
-   * @param i Flat logical index (C-order).
-   * @return Physical offset into the storage buffer.
-   * @complexity O(ndim).
-   */
-  [[nodiscard]] std::size_t _flat_logical(std::size_t i) const noexcept;
-
-  // =================================================================
-  // Iterators
-  // =================================================================
-
-  /**
-   * @brief Returns a mutable iterator to the first element.
-   * @return Iterator pointing to the first logical element.
-   */
-  iterator begin();
-
-  /**
-   * @brief Returns a mutable iterator past the last element.
-   * @return Iterator pointing one past the last logical element.
-   */
-  iterator end();
-
-  /**
-   * @brief Returns a const iterator to the first element.
-   * @return Const iterator pointing to the first logical element.
-   */
-  const_iterator begin() const;
-
-  /**
-   * @brief Returns a const iterator past the last element.
-   * @return Const iterator pointing one past the last logical element.
-   */
-  const_iterator end() const;
-
-  /** @brief Const iterator to the first element. */
-  const_iterator cbegin() const { return begin(); }
-
-  /** @brief Const iterator past the last element. */
-  const_iterator cend() const { return end(); }
-
-  // =================================================================
-  // Element access
-  // =================================================================
-
-  /**
-   * @brief Chained subscript access (read/write).
-   *
-   * Each call reduces one dimension; e.g. `a[i][j]` for a 2-D
-   * array returns a reference to the element at `(i, j)`.
-   * @param index Index into the first (outermost) dimension.
-   * @return A `Proxy<T>` that can be further subscripted or
-   *         implicitly converted to a reference.
-   */
-  auto operator[](std::size_t index) -> Proxy<T>;
-
-  /**
-   * @brief Chained subscript access (read-only).
-   * @param index Index into the first (outermost) dimension.
-   * @return A `ConstProxy<T>` that can be further subscripted.
-   */
-  auto operator[](std::size_t index) const -> ConstProxy<T>;
-
-  /**
-   * @brief Compile-time-size index access (reference).
-   * @tparam N Number of dimensions (deduced from the array).
-   * @param idx Fixed-size array of indices, one per dimension.
-   * @return Reference to the element at `idx`.
-   * @throws std::invalid_argument if `N != ndim()`.
-   * @throws std::out_of_range if any index is out of bounds.
-   */
-  template <std::size_t N>
-  auto get(const std::array<std::size_t, N> &idx) -> reference;
-
-  /**
-   * @brief Compile-time-size index access (const reference).
-   * @tparam N Number of dimensions.
-   * @param idx Fixed-size array of indices.
-   * @return Const reference to the element at `idx`.
-   * @throws std::invalid_argument if `N != ndim()`.
-   * @throws std::out_of_range if any index is out of bounds.
-   */
-  template <std::size_t N>
-  auto get(const std::array<std::size_t, N> &idx) const -> const T &;
-
-  /**
-   * @brief Runtime index container access (by value).
-   * @tparam Container Type of the index container (e.g.
-   *         `std::vector<std::size_t>`).
-   * @param idx Index container; size must equal `ndim()`.
-   * @return Element value at `idx`.
-   * @throws std::invalid_argument if `idx.size() != ndim()`.
-   * @throws std::out_of_range if any index is out of bounds.
-   */
-  template <typename Container> auto get(const Container &idx) const -> T;
-
-  /**
-   * @brief Write a value at runtime index container position.
-   * @tparam Container Type of the index container.
-   * @param idx Index container; size must equal `ndim()`.
-   * @param value Value to write.
-   * @throws std::invalid_argument if `idx.size() != ndim()`.
-   * @throws std::out_of_range if any index is out of bounds.
-   */
-  template <typename Container> void set(const Container &idx, const T &value);
-
-  /**
-   * @brief 1D bounds-checked access.
-   * @param i Row index.
-   * @return Reference to the element.
-   * @throws std::invalid_argument if `ndim() != 1`.
-   * @throws std::out_of_range if `i >= shape[0]`.
-   */
-  auto at(std::size_t i) -> reference;
-
-  /**
-   * @brief 1D bounds-checked access (const).
-   * @param i Row index.
-   * @return Const reference to the element.
-   * @throws std::invalid_argument if `ndim() != 1`.
-   * @throws std::out_of_range if `i >= shape[0]`.
-   */
-  auto at(std::size_t i) const -> const T &;
-
-  /**
-   * @brief Single-index access for 1D arrays (read/write).
-   * @param i Element index.
-   * @return Reference to the element.
-   * @throws std::invalid_argument if `ndim() != 1`.
-   */
-  auto operator()(std::size_t i) -> reference;
-
-  /**
-   * @brief Single-index access for 1D arrays (const).
-   * @param i Element index.
-   * @return Const reference to the element.
-   * @throws std::invalid_argument if `ndim() != 1`.
-   */
-  auto operator()(std::size_t i) const -> const T &;
-
-  /**
-   * @brief 2D index access (read/write).
-   * @param i Row index.
-   * @param j Column index.
-   * @return Reference to the element.
-   * @throws std::invalid_argument if `ndim() != 2`.
-   */
-  auto operator()(std::size_t i, std::size_t j) -> reference;
-
-  /**
-   * @brief 2D index access (const).
-   * @param i Row index.
-   * @param j Column index.
-   * @return Const reference to the element.
-   * @throws std::invalid_argument if `ndim() != 2`.
-   */
-  auto operator()(std::size_t i, std::size_t j) const -> const T &;
-
-  /**
-   * @brief 2D bounds-checked access.
-   * @param i Row index.
-   * @param j Column index.
-   * @return Reference to the element.
-   * @throws std::invalid_argument if `ndim() != 2`.
-   * @throws std::out_of_range if either index is out of bounds.
-   */
-  auto at(std::size_t i, std::size_t j) -> reference;
-
-  /**
-   * @brief 2D bounds-checked access (const).
-   * @param i Row index.
-   * @param j Column index.
-   * @return Const reference to the element.
-   * @throws std::invalid_argument if `ndim() != 2`.
-   * @throws std::out_of_range if either index is out of bounds.
-   */
-  auto at(std::size_t i, std::size_t j) const -> const T &;
-
-  /**
-   * @brief Returns the single element of a 0-d/1-element array.
-   * @return The single element value.
-   * @throws std::invalid_argument if `size() != 1`.
-   */
-  T item() const;
-
-  /**
-   * @brief Scalar conversion for single-element arrays (numpy `bool()`).
-   * @return `true` if the single element is non-zero.
-   * @throws std::invalid_argument if `size() != 1`.
-   */
-  explicit operator bool() const;
-
-  /**
-   * @brief Scalar conversion for single-element arrays (numpy `int()`).
-   * @return The element cast to `long long`.
-   * @throws std::invalid_argument if `size() != 1`.
-   */
-  explicit operator long long() const;
-
-  /**
-   * @brief Scalar conversion for single-element arrays (numpy `float()`).
-   * @return The element cast to `double`.
-   * @throws std::invalid_argument if `size() != 1`.
-   */
-  explicit operator double() const;
-
-  /**
-   * @brief Scalar conversion for single-element arrays (numpy `complex()`).
-   * @return The element as `std::complex<double>`.
-   * @throws std::invalid_argument if `size() != 1`.
-   */
-  explicit operator std::complex<double>() const;
-
-  // =================================================================
-  // Reductions
-  // =================================================================
-
-  /**
-   * @brief Sum over all elements.
-   * @return Sum of all elements. For `bool` arrays the return type
-   *         is `std::int64_t` (NumPy semantics).
-   * @complexity O(n), where n = size().
-   */
-  auto sum() const
-      -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
-
-  /**
-   * @brief Sum along an axis.
-   * @tparam Acc Accumulator type (default: element type, or `int64_t`
-   *         for `bool`).
-   * @param axis Axis along which to reduce. Negative indices count
-   *        from the last axis.
-   * @param keepdims If true, the reduced axis is retained with size 1.
-   * @return Array with one fewer dimension (or same rank if
-   *         `keepdims`).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n), where n = size().
-   */
-  template <typename Acc =
-                std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
-  auto sum(int axis, bool keepdims = false) const -> ndarray<Acc>;
-
-  /**
-   * @brief Product over all elements.
-   * @return Product of all elements. For `bool` arrays the return
-   *         type is `std::int64_t`.
-   * @complexity O(n), where n = size().
-   */
-  auto prod() const
-      -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
-
-  /**
-   * @brief Product along an axis.
-   * @tparam Acc Accumulator type.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, the reduced axis is retained with size 1.
-   * @return Array with one fewer dimension (or same rank if
-   *         `keepdims`).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  template <typename Acc =
-                std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
-  auto prod(int axis, bool keepdims = false) const -> ndarray<Acc>;
-
-  /**
-   * @brief Minimum over all elements.
-   * @return Smallest element.
-   * @throws std::runtime_error if the array is empty.
-   * @complexity O(n).
-   */
-  T min() const;
-
-  /**
-   * @brief Minimum along an axis.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, the reduced axis is retained with size 1.
-   * @return Array with one fewer dimension (or same rank if
-   *         `keepdims`).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  auto min(int axis, bool keepdims = false) const -> ndarray<T>;
-
-  /**
-   * @brief Maximum over all elements.
-   * @return Largest element.
-   * @throws std::runtime_error if the array is empty.
-   * @complexity O(n).
-   */
-  T max() const;
-
-  /**
-   * @brief Maximum along an axis.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, the reduced axis is retained with size 1.
-   * @return Array with one fewer dimension (or same rank if
-   *         `keepdims`).
-   * @return Array with one fewer dimension (or same rank if
-   *         `keepdims`).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  auto max(int axis, bool keepdims = false) const -> ndarray<T>;
-
-  /**
-   * @brief Peak-to-peak (max - min) over all elements.
-   * @return `max() - min()`.
-   * @throws std::runtime_error if the array is empty.
-   * @complexity O(n).
-   */
-  T ptp() const;
-
-  /**
-   * @brief Peak-to-peak (max - min) along an axis.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, the reduced axis is retained with size 1.
-   * @return Array with one fewer dimension (or same rank if
-   *         `keepdims`).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  auto ptp(int axis, bool keepdims = false) const -> ndarray<T>;
-
-  /**
-   * @brief Arithmetic mean over all elements.
-   * @return Mean value. Integer and boolean inputs promote to
-   *         `double`; floating-point and complex inputs keep
-   *         their type (NumPy semantics).
-   * @throws std::runtime_error if the array is empty.
-   * @complexity O(n).
-   */
-  auto mean() const -> typename _mean_type<T>::type;
-
-  /**
-   * @brief Arithmetic mean along an axis.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, the reduced axis is retained with size 1.
-   * @return Array with one fewer dimension (or same rank if
-   *         `keepdims`).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  auto mean(int axis, bool keepdims = false) const
-      -> ndarray<typename _mean_type<T>::type>;
-
-  /**
-   * @brief Population variance over all elements.
-   * @return Variance. Uses Welford's online algorithm for numerical
-   *         stability.
-   * @throws std::runtime_error if the array is empty.
-   * @complexity O(n).
-   */
-  auto var() const -> typename _mean_type<T>::type;
-
-  /**
-   * @brief Population variance along an axis.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, the reduced axis is retained with size 1.
-   * @return Array with one fewer dimension (or same rank if
-   *         `keepdims`).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  auto var(int axis, bool keepdims = false) const
-      -> ndarray<typename _mean_type<T>::type>;
-
-  /**
-   * @brief Population standard deviation over all elements.
-   * @return Standard deviation (`sqrt(var())`).
-   * @complexity O(n).
-   */
-  auto std() const -> typename _mean_type<T>::type;
-
-  /**
-   * @brief Population standard deviation along an axis.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, the reduced axis is retained with size 1.
-   * @return Array with one fewer dimension (or same rank if
-   *         `keepdims`).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  auto std(int axis, bool keepdims = false) const
-      -> ndarray<typename _mean_type<T>::type>;
-
-  /**
-   * @brief True when every element is non-zero.
-   * @return true if all elements are truthy.
-   * @complexity O(n).
-   */
-  bool all() const;
-
-  /**
-   * @brief All along an axis.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, the reduced axis is retained with size 1.
-   * @return Boolean array with one fewer dimension (or same rank if
-   *         `keepdims`).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  auto all(int axis, bool keepdims = false) const -> ndarray<bool>;
-
-  /**
-   * @brief True when any element is non-zero.
-   * @return true if any element is truthy.
-   * @complexity O(n).
-   */
-  bool any() const;
-
-  /**
-   * @brief Any along an axis.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, the reduced axis is retained with size 1.
-   * @return Boolean array with one fewer dimension (or same rank if
-   *         `keepdims`).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  auto any(int axis, bool keepdims = false) const -> ndarray<bool>;
-
-  /**
-   * @brief Flat logical index of the maximum element.
-   * @return Linear index of the first occurrence of the maximum.
-   * @throws std::runtime_error if the array is empty.
-   * @complexity O(n).
-   */
-  std::size_t argmax() const;
-
-  /**
-   * @brief Indices of maxima along an axis.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, the reduced axis is retained with size 1.
-   * @return Array of indices with one fewer dimension (or same rank
-   *         if `keepdims`).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  auto argmax(int axis, bool keepdims = false) const -> ndarray<std::size_t>;
-
-  /**
-   * @brief Flat logical index of the minimum element.
-   * @return Linear index of the first occurrence of the minimum.
-   * @throws std::runtime_error if the array is empty.
-   * @complexity O(n).
-   */
-  std::size_t argmin() const;
-
-  /**
-   * @brief Indices of minima along an axis.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, the reduced axis is retained with size 1.
-   * @return Array of indices with one fewer dimension (or same rank
-   *         if `keepdims`).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  auto argmin(int axis, bool keepdims = false) const -> ndarray<std::size_t>;
-
-  /**
-   * @brief Cumulative sum (flattened when no axis is given).
-   * @return 1-D array of cumulative sums.
-   * @complexity O(n).
-   */
-  auto cumsum() const
-      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
-
-  /**
-   * @brief Cumulative sum along an axis.
-   * @param axis Axis along which to accumulate.
-   * @return Array of the same shape with cumulative sums.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  auto cumsum(int axis) const
-      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
-
-  /**
-   * @brief Cumulative product (flattened when no axis is given).
-   * @return 1-D array of cumulative products.
-   * @complexity O(n).
-   */
-  auto cumprod() const
-      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
-
-  /**
-   * @brief Cumulative product along an axis.
-   * @param axis Axis along which to accumulate.
-   * @return Array of the same shape with cumulative products.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  auto cumprod(int axis) const
-      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
-
-  // =================================================================
-  // Sorting / searching
-  // =================================================================
-
-  /**
-   * @brief In-place sort along an axis (default: last axis).
-   * @param axis Axis along which to sort. Negative indices
-   *        count from the last axis.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n log n) per slice, where n is the axis
-   *         length.
-   */
-  void sort(int axis = -1);
-
-  /**
-   * @brief Sorted copy of the array along an axis (default: last).
-   * @param axis Axis along which to sort.
-   * @return A new sorted array.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n log n).
-   */
-  auto sorted(int axis = -1) const -> ndarray<T>;
-
-  /**
-   * @brief Indices that would sort the array along an axis.
-   * @param axis Axis along which to sort.
-   * @return Array of indices that would sort this array along
-   *         the given axis.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n log n).
-   */
-  auto argsort(int axis = -1) const -> ndarray<std::size_t>;
-
-  /**
-   * @brief Indices that would partition at position k along
-   *        an axis.
-   * @param kth Partition index; the element at position k
-   *        will be in its final sorted position.
-   * @param axis Axis along which to partition.
-   * @return Array of partition indices.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @throws std::out_of_range if `kth >= axis_len`.
-   * @complexity O(n) average (introselect).
-   */
-  auto argpartition(std::size_t kth, int axis = -1) const
-      -> ndarray<std::size_t>;
-
-  /**
-   * @brief Binary search for a value in a sorted 1D array.
-   * @param value Value to search for.
-   * @param side_right If true, return the rightmost
-   *        insertion point; otherwise the leftmost.
-   * @return Index where `value` would be inserted.
-   * @throws std::invalid_argument if the array is not 1-D.
-   * @complexity O(log n).
-   */
-  std::size_t searchsorted(const T &value, bool side_right = false) const;
-
-  /**
-   * @brief Searchsorted applied to every element of `values`.
-   * @param values 1-D array of search values.
-   * @return Array of insertion indices.
-   * @throws std::invalid_argument if the array is not 1-D.
-   * @complexity O(m log n), where m = values.size().
-   */
-  auto searchsorted(const ndarray<int> &values) const -> ndarray<std::size_t>;
-
-  // =================================================================
-  // Shape manipulation
-  // =================================================================
-
-  /**
-   * @brief View (when contiguous) or copy with a new shape.
-   *
-   * If the array is C-contiguous, returns a view sharing
-   * storage. Otherwise, returns a copy. At most one
-   * dimension may be `-1`, in which case it is inferred.
-   * @param shape New shape; at most one dimension may be -1.
-   * @return Reshaped array (view or copy).
-   * @throws std::invalid_argument if the total element count
-   *         does not match, or if more than one dimension is -1.
-   * @complexity O(n) for the copy path, O(ndim) for the view path.
-   */
-  auto reshape(const std::vector<int> &shape) const -> ndarray;
-
-  /**
-   * @brief View with reversed dimensions.
-   * @return Array with shape and strides reversed.
-   * @complexity O(ndim).
-   */
-  auto transpose() const -> ndarray;
-
-  /**
-   * @brief View with a permutation of the dimensions.
-   * @param perm Permutation of axis indices; length must
-   *        equal `ndim()`.
-   * @return Array with axes reordered.
-   * @throws std::invalid_argument if `perm` is not a valid
-   *         permutation of `[0, ndim())`.
-   * @complexity O(ndim).
-   */
-  auto transpose(const std::vector<int> &perm) const -> ndarray;
-
-  /**
-   * @brief View with two axes swapped.
-   * @param axis1 First axis index.
-   * @param axis2 Second axis index.
-   * @return Array with the two axes swapped.
-   * @throws np::AxisError if either axis is out of bounds.
-   * @complexity O(ndim).
-   */
-  auto swapaxes(int axis1, int axis2) const -> ndarray;
-
-  /**
-   * @brief View removing all size-1 dimensions.
-   * @return Array with all singleton dimensions removed.
-   * @complexity O(ndim).
-   */
-  auto squeeze() const -> ndarray;
-
-  /**
-   * @brief View removing a specific dimension.
-   * @param axis Axis to remove; must have extent 1.
-   * @return Array with the specified axis removed.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @throws std::invalid_argument if `shape[axis] != 1`.
-   * @complexity O(ndim).
-   */
-  auto squeeze(int axis) const -> ndarray;
-
-  /**
-   * @brief View (contiguous) or copy flattened in C order.
-   * @return 1-D array containing all logical elements.
-   * @complexity O(n) for the copy path, O(ndim) for the view path.
-   */
-  auto ravel() const -> ndarray;
-
-  /**
-   * @brief Copy flattened in C order.
-   * @return 1-D copy of all elements.
-   * @complexity O(n).
-   */
-  auto flatten() const -> ndarray;
-
-  /**
-   * @brief Resize in place to a new total number of elements.
-   *
-   * Truncates or pads with default-constructed values.
-   * @param new_shape New shape; total element count may
-   *        differ from the current size.
-   * @complexity O(n).
-   */
-  void resize(const std::vector<int> &new_shape);
-
-  // =================================================================
-  // Manipulation
-  // =================================================================
-
-  /**
-   * @brief Fill every element with a value.
-   * @param value Value to fill with.
-   * @complexity O(n).
-   */
-  void fill(const T &value);
-
-  /**
-   * @brief Deep copy of the array.
-   * @return New array with the same data and shape.
-   * @complexity O(n).
-   */
-  auto copy() const -> ndarray;
-
-  /**
-   * @brief View sharing the same storage.
-   * @return New array that shares `data_` with `*this`.
-   * @complexity O(ndim).
-   */
-  auto view() const -> ndarray;
-
-  /**
-   * @brief Element-wise conversion to another type.
-   * @tparam U Target element type.
-   * @return New array with elements cast to `U`.
-   * @complexity O(n).
-   */
-  template <typename U> auto astype() const -> ndarray<U>;
-
-  /**
-   * @brief Gather elements along an axis (default: flattened).
-   * @param indices Indices to gather.
-   * @param axis Axis along which to gather (default: 0).
-   * @return New array with gathered elements.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @throws std::out_of_range if any index is out of bounds.
-   * @complexity O(n).
-   */
-  auto take(const std::vector<std::size_t> &indices, int axis = 0) const
-      -> ndarray;
-
-  /**
-   * @brief Set elements at flat logical positions.
-   * @param indices Flat logical positions to write to.
-   * @param values Values to write (cycled if shorter than
-   *        `indices`).
-   * @param mode `'r'` raise on out-of-bounds (default),
-   *        `'w'` wrap, `'c'` clip.
-   * @throws std::out_of_range if an index is out of bounds
-   *         and `mode == 'r'`.
-   * @complexity O(indices.size()).
-   */
-  void put(const std::vector<std::size_t> &indices,
-           const std::vector<T> &values, char mode = 'r');
-
-  /**
-   * @brief Repeat elements (flattened when no axis given).
-   * @param repeats Number of repetitions per element.
-   * @return Array with repeated elements.
-   * @complexity O(n * repeats).
-   */
-  auto repeat(std::size_t repeats) const -> ndarray;
-
-  /**
-   * @brief Repeat elements along an axis.
-   * @param repeats Number of repetitions per element.
-   * @param axis Axis along which to repeat.
-   * @return Array with repeated elements along the axis.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n * repeats).
-   */
-  auto repeat(std::size_t repeats, int axis) const -> ndarray;
-
-  /**
-   * @brief Clip values into [min_value, max_value].
-   * @param min_value Lower bound.
-   * @param max_value Upper bound.
-   * @return New array with clipped values.
-   * @complexity O(n).
-   */
-  auto clip(const T &min_value, const T &max_value) const -> ndarray;
-
-  /**
-   * @brief Round to `decimals` places.
-   * @param decimals Number of decimal places (default: 0).
-   * @return New array with rounded values.
-   * @note Only affects floating-point element types; integer
-   *       arrays are returned unchanged.
-   * @complexity O(n).
-   */
-  auto round(int decimals = 0) const -> ndarray;
-
-  /**
-   * @brief Diagonal of a 2D+ array.
-   * @param offset Diagonal offset (0 = main diagonal,
-   *        positive = above, negative = below).
-   * @return 1-D array of diagonal elements.
-   * @throws np::AxisError if `ndim() < 2`.
-   * @complexity O(min(shape[0], shape[1])).
-   */
-  auto diagonal(int offset = 0) const -> ndarray;
-
-  /**
-   * @brief Sum along the diagonal.
-   * @param offset Diagonal offset.
-   * @return Sum of diagonal elements.
-   * @throws np::AxisError if `ndim() < 2`.
-   * @complexity O(min(shape[0], shape[1])).
-   */
-  T trace(int offset = 0) const;
-
-  /**
-   * @brief Indices of non-zero elements (one array per dimension).
-   * @return Vector of 1-D arrays, one per dimension.
-   * @complexity O(n).
-   */
-  auto nonzero() const -> std::vector<ndarray<std::size_t>>;
-
-  /**
-   * @brief Element-wise complex conjugate.
-   * @return New array with conjugated elements.
-   * @complexity O(n).
-   */
-  auto conj() const -> ndarray;
-
-  /**
-   * @brief Swap the byte order of every element, in place.
-   * @complexity O(n).
-   */
-  void byteswap();
-
-  // =================================================================
-  // Selection / manipulation (numpy.ndarray.choose / compress / ...)
-  // =================================================================
-
-  /**
-   * @brief Element-wise absolute value.
-   * @return New array with absolute values.
-   * @complexity O(n).
-   */
-  auto abs() const -> ndarray;
-
-  /**
-   * @brief Alias of conj() (numpy.ndarray.conjugate).
-   * @return New array with conjugated elements.
-   * @complexity O(n).
-   */
-  auto conjugate() const -> ndarray;
-
-  /**
-   * @brief Build an array from an index array and a list of
-   *        choices.
-   *
-   * The i-th output element is `choices[a[i]][i]` with
-   * broadcast indexing.
-   * @tparam U Element type of the choice arrays.
-   * @param choices Choice arrays; all must be broadcastable
-   *        to the same shape.
-   * @param mode `'r'` raise (default), `'w'` wrap,
-   *        `'c'` clip.
-   * @return New array assembled from the choices.
-   * @throws std::invalid_argument if `choices` is empty or
-   *         if an out-of-range index is encountered with
-   *         `mode == 'r'`.
-   * @complexity O(n * choices.size()).
-   */
-  template <typename U>
-  auto choose(const std::vector<ndarray<U>> &choices, char mode = 'r') const
-      -> ndarray<U>;
-
-  /**
-   * @brief Return selected slices along an axis.
-   *
-   * When `condition` is a 1-D bool array whose length
-   * matches the axis length, the matching slices are kept.
-   * A `nullopt` axis works on the flattened array (numpy
-   * default).
-   * @param condition 1-D bool array of selectors.
-   * @param axis Axis along which to filter (default:
-   *        flattened).
-   * @return New array with selected slices.
-   * @throws std::invalid_argument if `condition` is not 1-D
-   *         or if its length does not match the axis length.
-   * @complexity O(n).
-   */
-  auto compress(const ndarray<bool> &condition,
-                std::optional<int> axis = std::nullopt) const -> ndarray;
-
-  /**
-   * @brief Matrix product (delegates to np::dot).
-   * @tparam U Right-hand operand element type.
-   * @param b Right-hand operand.
-   * @return Result of the matrix product.
-   * @see np::linalg::dot
-   * @complexity O(n^3) for 2-D arrays (standard matrix
-   *         multiplication).
-   */
-  template <typename U>
-  auto dot(const ndarray<U> &b) const -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Matrix multiply (numpy `@`, delegates to np::matmul).
-   * @tparam U Right-hand operand element type.
-   * @param b Right-hand operand.
-   * @return Result of the matrix multiplication.
-   * @see np::linalg::matmul
-   * @complexity O(n^3) for 2-D arrays.
-   */
-  template <typename U>
-  auto matmul(const ndarray<U> &b) const -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief In-place partial sort so that a[kth] is in its
-   *        sorted position along an axis.
-   * @param kth Partition index.
-   * @param axis Axis along which to partition (default: last).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @throws std::out_of_range if `kth >= axis_len`.
-   * @complexity O(n) average (introselect).
-   */
-  void partition(std::size_t kth, int axis = -1);
-
-  /**
-   * @brief Real part: for complex element types the extracted
-   *        real components; for real types a view of the array
-   *        itself.
-   * @return New array of real components, or a view for real
-   *         types.
-   * @complexity O(n).
-   */
-  auto real() const -> ndarray<typename detail::_Np_real_of<T>::type>;
-
-  /**
-   * @brief Imaginary part: for complex element types the
-   *        extracted imaginary components; for real types an
-   *        all-zero array.
-   * @return New array of imaginary components, or a zero array
-   *         for real types.
-   * @complexity O(n).
-   */
-  auto imag() const -> ndarray<typename detail::_Np_real_of<T>::type>;
-
-  /**
-   * @brief View transposing the last two dimensions
-   *        (ndim >= 2).
-   * @return Array with the last two axes swapped.
-   * @throws np::AxisError if `ndim() < 2`.
-   * @complexity O(ndim).
-   */
-  auto mT() const -> ndarray;
-
-  /**
-   * @brief Set the WRITEABLE flag (numpy.ndarray.setflags).
-   * @param writeable If false, the array becomes read-only.
-   */
-  void setflags(bool writeable);
-
-  /**
-   * @brief Current WRITEABLE flag.
-   * @return true if the array is writable.
-   */
-  [[nodiscard]] bool writeable() const noexcept;
-
-  /**
-   * @brief Base storage pointer when the array borrows memory
-   *        from a parent view, nullptr when it owns its data
-   *        (numpy.ndarray.base).
-   * @return Raw pointer to the parent's data buffer, or
-   *         nullptr if this array owns its data.
-   */
-  [[nodiscard]] const void *base() const noexcept;
-
-  /**
-   * @brief True when the array owns its own data buffer.
-   * @return true if `data_` is owned exclusively.
-   */
-  [[nodiscard]] bool owns_data() const noexcept;
-
-  /**
-   * @brief True when the array shares storage with a parent
-   *        view.
-   * @return true if this is a view.
-   */
-  [[nodiscard]] bool is_view() const noexcept;
-
-  /**
-   * @brief 1-D view of the logical elements (numpy.ndarray.flat).
-   * @return 1-D array of all logical elements.
-   */
-  auto flat() const -> ndarray;
-
-  /**
-   * @brief Size of the first axis (numpy `__len__`).
-   * @return `shape[0]`.
-   * @throws std::invalid_argument if the array is 0-D.
-   */
-  [[nodiscard]] std::size_t len() const;
-
-  /**
-   * @brief True when any element equals `value` (numpy `in`).
-   * @param value Value to search for.
-   * @return true if `value` is found.
-   * @complexity O(n).
-   */
-  [[nodiscard]] bool contains(const T &value) const;
-
-  /**
-   * @brief Element-wise floor division (numpy `//`).
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand array.
-   * @return Array of floored division results.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto floordiv(const ndarray<U> &rhs) const
-      -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise floor division by a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Divisor.
-   * @return Array of floored division results.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto floordiv(const U &scalar) const -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief (floor_divide, remainder) pair (numpy `divmod`).
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand array.
-   * @return Pair of (floordiv, remainder) arrays.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto divmod(const ndarray<U> &rhs) const
-      -> std::pair<ndarray<std::common_type_t<T, U>>,
-                   ndarray<std::common_type_t<T, U>>>;
-
-  /**
-   * @brief (floor_divide, remainder) pair by a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Divisor.
-   * @return Pair of (floordiv, remainder) arrays.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto divmod(const U &scalar) const
-      -> std::pair<ndarray<std::common_type_t<T, U>>,
-                   ndarray<std::common_type_t<T, U>>>;
-
-  /**
-   * @brief Element-wise power (numpy `**`).
-   * @tparam U Right-hand operand element type.
-   * @param rhs Exponent array.
-   * @return Array of element-wise powers.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto pow(const ndarray<U> &rhs) const -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise power by a scalar.
-   * @tparam U Scalar exponent type.
-   * @param scalar Exponent.
-   * @return Array of element-wise powers.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto pow(const U &scalar) const -> ndarray<std::common_type_t<T, U>>;
-
-  // =================================================================
-  // Conversions / IO
-  // =================================================================
-
-  /**
-   * @brief Flat logical elements as a std::vector.
-   * @return Vector of all logical elements in C order.
-   * @complexity O(n).
-   */
-  auto tolist() const -> std::vector<T>;
-
-  /**
-   * @brief Native-endian byte dump of the logical elements.
-   * @return Byte vector of all elements in native endianness.
-   * @complexity O(n * sizeof(T)).
-   */
-  auto tobytes() const -> std::vector<std::uint8_t>;
-
-  /**
-   * @brief Write the raw bytes to a binary file.
-   * @param filename Output file path.
-   * @throws std::runtime_error if the file cannot be opened.
-   * @complexity O(n * sizeof(T)).
-   */
-  void tofile(const std::string &filename) const;
-
-  /**
-   * @brief Write the raw bytes to an output stream.
-   * @param os Output stream.
-   * @complexity O(n * sizeof(T)).
-   */
-  void tofile(std::ostream &os) const;
-
-  /**
-   * @brief Human-readable representation to stdout.
-   * @param os Output stream (default: `std::cout`).
-   * @complexity O(n).
-   */
-  void print(std::ostream &os = std::cout) const;
-
-  // =================================================================
-  // Element-wise arithmetic (broadcasting)
-  // =================================================================
-
-  /**
-   * @brief Element-wise addition with another array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Broadcast sum.
-   * @complexity O(n), where n = broadcast size.
-   */
-  template <typename U>
-  auto operator+(const ndarray<U> &rhs) const
-      -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise subtraction with another array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Broadcast difference.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator-(const ndarray<U> &rhs) const
-      -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise multiplication with another array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Broadcast product.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator*(const ndarray<U> &rhs) const
-      -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise division with another array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Broadcast quotient.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator/(const ndarray<U> &rhs) const
-      -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise addition with a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar value.
-   * @return Array with each element incremented.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator+(const U &scalar) const -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise subtraction of a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar value.
-   * @return Array with each element decremented.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator-(const U &scalar) const -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise multiplication by a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar value.
-   * @return Array with each element scaled.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator*(const U &scalar) const -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise division by a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar divisor.
-   * @return Array with each element divided.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator/(const U &scalar) const -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Unary negation (element-wise).
-   * @return Array with negated elements.
-   * @complexity O(n).
-   */
-  auto operator-() const -> ndarray;
-
-  /**
-   * @brief Unary plus (numpy `+a`): identity copy.
-   * @return Copy of the array.
-   * @complexity O(n).
-   */
-  auto operator+() const -> ndarray;
-
-  // Element-wise floored remainder (numpy `%`)
-
-  /**
-   * @brief Element-wise floored remainder with an array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Array of floored remainders.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator%(const ndarray<U> &rhs) const
-      -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise floored remainder by a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar divisor.
-   * @return Array of floored remainders.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator%(const U &scalar) const -> ndarray<std::common_type_t<T, U>>;
-
-  // Bitwise ops (integral/bool element types only, numpy semantics)
-
-  /**
-   * @brief Element-wise bitwise AND with an array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Bitwise AND result.
-   * @pre Both element types must be integral or bool.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator&(const ndarray<U> &rhs) const
-      -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise bitwise AND with a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar value.
-   * @return Bitwise AND result.
-   * @pre Both element types must be integral or bool.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator&(const U &scalar) const -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise bitwise OR with an array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Bitwise OR result.
-   * @pre Both element types must be integral or bool.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator|(const ndarray<U> &rhs) const
-      -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise bitwise OR with a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar value.
-   * @return Bitwise OR result.
-   * @pre Both element types must be integral or bool.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator|(const U &scalar) const -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise bitwise XOR with an array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Bitwise XOR result.
-   * @pre Both element types must be integral or bool.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator^(const ndarray<U> &rhs) const
-      -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise bitwise XOR with a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar value.
-   * @return Bitwise XOR result.
-   * @pre Both element types must be integral or bool.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator^(const U &scalar) const -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise bitwise NOT (numpy `~`).
-   * @return Bitwise complement of each element.
-   * @pre Element type must be integral.
-   * @complexity O(n).
-   */
-  auto operator~() const -> ndarray;
-
-  // Element-wise shifts (integral element types only)
-
-  /**
-   * @brief Element-wise left shift with an array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Shift amounts.
-   * @return Left-shifted result.
-   * @pre Both element types must be integral.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator<<(const ndarray<U> &rhs) const
-      -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise left shift by a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Shift amount.
-   * @return Left-shifted result.
-   * @pre Both element types must be integral.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator<<(const U &scalar) const -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise right shift with an array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Shift amounts.
-   * @return Right-shifted result.
-   * @pre Both element types must be integral.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator>>(const ndarray<U> &rhs) const
-      -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Element-wise right shift by a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Shift amount.
-   * @return Right-shifted result.
-   * @pre Both element types must be integral.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator>>(const U &scalar) const -> ndarray<std::common_type_t<T, U>>;
-
-  // Comparisons (element-wise, NumPy semantics)
-
-  /**
-   * @brief Element-wise equality with an array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Boolean array of element-wise equality.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator==(const ndarray<U> &rhs) const -> ndarray<bool>;
-
-  /**
-   * @brief Element-wise inequality with an array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Boolean array of element-wise inequality.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator!=(const ndarray<U> &rhs) const -> ndarray<bool>;
-
-  /**
-   * @brief Element-wise less-than with an array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Boolean array of element-wise comparisons.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator<(const ndarray<U> &rhs) const -> ndarray<bool>;
-
-  /**
-   * @brief Element-wise less-than-or-equal with an array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Boolean array of element-wise comparisons.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator<=(const ndarray<U> &rhs) const -> ndarray<bool>;
-
-  /**
-   * @brief Element-wise greater-than with an array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Boolean array of element-wise comparisons.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator>(const ndarray<U> &rhs) const -> ndarray<bool>;
-
-  /**
-   * @brief Element-wise greater-than-or-equal with an array.
-   * @tparam U Right-hand operand element type.
-   * @param rhs Right-hand operand.
-   * @return Boolean array of element-wise comparisons.
-   * @complexity O(n).
-   */
-  template <typename U>
-  auto operator>=(const ndarray<U> &rhs) const -> ndarray<bool>;
-
-  /**
-   * @brief Element-wise equality with a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar value.
-   * @return Boolean array of element-wise comparisons.
-   * @complexity O(n).
-   */
-  template <typename U> auto operator==(const U &scalar) const -> ndarray<bool>;
-
-  /**
-   * @brief Element-wise inequality with a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar value.
-   * @return Boolean array of element-wise comparisons.
-   * @complexity O(n).
-   */
-  template <typename U> auto operator!=(const U &scalar) const -> ndarray<bool>;
-
-  /**
-   * @brief Element-wise less-than with a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar value.
-   * @return Boolean array of element-wise comparisons.
-   * @complexity O(n).
-   */
-  template <typename U> auto operator<(const U &scalar) const -> ndarray<bool>;
-
-  /**
-   * @brief Element-wise less-than-or-equal with a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar value.
-   * @return Boolean array of element-wise comparisons.
-   * @complexity O(n).
-   */
-  template <typename U> auto operator<=(const U &scalar) const -> ndarray<bool>;
-
-  /**
-   * @brief Element-wise greater-than with a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar value.
-   * @return Boolean array of element-wise comparisons.
-   * @complexity O(n).
-   */
-  template <typename U> auto operator>(const U &scalar) const -> ndarray<bool>;
-
-  /**
-   * @brief Element-wise greater-than-or-equal with a scalar.
-   * @tparam U Scalar type.
-   * @param scalar Scalar value.
-   * @return Boolean array of element-wise comparisons.
-   * @complexity O(n).
-   */
-  template <typename U> auto operator>=(const U &scalar) const -> ndarray<bool>;
-
-  /**
-   * @brief True if same shape and all elements equal.
-   * @param other Array to compare against.
-   * @return true if shapes match and all elements are equal.
-   * @complexity O(n).
-   */
-  bool all_equal(const ndarray &other) const noexcept;
-
-  /**
-   * @brief True if all elements equal the given value.
-   * @param value Value to compare against.
-   * @return true if every element equals `value`.
-   * @complexity O(n).
-   */
-  bool all_equal(const T &value) const noexcept;
-
-  // In-place arithmetic (same shape, or broadcast for += etc.)
-
-  /**
-   * @brief In-place element-wise addition with an array.
-   * @param rhs Right-hand operand.
-   * @return Reference to `*this`.
-   * @complexity O(n).
-   */
-  ndarray &operator+=(const ndarray &rhs);
-
-  /**
-   * @brief In-place element-wise subtraction with an array.
-   * @param rhs Right-hand operand.
-   * @return Reference to `*this`.
-   * @complexity O(n).
-   */
-  ndarray &operator-=(const ndarray &rhs);
-
-  /**
-   * @brief In-place element-wise multiplication with an array.
-   * @param rhs Right-hand operand.
-   * @return Reference to `*this`.
-   * @complexity O(n).
-   */
-  ndarray &operator*=(const ndarray &rhs);
-
-  /**
-   * @brief In-place element-wise division with an array.
-   * @param rhs Right-hand operand.
-   * @return Reference to `*this`.
-   * @complexity O(n).
-   */
-  ndarray &operator/=(const ndarray &rhs);
-
-  /**
-   * @brief In-place addition of a scalar.
-   * @param scalar Scalar value.
-   * @return Reference to `*this`.
-   * @complexity O(n).
-   */
-  ndarray &operator+=(const T &scalar);
-
-  /**
-   * @brief In-place subtraction of a scalar.
-   * @param scalar Scalar value.
-   * @return Reference to `*this`.
-   * @complexity O(n).
-   */
-  ndarray &operator-=(const T &scalar);
-
-  /**
-   * @brief In-place multiplication by a scalar.
-   * @param scalar Scalar value.
-   * @return Reference to `*this`.
-   * @complexity O(n).
-   */
-  ndarray &operator*=(const T &scalar);
-
-  /**
-   * @brief In-place division by a scalar.
-   * @param scalar Scalar divisor.
-   * @return Reference to `*this`.
-   * @complexity O(n).
-   */
-  ndarray &operator/=(const T &scalar);
-
-  // In-place floored remainder / bitwise / shifts
-
-  /** @brief In-place floored remainder with an array. */
-  ndarray &operator%=(const ndarray &rhs);
-  /** @brief In-place floored remainder by a scalar. */
-  ndarray &operator%=(const T &scalar);
-  /** @brief In-place bitwise AND with an array. */
-  ndarray &operator&=(const ndarray &rhs);
-  /** @brief In-place bitwise AND with a scalar. */
-  ndarray &operator&=(const T &scalar);
-  /** @brief In-place bitwise OR with an array. */
-  ndarray &operator|=(const ndarray &rhs);
-  /** @brief In-place bitwise OR with a scalar. */
-  ndarray &operator|=(const T &scalar);
-  /** @brief In-place bitwise XOR with an array. */
-  ndarray &operator^=(const ndarray &rhs);
-  /** @brief In-place bitwise XOR with a scalar. */
-  ndarray &operator^=(const T &scalar);
-  /** @brief In-place left shift with an array. */
-  ndarray &operator<<=(const ndarray &rhs);
-  /** @brief In-place left shift by a scalar. */
-  ndarray &operator<<=(const T &scalar);
-  /** @brief In-place right shift with an array. */
-  ndarray &operator>>=(const ndarray &rhs);
-  /** @brief In-place right shift by a scalar. */
-  ndarray &operator>>=(const T &scalar);
-
-  // In-place floor division / power (no C++ operator spelling)
-
-  /** @brief In-place floored division by an array. */
-  ndarray &floordiv_eq(const ndarray &rhs);
-  /** @brief In-place floored division by a scalar. */
-  ndarray &floordiv_eq(const T &scalar);
-  /** @brief In-place element-wise power by an array. */
-  ndarray &pow_eq(const ndarray &rhs);
-  /** @brief In-place element-wise power by a scalar. */
-  ndarray &pow_eq(const T &scalar);
-
-  // Scalar-on-the-left friends
-
-  /**
-   * @brief Scalar + array (commutative with array + scalar).
-   * @tparam U Scalar type.
-   * @param scalar Left-hand scalar operand.
-   * @param arr Right-hand array operand.
-   * @return Broadcast sum.
-   * @complexity O(n).
-   */
-  template <typename U>
-  friend auto operator+(const U &scalar, const ndarray &arr)
-      -> ndarray<std::common_type_t<U, T>> {
-    return arr + scalar;
+  // ---------------------------------------------------------------------
+
+  template <typename T>
+  auto ndarray<T>::size() const noexcept -> std::size_t
+  {
+    return _numel();
   }
 
-  /**
-   * @brief Scalar - array (non-commutative).
-   * @tparam U Scalar type.
-   * @param scalar Left-hand scalar operand.
-   * @param arr Right-hand array operand.
-   * @return Broadcast difference.
-   * @complexity O(n).
-   */
-  template <typename U>
-  friend auto operator-(const U &scalar, const ndarray &arr)
-      -> ndarray<std::common_type_t<U, T>> {
-    return arr._scalar_left_op(scalar,
-                               [](const U &a, const T &b) { return a - b; });
+  template <typename T>
+  auto ndarray<T>::ndim() const noexcept -> std::size_t
+  {
+    return shape.size();
   }
 
-  /**
-   * @brief Scalar * array (commutative with array * scalar).
-   * @tparam U Scalar type.
-   * @param scalar Left-hand scalar operand.
-   * @param arr Right-hand array operand.
-   * @return Broadcast product.
-   * @complexity O(n).
-   */
-  template <typename U>
-  friend auto operator*(const U &scalar, const ndarray &arr)
-      -> ndarray<std::common_type_t<U, T>> {
-    return arr._scalar_left_op(scalar,
-                               [](const U &a, const T &b) { return a * b; });
+  template <typename T>
+  auto ndarray<T>::itemsize() const noexcept -> std::size_t
+  {
+    return sizeof(T);
   }
 
-  /**
-   * @brief Scalar / array (non-commutative).
-   * @tparam U Scalar type.
-   * @param scalar Left-hand scalar operand.
-   * @param arr Right-hand array operand.
-   * @return Broadcast quotient.
-   * @complexity O(n).
-   */
-  template <typename U>
-  friend auto operator/(const U &scalar, const ndarray &arr)
-      -> ndarray<std::common_type_t<U, T>> {
-    return arr._scalar_left_op(scalar,
-                               [](const U &a, const T &b) { return a / b; });
+  template <typename T>
+  auto ndarray<T>::nbytes() const noexcept -> std::size_t
+  {
+    return _numel() * sizeof(T);
   }
 
-  /**
-   * @brief Scalar % array (non-commutative).
-   * @tparam U Scalar type.
-   * @param scalar Left-hand scalar operand.
-   * @param arr Right-hand array operand.
-   * @return Broadcast floored remainder.
-   * @complexity O(n).
-   */
-  template <typename U>
-  friend auto operator%(const U &scalar, const ndarray &arr)
-      -> ndarray<std::common_type_t<U, T>> {
-    return arr._scalar_left_op(scalar, [](const U &a, const T &b) {
-      return detail::floored_mod(a, b);
-    });
+  template <typename T>
+  bool ndarray<T>::empty() const noexcept
+  {
+    return _numel() == 0;
   }
 
-  /**
-   * @brief Scalar & array (bitwise AND).
-   * @tparam U Scalar type.
-   * @param scalar Left-hand scalar operand.
-   * @param arr Right-hand array operand.
-   * @return Broadcast bitwise AND.
-   * @pre Both types must be integral.
-   * @complexity O(n).
-   */
-  template <typename U>
-  friend auto operator&(const U &scalar, const ndarray &arr)
-      -> ndarray<std::common_type_t<U, T>> {
-    return arr._scalar_left_op(scalar,
-                               [](const U &a, const T &b) { return a & b; });
-  }
-
-  /**
-   * @brief Scalar | array (bitwise OR).
-   * @tparam U Scalar type.
-   * @param scalar Left-hand scalar operand.
-   * @param arr Right-hand array operand.
-   * @return Broadcast bitwise OR.
-   * @pre Both types must be integral.
-   * @complexity O(n).
-   */
-  template <typename U>
-  friend auto operator|(const U &scalar, const ndarray &arr)
-      -> ndarray<std::common_type_t<U, T>> {
-    return arr._scalar_left_op(scalar,
-                               [](const U &a, const T &b) { return a | b; });
-  }
-
-  /**
-   * @brief Scalar ^ array (bitwise XOR).
-   * @tparam U Scalar type.
-   * @param scalar Left-hand scalar operand.
-   * @param arr Right-hand array operand.
-   * @return Broadcast bitwise XOR.
-   * @pre Both types must be integral.
-   * @complexity O(n).
-   */
-  template <typename U>
-  friend auto operator^(const U &scalar, const ndarray &arr)
-      -> ndarray<std::common_type_t<U, T>> {
-    return arr._scalar_left_op(scalar,
-                               [](const U &a, const T &b) { return a ^ b; });
-  }
-
-  /**
-   * @brief Scalar << array (left shift).
-   * @tparam U Scalar type.
-   * @param scalar Left-hand scalar operand.
-   * @param arr Right-hand array operand.
-   * @return Broadcast left shift.
-   * @pre Both types must be integral.
-   * @complexity O(n).
-   */
-  template <typename U>
-  friend auto operator<<(const U &scalar, const ndarray &arr)
-      -> ndarray<std::common_type_t<U, T>> {
-    return arr._scalar_left_op(scalar,
-                               [](const U &a, const T &b) { return a << b; });
-  }
-
-  /**
-   * @brief Scalar >> array (right shift).
-   * @tparam U Scalar type.
-   * @param scalar Left-hand scalar operand.
-   * @param arr Right-hand array operand.
-   * @return Broadcast right shift.
-   * @pre Both types must be integral.
-   * @complexity O(n).
-   */
-  template <typename U>
-  friend auto operator>>(const U &scalar, const ndarray &arr)
-      -> ndarray<std::common_type_t<U, T>> {
-    return arr._scalar_left_op(scalar,
-                               [](const U &a, const T &b) { return a >> b; });
-  }
-
-  /**
-   * @brief Stream output in NumPy repr style.
-   * @param os Output stream.
-   * @param arr Array to output.
-   * @return Reference to `os`.
-   * @complexity O(n).
-   */
-  friend auto operator<<(std::ostream &os, const ndarray &arr)
-      -> std::ostream & {
-    arr._print_to(os);
-    return os;
-  }
-
-private:
-  // -----------------------------------------------------------------
-  // Internals
-  // -----------------------------------------------------------------
-
-  template <typename U> friend class ndarray;
-
-  std::shared_ptr<std::vector<T>> data_; ///< Shared storage (enables views)
-
-  /** WRITEABLE flag (numpy.ndarray.setflags). */
-  bool writeable_ = true;
-
-  /** True when this array shares storage with a parent view. */
-  bool is_view_ = false;
-
-  /**
-   * @brief View constructor (shares storage).
-   * @param data Shared data buffer.
-   * @param shape Dimensions.
-   * @param strides Stride vector in elements.
-   * @param type Data type.
-   * @param order Memory layout.
-   * @param offset Element offset into storage.
-   */
-  ndarray(std::shared_ptr<std::vector<T>> data, std::vector<int> shape,
-          std::vector<std::size_t> strides, np::dtype type, matrix::Order order,
-          std::size_t offset);
-
-  /**
-   * @brief C-order strides for a shape.
-   * @param shape Shape vector.
-   * @return Stride vector in elements for C-order layout.
-   * @complexity O(ndim).
-   */
-  [[nodiscard]] static std::vector<std::size_t>
-  _c_strides(const std::vector<int> &shape) noexcept;
-
-  /**
-   * @brief Validate that every shape dimension is non-negative.
-   * @param s Shape to validate.
-   * @throws std::invalid_argument if any dimension is negative.
-   * @note A negative dimension would otherwise silently wrap to a huge
-   *       (or, for certain combinations, incorrectly small) value when
-   *       cast to `std::size_t` in `_numel()`/`_c_strides()`, producing
-   *       a buffer/stride mismatch and out-of-bounds access.
-   */
-  static void _validate_shape(const std::vector<int> &s);
-
-  /**
-   * @brief Validated element count: throws before any allocation if
-   *        `s` contains a negative dimension.
-   * @param s Shape to measure.
-   * @return `product(s)`.
-   * @throws std::invalid_argument if any dimension is negative.
-   */
-  [[nodiscard]] static std::size_t _checked_numel(const std::vector<int> &s);
-
-  /**
-   * @brief shape as std::size_t vector.
-   * @return Shape converted to `std::size_t`.
-   * @complexity O(ndim).
-   */
-  [[nodiscard]] std::vector<std::size_t> _shape_u() const noexcept;
-
-  /**
-   * @brief Normalize a possibly negative axis.
-   * @param axis Axis index (may be negative).
-   * @return Normalized axis in [0, ndim()).
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(1).
-   */
-  [[nodiscard]] int _normalize_axis(int axis) const;
-
-  /**
-   * @brief Visit every logical element.
-   * @tparam Fn Callable accepting `const T&`.
-   * @param fn Function to call for each element.
-   * @complexity O(n).
-   */
-  template <typename Fn> void _for_each_logical(Fn &&fn) const;
-
-  /**
-   * @brief Visit every logical element with its multi-index.
-   * @tparam Fn Callable accepting `(const std::vector<std::size_t>&, const
-   * T&)`.
-   * @param fn Function to call for each element.
-   * @complexity O(n).
-   */
-  template <typename Fn> void _for_each_indexed(Fn &&fn) const;
-
-  /**
-   * @brief Generic axis reduction.
-   * @tparam Acc Accumulator type.
-   * @tparam StepFn Callable accepting `(Acc&, const T&)`.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, retain the reduced axis with size 1.
-   * @param seed Optional initial accumulator value.
-   * @param step Reduction step function.
-   * @return Reduced array.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  template <typename Acc, typename StepFn>
-  auto _reduce_axis(int axis, bool keepdims, std::optional<Acc> seed,
-                    StepFn &&step) const -> ndarray<Acc>;
-
-  /**
-   * @brief Welford-based variance along an axis.
-   * @tparam MeanT Accumulator/promoted type.
-   * @param axis Axis along which to compute variance.
-   * @param keepdims If true, retain the reduced axis with size 1.
-   * @return Variance array.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  template <typename MeanT>
-  auto _var_axis(int axis, bool keepdims) const -> ndarray<MeanT>;
-
-  /**
-   * @brief Generic extrema/arg reduction along an axis.
-   * @tparam Cmp Comparison callable returning bool.
-   * @param axis Axis along which to reduce.
-   * @param keepdims If true, retain the reduced axis with size 1.
-   * @param cmp Comparison function (returns true if first arg is
-   *        "better").
-   * @return Array of indices of the extrema along the axis.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  template <typename Cmp>
-  auto _arg_reduce_axis(int axis, bool keepdims, Cmp &&cmp) const
-      -> ndarray<std::size_t>;
-
-  /**
-   * @brief Internal flat write used by cumsum/cumprod.
-   * @tparam Acc Accumulator type.
-   * @tparam Fn Reduction callable.
-   * @param axis Axis along which to accumulate.
-   * @param fn Accumulation function.
-   * @return Array of accumulated values.
-   * @throws np::AxisError if the axis is out of bounds.
-   * @complexity O(n).
-   */
-  template <typename Acc, typename Fn>
-  auto _cum_axis(int axis, Fn &&fn) const -> ndarray<Acc>;
-
-  /**
-   * @brief Scalar element-wise operation over own shape.
-   * @tparam U Scalar type.
-   * @tparam Fn Binary operation callable.
-   * @param scalar Scalar operand.
-   * @param fn Operation `(T, U) -> R`.
-   * @return Result array.
-   * @complexity O(n).
-   */
-  template <typename U, typename Fn>
-  auto _scalar_op(const U &scalar, Fn &&fn) const
-      -> ndarray<std::common_type_t<T, U>>;
-
-  /**
-   * @brief Scalar on the left (a op b[i] with a first).
-   * @tparam U Scalar type.
-   * @tparam Fn Binary operation callable.
-   * @param scalar Left scalar operand.
-   * @param fn Operation `(U, T) -> R`.
-   * @return Result array.
-   * @complexity O(n).
-   */
-  template <typename U, typename Fn>
-  auto _scalar_left_op(const U &scalar, Fn &&fn) const
-      -> ndarray<std::common_type_t<U, T>>;
-
-  /**
-   * @brief Scalar comparison producing a bool array.
-   * @tparam U Scalar type.
-   * @tparam Fn Comparison callable.
-   * @param scalar Scalar operand.
-   * @param fn Comparison `(T, U) -> bool`.
-   * @return Boolean result array.
-   * @complexity O(n).
-   */
-  template <typename U, typename Fn>
-  auto _cmp_scalar(const U &scalar, Fn &&fn) const -> ndarray<bool>;
-
-  /**
-   * @brief Recursive printing helper.
-   * @param dim Current dimension depth.
-   * @param flat_offset Flat offset into the data buffer.
-   * @param os Output stream.
-   */
-  void _print_recursive(std::size_t dim, std::size_t flat_offset,
-                        std::ostream &os) const;
-
-  /**
-   * @brief Full repr: `array(..., dtype=...)`.
-   * @param os Output stream.
-   */
-  void _print_to(std::ostream &os) const;
-
-  /**
-   * @brief Storage pointer for iterators.
-   * @return Raw pointer to the data buffer + offset.
-   */
-  T *_raw_ptr() noexcept;
-
-  /**
-   * @brief Const storage pointer for iterators.
-   * @return Const raw pointer to the data buffer + offset.
-   */
-  const T *_raw_ptr() const noexcept;
-
-  /**
-   * @brief Finalize strides/type after construction.
-   *
-   * Computes C-order strides, allocates the data buffer
-   * if empty, and deduces the dtype from `T` if unset.
-   */
-  void _finalize();
-
-  /**
-   * @brief Valid scalar type constraint.
-   * @tparam U Type to check.
-   */
-  template <typename U>
-  static constexpr bool _is_valid_scalar =
-      std::is_arithmetic_v<U> || detail::is_complex_v<U>;
-};
-
-// Forward declarations so ndarray<T>::dot/matmul can delegate to the
-// free functions defined in linalg.hpp (which includes this header).
-namespace linalg {
-template <typename T, typename U>
-auto dot(const ndarray<T> &a, const ndarray<U> &b)
-    -> ndarray<std::common_type_t<T, U>>;
-template <typename T, typename U>
-auto matmul(const ndarray<T> &a, const ndarray<U> &b)
-    -> ndarray<std::common_type_t<T, U>>;
-} // namespace linalg
-
-// =====================================================================
-// Broadcasting helpers
-// =====================================================================
-
-namespace detail {
-
-/**
- * @brief NumPy-style broadcast of two shapes.
- *
- * Aligns shapes from the right and expands dimensions
- * of size 1 to match the other shape.
- * @param a First shape.
- * @param b Second shape.
- * @return Broadcast shape.
- * @throws std::invalid_argument if the shapes cannot be
- *         broadcast together.
- * @complexity O(max(a.size(), b.size())).
- */
-[[nodiscard]] inline std::vector<int>
-broadcast_shapes(const std::vector<int> &a, const std::vector<int> &b) {
-  const int na = static_cast<int>(a.size());
-  const int nb = static_cast<int>(b.size());
-  const int nr = std::max(na, nb);
-  std::vector<int> r(nr);
-  for (int d = 0; d < nr; ++d) {
-    const int ia = na - nr + d;
-    const int ib = nb - nr + d;
-    const int sa = ia < 0 ? 1 : a[ia];
-    const int sb = ib < 0 ? 1 : b[ib];
-    if (sa == sb) {
-      r[d] = sa;
-    } else if (sa == 1) {
-      r[d] = sb;
-    } else if (sb == 1) {
-      r[d] = sa;
-    } else {
-      throw std::invalid_argument("operands could not be broadcast together");
-    }
-  }
-  return r;
-}
-
-/**
- * @brief Element-wise operation with broadcasting.
- *
- * Computes the broadcast shape, then iterates over
- * every logical element applying `fn(a[i], b[i])`.
- * @tparam R Element type of `a`.
- * @tparam S Element type of `b`.
- * @tparam Fn Callable accepting `(const R&, const S&)`
- *        and returning the output type.
- * @param a First operand.
- * @param b Second operand.
- * @param fn Element-wise operation.
- * @return New array with the broadcast shape and
- *         element-wise results.
- * @throws std::invalid_argument if shapes cannot be
- *         broadcast.
- * @complexity O(n), where n = broadcast size.
- */
-template <typename R, typename S, typename Fn>
-auto elementwise(const ndarray<R> &a, const ndarray<S> &b, Fn &&fn) {
-  using OutT = std::invoke_result_t<Fn, R, S>;
-  const std::vector<int> out_shape = broadcast_shapes(a.shape, b.shape);
-  ndarray<OutT> out(out_shape);
-
-  const int nr = static_cast<int>(out_shape.size());
-  const int shift_a = nr - static_cast<int>(a.shape.size());
-  const int shift_b = nr - static_cast<int>(b.shape.size());
-
-  std::vector<std::size_t> adj_a(nr), adj_b(nr);
-  for (int d = 0; d < nr; ++d) {
-    const int ka = d - shift_a;
-    const int kb = d - shift_b;
-    adj_a[d] = (ka < 0 || a.shape[ka] == 1) ? 0 : a.strides[ka];
-    adj_b[d] = (kb < 0 || b.shape[kb] == 1) ? 0 : b.strides[kb];
-  }
-
-  Odometer od(out_shape);
-  while (!od.done()) {
-    const auto &idx = od.idx();
-    std::size_t fa = a.offset, fb = b.offset, fo = 0;
-    for (int d = 0; d < nr; ++d) {
-      fa += idx[d] * adj_a[d];
-      fb += idx[d] * adj_b[d];
-      fo += idx[d] * out.strides[d];
-    }
-    out.data()[fo] = fn(a.data()[fa], b.data()[fb]);
-    od.advance();
-  }
-  return out;
-}
-
-/**
- * @brief Flat offset of array element at a broadcast
- *        position.
- *
- * Computes the physical storage offset for element
- * `idx` of array `a` when `a` is broadcast to
- * `out_shape`.
- * @tparam R Element type of the source array.
- * @param a Source array.
- * @param out_shape Broadcast shape (rank >= a's rank).
- * @param idx Multi-index into the broadcast shape.
- * @return Physical flat offset into `a`'s storage.
- * @complexity O(out_shape.size()).
- */
-template <typename R>
-[[nodiscard]] inline std::size_t
-broadcast_offset(const ndarray<R> &a, const std::vector<int> &out_shape,
-                 const std::vector<std::size_t> &idx) {
-  const int nr = static_cast<int>(out_shape.size());
-  const int shift = nr - static_cast<int>(a.shape.size());
-  std::size_t f = a.offset;
-  for (int d = 0; d < nr; ++d) {
-    const int ka = d - shift;
-    if (ka < 0 || a.shape[ka] == 1) {
-      continue;
-    }
-    f += idx[d] * a.strides[ka];
-  }
-  return f;
-}
-
-} // namespace detail
-
-// =====================================================================
-// Implementation
-// =====================================================================
-
-template <typename T>
-ndarray<T>::ndarray(const std::vector<int> &shape, np::dtype type,
-                    const T &fill)
-    : shape(shape), type(type),
-      data_(std::make_shared<std::vector<T>>(_checked_numel(shape), fill)) {
-  _finalize();
-}
-
-template <typename T>
-auto ndarray<T>::from_data(const std::vector<int> &shape, std::vector<T> data)
-    -> ndarray {
-  _validate_shape(shape);
-  ndarray out;
-  out.shape = shape;
-  out.data_ = std::make_shared<std::vector<T>>(std::move(data));
-  if (out.data_->size() != out._numel()) {
-    throw std::invalid_argument("data size does not match the array shape");
-  }
-  out._finalize();
-  return out;
-}
-
-template <typename T>
-ndarray<T>::ndarray(std::initializer_list<T> list)
-    : data_(std::make_shared<std::vector<T>>(list.begin(), list.end())) {
-  shape = {static_cast<int>(list.size())};
-  _finalize();
-}
-
-template <typename T>
-template <typename U>
-ndarray<T>::ndarray(std::initializer_list<std::initializer_list<U>> rows) {
-  const int n_rows = static_cast<int>(rows.size());
-  const int n_cols = n_rows > 0 ? static_cast<int>(rows.begin()->size()) : 0;
-  shape = {n_rows, n_cols};
-  data_ = std::make_shared<std::vector<T>>(_numel(), T{});
-  std::size_t k = 0;
-  for (const auto &row : rows) {
-    if (static_cast<int>(row.size()) != n_cols) {
-      throw std::invalid_argument("ragged rows in nested initializer list");
-    }
-    for (const U &v : row) {
-      (*data_)[k++] = static_cast<T>(v);
-    }
-  }
-  _finalize();
-}
-
-template <typename T>
-ndarray<T>::ndarray(const ndarray &other)
-    : shape(other.shape), strides(other.strides), type(other.type),
-      order(other.order), offset(other.offset), writeable_(other.writeable_),
-      is_view_(false) {
-  if (other.data_) {
-    data_ = std::make_shared<std::vector<T>>(*other.data_);
-  }
-}
-
-template <typename T> ndarray<T> &ndarray<T>::operator=(const ndarray &other) {
-  if (this != &other) {
-    shape = other.shape;
-    strides = other.strides;
-    type = other.type;
-    order = other.order;
-    offset = other.offset;
-    writeable_ = other.writeable_;
-    is_view_ = false;
-    data_ =
-        other.data_ ? std::make_shared<std::vector<T>>(*other.data_) : nullptr;
-  }
-  return *this;
-}
-
-template <typename T>
-ndarray<T>::ndarray(std::shared_ptr<std::vector<T>> data,
-                    std::vector<int> shape, std::vector<std::size_t> strides,
-                    np::dtype type, matrix::Order order, std::size_t offset)
-    : shape(std::move(shape)), strides(std::move(strides)), type(type),
-      order(order), offset(offset), data_(std::move(data)), is_view_(true) {}
-
-// ---------------------------------------------------------------------
-// Attributes
-// ---------------------------------------------------------------------
-
-template <typename T> auto ndarray<T>::size() const noexcept -> std::size_t {
-  return _numel();
-}
-
-template <typename T> auto ndarray<T>::ndim() const noexcept -> std::size_t {
-  return shape.size();
-}
-
-template <typename T>
-auto ndarray<T>::itemsize() const noexcept -> std::size_t {
-  return sizeof(T);
-}
-
-template <typename T> auto ndarray<T>::nbytes() const noexcept -> std::size_t {
-  return _numel() * sizeof(T);
-}
-
-template <typename T> bool ndarray<T>::empty() const noexcept {
-  return _numel() == 0;
-}
-
-template <typename T> bool ndarray<T>::is_contiguous() const noexcept {
-  if (strides != _c_strides(shape) || offset != 0) {
-    return false;
-  }
-  return !data_ || data_->size() >= _numel();
-}
-
-template <typename T> bool ndarray<T>::is_f_contiguous() const noexcept {
-  std::size_t stride = 1;
-  for (std::size_t d = 0; d < shape.size(); ++d) {
-    if (strides[d] != stride) {
+  template <typename T>
+  bool ndarray<T>::is_contiguous() const noexcept
+  {
+    if (strides != _c_strides(shape) || offset != 0)
+    {
       return false;
     }
-    stride *= static_cast<std::size_t>(shape[d]);
+    return !data_ || data_->size() >= _numel();
   }
-  return offset == 0 && (!data_ || data_->size() >= _numel());
-}
 
-template <typename T> auto ndarray<T>::data() -> std::vector<T> & {
-  if (!data_) {
-    data_ = std::make_shared<std::vector<T>>(_numel(), T{});
+  template <typename T>
+  bool ndarray<T>::is_f_contiguous() const noexcept
+  {
+    std::size_t stride = 1;
+    for (std::size_t d = 0; d < shape.size(); ++d)
+    {
+      if (strides[d] != stride)
+      {
+        return false;
+      }
+      stride *= static_cast<std::size_t>(shape[d]);
+    }
+    return offset == 0 && (!data_ || data_->size() >= _numel());
   }
-  return *data_;
-}
 
-template <typename T> auto ndarray<T>::data() const -> const std::vector<T> & {
-  if (!data_) {
-    throw std::runtime_error("ndarray has no data buffer");
+  template <typename T>
+  auto ndarray<T>::data() -> std::vector<T>&
+  {
+    if (!data_)
+    {
+      data_ = std::make_shared<std::vector<T>>(_numel(), T{});
+    }
+    return *data_;
   }
-  return *data_;
-}
 
-// ---------------------------------------------------------------------
-// Iterators
-// ---------------------------------------------------------------------
-
-template <typename T> auto ndarray<T>::_raw_ptr() noexcept -> T * {
-  return data_ ? data_->data() + offset : nullptr;
-}
-
-template <typename T> auto ndarray<T>::_raw_ptr() const noexcept -> const T * {
-  return data_ ? data_->data() + offset : nullptr;
-}
-
-template <typename T> auto ndarray<T>::begin() -> iterator {
-  return iterator(_raw_ptr(), _shape_u(), strides, _numel() == 0);
-}
-
-template <typename T> auto ndarray<T>::end() -> iterator {
-  return iterator(_raw_ptr(), _shape_u(), strides, true);
-}
-
-template <typename T> auto ndarray<T>::begin() const -> const_iterator {
-  return const_iterator(_raw_ptr(), _shape_u(), strides, _numel() == 0);
-}
-
-template <typename T> auto ndarray<T>::end() const -> const_iterator {
-  return const_iterator(_raw_ptr(), _shape_u(), strides, true);
-}
-
-// ---------------------------------------------------------------------
-// Element access
-// ---------------------------------------------------------------------
-
-template <typename T>
-auto ndarray<T>::operator[](std::size_t index) -> Proxy<T> {
-  detail::IndexStack<> idx;
-  idx.push_back(index);
-  return Proxy<T>(*this, idx);
-}
-
-template <typename T>
-auto ndarray<T>::operator[](std::size_t index) const -> ConstProxy<T> {
-  detail::IndexStack<> idx;
-  idx.push_back(index);
-  return ConstProxy<T>(*this, idx);
-}
-
-template <typename T>
-template <std::size_t N>
-auto ndarray<T>::get(const std::array<std::size_t, N> &idx) -> reference {
-  if (N != shape.size()) {
-    throw std::invalid_argument(
-        "index dimensionality does not match array dimensions");
+  template <typename T>
+  auto ndarray<T>::data() const -> const std::vector<T>&
+  {
+    if (!data_)
+    {
+      throw std::runtime_error("ndarray has no data buffer");
+    }
+    return *data_;
   }
-  std::size_t flat = offset;
-  for (std::size_t i = 0; i < N; ++i) {
-    if (idx[i] >= static_cast<std::size_t>(shape[i])) {
+
+  // ---------------------------------------------------------------------
+  // Iterators
+  // ---------------------------------------------------------------------
+
+  template <typename T>
+  auto ndarray<T>::_raw_ptr() noexcept -> T*
+  {
+    return data_ ? data_->data() + offset : nullptr;
+  }
+
+  template <typename T>
+  auto ndarray<T>::_raw_ptr() const noexcept -> const T*
+  {
+    return data_ ? data_->data() + offset : nullptr;
+  }
+
+  template <typename T>
+  auto ndarray<T>::begin() -> iterator
+  {
+    return iterator(_raw_ptr(), _shape_u(), strides, _numel() == 0);
+  }
+
+  template <typename T>
+  auto ndarray<T>::end() -> iterator
+  {
+    return iterator(_raw_ptr(), _shape_u(), strides, true);
+  }
+
+  template <typename T>
+  auto ndarray<T>::begin() const -> const_iterator
+  {
+    return const_iterator(_raw_ptr(), _shape_u(), strides, _numel() == 0);
+  }
+
+  template <typename T>
+  auto ndarray<T>::end() const -> const_iterator
+  {
+    return const_iterator(_raw_ptr(), _shape_u(), strides, true);
+  }
+
+  // ---------------------------------------------------------------------
+  // Element access
+  // ---------------------------------------------------------------------
+
+  template <typename T>
+  auto ndarray<T>::operator[](std::size_t index) -> Proxy<T>
+  {
+    detail::IndexStack<> idx;
+    idx.push_back(index);
+    return Proxy<T>(*this, idx);
+  }
+
+  template <typename T>
+  auto ndarray<T>::operator[](std::size_t index) const -> ConstProxy<T>
+  {
+    detail::IndexStack<> idx;
+    idx.push_back(index);
+    return ConstProxy<T>(*this, idx);
+  }
+
+  template <typename T>
+  template <std::size_t N>
+  auto ndarray<T>::get(const std::array<std::size_t, N>& idx) -> reference
+  {
+    if (N != shape.size())
+    {
+      throw std::invalid_argument("index dimensionality does not match array dimensions");
+    }
+    std::size_t flat = offset;
+    for (std::size_t i = 0; i < N; ++i)
+    {
+      if (idx[i] >= static_cast<std::size_t>(shape[i]))
+      {
+        throw std::out_of_range("index out of bounds");
+      }
+      flat += idx[i] * strides[i];
+    }
+    return (*data_)[flat];
+  }
+
+  template <typename T>
+  template <std::size_t N>
+  auto ndarray<T>::get(const std::array<std::size_t, N>& idx) const -> const T&
+  {
+    if (N != shape.size())
+    {
+      throw std::invalid_argument("index dimensionality does not match array dimensions");
+    }
+    std::size_t flat = offset;
+    for (std::size_t i = 0; i < N; ++i)
+    {
+      if (idx[i] >= static_cast<std::size_t>(shape[i]))
+      {
+        throw std::out_of_range("index out of bounds");
+      }
+      flat += idx[i] * strides[i];
+    }
+    return (*data_)[flat];
+  }
+
+  template <typename T>
+  template <typename Container>
+  auto ndarray<T>::get(const Container& idx) const -> T
+  {
+    if (idx.size() != shape.size())
+    {
+      throw std::invalid_argument("index dimensionality does not match array dimensions");
+    }
+    std::size_t flat = offset;
+    for (std::size_t i = 0; i < idx.size(); ++i)
+    {
+      if (idx[i] >= static_cast<std::size_t>(shape[i]))
+      {
+        throw std::out_of_range("index out of bounds");
+      }
+      flat += idx[i] * strides[i];
+    }
+    return (*data_)[flat];
+  }
+
+  template <typename T>
+  template <typename Container>
+  void ndarray<T>::set(const Container& idx, const T& value)
+  {
+    if (idx.size() != shape.size())
+    {
+      throw std::invalid_argument("index dimensionality does not match array dimensions");
+    }
+    std::size_t flat = offset;
+    for (std::size_t i = 0; i < idx.size(); ++i)
+    {
+      if (idx[i] >= static_cast<std::size_t>(shape[i]))
+      {
+        throw std::out_of_range("index out of bounds");
+      }
+      flat += idx[i] * strides[i];
+    }
+    (*data_)[flat] = value;
+  }
+
+  template <typename T>
+  auto ndarray<T>::at(std::size_t i) -> reference
+  {
+    if (shape.size() != 1)
+    {
+      throw std::invalid_argument("at() requires a 1D array");
+    }
+    if (i >= static_cast<std::size_t>(shape[0]))
+    {
       throw std::out_of_range("index out of bounds");
     }
-    flat += idx[i] * strides[i];
+    return (*data_)[offset + i * strides[0]];
   }
-  return (*data_)[flat];
-}
 
-template <typename T>
-template <std::size_t N>
-auto ndarray<T>::get(const std::array<std::size_t, N> &idx) const -> const T & {
-  if (N != shape.size()) {
-    throw std::invalid_argument(
-        "index dimensionality does not match array dimensions");
-  }
-  std::size_t flat = offset;
-  for (std::size_t i = 0; i < N; ++i) {
-    if (idx[i] >= static_cast<std::size_t>(shape[i])) {
+  template <typename T>
+  auto ndarray<T>::at(std::size_t i) const -> const T&
+  {
+    if (shape.size() != 1)
+    {
+      throw std::invalid_argument("at() requires a 1D array");
+    }
+    if (i >= static_cast<std::size_t>(shape[0]))
+    {
       throw std::out_of_range("index out of bounds");
     }
-    flat += idx[i] * strides[i];
+    return (*data_)[offset + i * strides[0]];
   }
-  return (*data_)[flat];
-}
 
-template <typename T>
-template <typename Container>
-auto ndarray<T>::get(const Container &idx) const -> T {
-  if (idx.size() != shape.size()) {
-    throw std::invalid_argument(
-        "index dimensionality does not match array dimensions");
+  template <typename T>
+  T ndarray<T>::item() const
+  {
+    if (_numel() != 1)
+    {
+      throw std::invalid_argument("can only convert an array of size 1 to a scalar");
+    }
+    if (!data_)
+    {
+      return T{};
+    }
+    return (*data_)[offset];
   }
-  std::size_t flat = offset;
-  for (std::size_t i = 0; i < idx.size(); ++i) {
-    if (idx[i] >= static_cast<std::size_t>(shape[i])) {
+
+  template <typename T>
+  auto ndarray<T>::operator()(std::size_t i) -> reference
+  {
+    if (shape.size() != 1)
+    {
+      throw std::invalid_argument("operator()(i) requires a 1D array");
+    }
+    return (*data_)[offset + i * strides[0]];
+  }
+
+  template <typename T>
+  auto ndarray<T>::operator()(std::size_t i) const -> const T&
+  {
+    if (shape.size() != 1)
+    {
+      throw std::invalid_argument("operator()(i) requires a 1D array");
+    }
+    return (*data_)[offset + i * strides[0]];
+  }
+
+  template <typename T>
+  auto ndarray<T>::operator()(std::size_t i, std::size_t j) -> reference
+  {
+    if (shape.size() != 2)
+    {
+      throw std::invalid_argument("operator()(i, j) requires a 2D array");
+    }
+    return (*data_)[offset + i * strides[0] + j * strides[1]];
+  }
+
+  template <typename T>
+  auto ndarray<T>::operator()(std::size_t i, std::size_t j) const -> const T&
+  {
+    if (shape.size() != 2)
+    {
+      throw std::invalid_argument("operator()(i, j) requires a 2D array");
+    }
+    return (*data_)[offset + i * strides[0] + j * strides[1]];
+  }
+
+  template <typename T>
+  auto ndarray<T>::at(std::size_t i, std::size_t j) -> reference
+  {
+    if (shape.size() != 2)
+    {
+      throw std::invalid_argument("at(i, j) requires a 2D array");
+    }
+    if (i >= static_cast<std::size_t>(shape[0])
+        || j >= static_cast<std::size_t>(shape[1]))
+    {
       throw std::out_of_range("index out of bounds");
     }
-    flat += idx[i] * strides[i];
+    return (*data_)[offset + i * strides[0] + j * strides[1]];
   }
-  return (*data_)[flat];
-}
 
-template <typename T>
-template <typename Container>
-void ndarray<T>::set(const Container &idx, const T &value) {
-  if (idx.size() != shape.size()) {
-    throw std::invalid_argument(
-        "index dimensionality does not match array dimensions");
-  }
-  std::size_t flat = offset;
-  for (std::size_t i = 0; i < idx.size(); ++i) {
-    if (idx[i] >= static_cast<std::size_t>(shape[i])) {
+  template <typename T>
+  auto ndarray<T>::at(std::size_t i, std::size_t j) const -> const T&
+  {
+    if (shape.size() != 2)
+    {
+      throw std::invalid_argument("at(i, j) requires a 2D array");
+    }
+    if (i >= static_cast<std::size_t>(shape[0])
+        || j >= static_cast<std::size_t>(shape[1]))
+    {
       throw std::out_of_range("index out of bounds");
     }
-    flat += idx[i] * strides[i];
-  }
-  (*data_)[flat] = value;
-}
-
-template <typename T> auto ndarray<T>::at(std::size_t i) -> reference {
-  if (shape.size() != 1) {
-    throw std::invalid_argument("at() requires a 1D array");
-  }
-  if (i >= static_cast<std::size_t>(shape[0])) {
-    throw std::out_of_range("index out of bounds");
-  }
-  return (*data_)[offset + i * strides[0]];
-}
-
-template <typename T> auto ndarray<T>::at(std::size_t i) const -> const T & {
-  if (shape.size() != 1) {
-    throw std::invalid_argument("at() requires a 1D array");
-  }
-  if (i >= static_cast<std::size_t>(shape[0])) {
-    throw std::out_of_range("index out of bounds");
-  }
-  return (*data_)[offset + i * strides[0]];
-}
-
-template <typename T> T ndarray<T>::item() const {
-  if (_numel() != 1) {
-    throw std::invalid_argument(
-        "can only convert an array of size 1 to a scalar");
-  }
-  if (!data_) {
-    return T{};
-  }
-  return (*data_)[offset];
-}
-
-template <typename T> auto ndarray<T>::operator()(std::size_t i) -> reference {
-  if (shape.size() != 1) {
-    throw std::invalid_argument("operator()(i) requires a 1D array");
-  }
-  return (*data_)[offset + i * strides[0]];
-}
-
-template <typename T>
-auto ndarray<T>::operator()(std::size_t i) const -> const T & {
-  if (shape.size() != 1) {
-    throw std::invalid_argument("operator()(i) requires a 1D array");
-  }
-  return (*data_)[offset + i * strides[0]];
-}
-
-template <typename T>
-auto ndarray<T>::operator()(std::size_t i, std::size_t j) -> reference {
-  if (shape.size() != 2) {
-    throw std::invalid_argument("operator()(i, j) requires a 2D array");
-  }
-  return (*data_)[offset + i * strides[0] + j * strides[1]];
-}
-
-template <typename T>
-auto ndarray<T>::operator()(std::size_t i, std::size_t j) const -> const T & {
-  if (shape.size() != 2) {
-    throw std::invalid_argument("operator()(i, j) requires a 2D array");
-  }
-  return (*data_)[offset + i * strides[0] + j * strides[1]];
-}
-
-template <typename T>
-auto ndarray<T>::at(std::size_t i, std::size_t j) -> reference {
-  if (shape.size() != 2) {
-    throw std::invalid_argument("at(i, j) requires a 2D array");
-  }
-  if (i >= static_cast<std::size_t>(shape[0]) ||
-      j >= static_cast<std::size_t>(shape[1])) {
-    throw std::out_of_range("index out of bounds");
-  }
-  return (*data_)[offset + i * strides[0] + j * strides[1]];
-}
-
-template <typename T>
-auto ndarray<T>::at(std::size_t i, std::size_t j) const -> const T & {
-  if (shape.size() != 2) {
-    throw std::invalid_argument("at(i, j) requires a 2D array");
-  }
-  if (i >= static_cast<std::size_t>(shape[0]) ||
-      j >= static_cast<std::size_t>(shape[1])) {
-    throw std::out_of_range("index out of bounds");
-  }
-  return (*data_)[offset + i * strides[0] + j * strides[1]];
-}
-
-// ---------------------------------------------------------------------
-// Internals
-// ---------------------------------------------------------------------
-
-template <typename T>
-void ndarray<T>::_validate_shape(const std::vector<int> &s) {
-  for (int d : s) {
-    if (d < 0) {
-      throw std::invalid_argument(
-          "ndarray: shape dimensions must be non-negative (got " +
-          std::to_string(d) + ")");
-    }
-  }
-}
-
-template <typename T>
-auto ndarray<T>::_checked_numel(const std::vector<int> &s) -> std::size_t {
-  _validate_shape(s);
-  std::size_t n = 1;
-  for (int d : s) {
-    n *= static_cast<std::size_t>(d);
-  }
-  return n;
-}
-
-template <typename T> auto ndarray<T>::_numel() const noexcept -> std::size_t {
-  std::size_t n = 1;
-  for (int d : shape) {
-    n *= static_cast<std::size_t>(d);
-  }
-  return n;
-}
-
-template <typename T>
-auto ndarray<T>::_c_strides(const std::vector<int> &s) noexcept
-    -> std::vector<std::size_t> {
-  std::vector<std::size_t> st(s.size(), 1);
-  std::size_t stride = 1;
-  for (std::size_t i = s.size(); i-- > 0;) {
-    st[i] = stride;
-    stride *= static_cast<std::size_t>(s[i]);
-  }
-  return st;
-}
-
-template <typename T>
-auto ndarray<T>::_flat(const std::vector<std::size_t> &idx) const noexcept
-    -> std::size_t {
-  return detail::flat_index(idx, strides, offset);
-}
-
-template <typename T>
-auto ndarray<T>::_flat_logical(std::size_t i) const noexcept -> std::size_t {
-  if (shape.empty() || i == 0) {
-    return offset;
-  }
-  std::vector<std::size_t> idx = _shape_u();
-  std::size_t rem = i;
-  for (std::size_t d = shape.size(); d-- > 0;) {
-    idx[d] = rem % static_cast<std::size_t>(shape[d]);
-    rem /= static_cast<std::size_t>(shape[d]);
-  }
-  return _flat(idx);
-}
-
-template <typename T>
-auto ndarray<T>::_shape_u() const noexcept -> std::vector<std::size_t> {
-  std::vector<std::size_t> u(shape.size());
-  for (std::size_t i = 0; i < shape.size(); ++i) {
-    u[i] = static_cast<std::size_t>(shape[i]);
-  }
-  return u;
-}
-
-template <typename T> auto ndarray<T>::_normalize_axis(int axis) const -> int {
-  const int nd = static_cast<int>(shape.size());
-  if (axis < 0) {
-    axis += nd;
-  }
-  if (axis < 0 || axis >= nd) {
-    throw np::AxisError("axis " + std::to_string(axis - (axis < 0 ? nd : 0)) +
-                        " is out of bounds for array of dimension " +
-                        std::to_string(nd));
-  }
-  return axis;
-}
-
-template <typename T>
-template <typename Fn>
-void ndarray<T>::_for_each_logical(Fn &&fn) const {
-  if (!data_) {
-    return;
-  }
-  if (is_contiguous()) {
-    for (const auto &v : *data_) {
-      fn(v);
-    }
-    return;
-  }
-  detail::Odometer od(shape);
-  while (!od.done()) {
-    fn((*data_)[_flat(od.idx())]);
-    od.advance();
-  }
-}
-
-template <typename T>
-template <typename Fn>
-void ndarray<T>::_for_each_indexed(Fn &&fn) const {
-  if (!data_) {
-    return;
-  }
-  detail::Odometer od(shape);
-  while (!od.done()) {
-    const auto &idx = od.idx();
-    fn(idx, (*data_)[_flat(idx)]);
-    od.advance();
-  }
-}
-
-template <typename T> void ndarray<T>::_finalize() {
-  _validate_shape(shape);
-  strides = _c_strides(shape);
-  if (!data_) {
-    data_ = std::make_shared<std::vector<T>>(_numel(), T{});
-  }
-  if (type == dtype::void_) {
-    type = dtype_of<T>;
-  }
-  order = matrix::Order::C;
-}
-
-// ---------------------------------------------------------------------
-// Reductions
-// ---------------------------------------------------------------------
-
-template <typename T>
-template <typename Acc, typename StepFn>
-auto ndarray<T>::_reduce_axis(int axis, bool keepdims, std::optional<Acc> seed,
-                              StepFn &&step) const -> ndarray<Acc> {
-  axis = _normalize_axis(axis);
-  const int nd = static_cast<int>(shape.size());
-
-  std::vector<int> out_shape = shape;
-  out_shape.erase(out_shape.begin() + axis);
-  if (keepdims) {
-    out_shape.insert(out_shape.begin() + axis, 1);
+    return (*data_)[offset + i * strides[0] + j * strides[1]];
   }
 
-  ndarray<Acc> out(out_shape);
-  if (seed.has_value()) {
-    std::fill(out.data().begin(), out.data().end(), *seed);
-  }
-  std::vector<std::uint8_t> first(out.size(), seed.has_value() ? 0u : 1u);
+  // ---------------------------------------------------------------------
+  // Internals
+  // ---------------------------------------------------------------------
 
-  std::vector<std::size_t> out_idx;
-  out_idx.reserve(nd - 1);
-  detail::Odometer od(shape);
-  while (!od.done()) {
-    const auto &idx = od.idx();
-    out_idx.clear();
-    for (int d = 0; d < nd; ++d) {
-      if (d != axis) {
-        out_idx.push_back(idx[d]);
-      } else if (keepdims) {
-        out_idx.push_back(0);
+  template <typename T>
+  void ndarray<T>::_validate_shape(const std::vector<int>& s)
+  {
+    for (int d : s)
+    {
+      if (d < 0)
+      {
+        throw std::invalid_argument(
+            "ndarray: shape dimensions must be non-negative (got " + std::to_string(d)
+            + ")");
       }
     }
-    const std::size_t of = detail::flat_index(out_idx, out.strides, 0);
-    const T value = (*data_)[_flat(idx)];
-    if (first[of]) {
-      out.data()[of] = static_cast<Acc>(value);
-      first[of] = 0;
-    } else {
-      step(out.data()[of], value);
+  }
+
+  template <typename T>
+  auto ndarray<T>::_checked_numel(const std::vector<int>& s) -> std::size_t
+  {
+    _validate_shape(s);
+    std::size_t n = 1;
+    for (int d : s)
+    {
+      n *= static_cast<std::size_t>(d);
     }
-    od.advance();
+    return n;
   }
-  return out;
-}
 
-template <typename T>
-auto ndarray<T>::sum() const
-    -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T> {
-  using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
-  Acc total{};
-  _for_each_logical([&](const T &v) { total += v; });
-  return total;
-}
-
-template <typename T>
-template <typename Acc>
-auto ndarray<T>::sum(int axis, bool keepdims) const -> ndarray<Acc> {
-  return _reduce_axis<Acc>(axis, keepdims, Acc(0),
-                           [](Acc &acc, const T &v) { acc += v; });
-}
-
-template <typename T>
-auto ndarray<T>::prod() const
-    -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T> {
-  using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
-  Acc total{1};
-  _for_each_logical([&](const T &v) { total *= v; });
-  return total;
-}
-
-template <typename T>
-template <typename Acc>
-auto ndarray<T>::prod(int axis, bool keepdims) const -> ndarray<Acc> {
-  return _reduce_axis<Acc>(axis, keepdims, Acc(1),
-                           [](Acc &acc, const T &v) { acc *= v; });
-}
-
-template <typename T> T ndarray<T>::min() const {
-  if (_numel() == 0) {
-    throw std::runtime_error("min() on empty array");
-  }
-  std::optional<T> best;
-  _for_each_logical([&](const T &v) {
-    if (!best.has_value() || v < *best) {
-      best = v;
+  template <typename T>
+  auto ndarray<T>::_numel() const noexcept -> std::size_t
+  {
+    std::size_t n = 1;
+    for (int d : shape)
+    {
+      n *= static_cast<std::size_t>(d);
     }
-  });
-  return *best;
-}
-
-template <typename T>
-auto ndarray<T>::min(int axis, bool keepdims) const -> ndarray<T> {
-  return _reduce_axis<T>(axis, keepdims, std::nullopt,
-                         [](T &acc, const T &v) { acc = std::min(acc, v); });
-}
-
-template <typename T> T ndarray<T>::max() const {
-  if (_numel() == 0) {
-    throw std::runtime_error("max() on empty array");
+    return n;
   }
-  std::optional<T> best;
-  _for_each_logical([&](const T &v) {
-    if (!best.has_value() || v > *best) {
-      best = v;
+
+  template <typename T>
+  auto ndarray<T>::_c_strides(const std::vector<int>& s) noexcept
+      -> std::vector<std::size_t>
+  {
+    std::vector<std::size_t> st(s.size(), 1);
+    std::size_t stride = 1;
+    for (std::size_t i = s.size(); i-- > 0;)
+    {
+      st[i] = stride;
+      stride *= static_cast<std::size_t>(s[i]);
     }
-  });
-  return *best;
-}
-
-template <typename T>
-auto ndarray<T>::max(int axis, bool keepdims) const -> ndarray<T> {
-  return _reduce_axis<T>(axis, keepdims, std::nullopt,
-                         [](T &acc, const T &v) { acc = std::max(acc, v); });
-}
-
-template <typename T> T ndarray<T>::ptp() const { return max() - min(); }
-
-template <typename T>
-auto ndarray<T>::ptp(int axis, bool keepdims) const -> ndarray<T> {
-  const ndarray<T> mx = max(axis, keepdims);
-  const ndarray<T> mn = min(axis, keepdims);
-  ndarray<T> out(mx.shape);
-  for (std::size_t i = 0; i < out.size(); ++i) {
-    out.data()[i] = mx.data()[i] - mn.data()[i];
+    return st;
   }
-  return out;
-}
 
-template <typename T>
-auto ndarray<T>::mean() const -> typename _mean_type<T>::type {
-  using MeanT = typename _mean_type<T>::type;
-  if (_numel() == 0) {
-    throw std::runtime_error("mean() on empty array");
+  template <typename T>
+  auto ndarray<T>::_flat(const std::vector<std::size_t>& idx) const noexcept
+      -> std::size_t
+  {
+    return detail::flat_index(idx, strides, offset);
   }
-  long double total = 0;
-  _for_each_logical([&](const T &v) { total += static_cast<long double>(v); });
-  return static_cast<MeanT>(total / static_cast<long double>(_numel()));
-}
 
-template <typename T>
-auto ndarray<T>::mean(int axis, bool keepdims) const
-    -> ndarray<typename _mean_type<T>::type> {
-  using MeanT = typename _mean_type<T>::type;
-  axis = _normalize_axis(axis);
-  const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
-  auto s = _reduce_axis<MeanT>(axis, keepdims, MeanT(0),
-                               [](MeanT &acc, const T &v) { acc += v; });
-  for (auto &v : s.data()) {
-    v /= static_cast<MeanT>(axis_len);
-  }
-  return s;
-}
-
-template <typename T>
-template <typename MeanT>
-auto ndarray<T>::_var_axis(int axis, bool keepdims) const -> ndarray<MeanT> {
-  axis = _normalize_axis(axis);
-  const int nd = static_cast<int>(shape.size());
-
-  std::vector<int> out_shape = shape;
-  out_shape.erase(out_shape.begin() + axis);
-  if (keepdims) {
-    out_shape.insert(out_shape.begin() + axis, 1);
-  }
-  ndarray<MeanT> out(out_shape);
-  const std::size_t n_out = out.size();
-  std::vector<long double> m(n_out, 0.0L), m2(n_out, 0.0L);
-  std::vector<std::size_t> count(n_out, 0);
-
-  std::vector<std::size_t> out_idx;
-  out_idx.reserve(nd - 1);
-  detail::Odometer od(shape);
-  while (!od.done()) {
-    const auto &idx = od.idx();
-    out_idx.clear();
-    for (int d = 0; d < nd; ++d) {
-      if (d != axis) {
-        out_idx.push_back(idx[d]);
-      } else if (keepdims) {
-        out_idx.push_back(0);
-      }
+  template <typename T>
+  auto ndarray<T>::_flat_logical(std::size_t i) const noexcept -> std::size_t
+  {
+    if (shape.empty() || i == 0)
+    {
+      return offset;
     }
-    const std::size_t of = detail::flat_index(out_idx, out.strides, 0);
-    const long double v = static_cast<long double>((*data_)[_flat(idx)]);
-    ++count[of];
-    const long double delta = v - m[of];
-    m[of] += delta / static_cast<long double>(count[of]);
-    m2[of] += delta * (v - m[of]);
-    od.advance();
-  }
-  for (std::size_t i = 0; i < n_out; ++i) {
-    const long double denom =
-        count[i] == 0 ? 1.0L : static_cast<long double>(count[i]);
-    out.data()[i] = static_cast<MeanT>(m2[i] / denom);
-  }
-  return out;
-}
-
-template <typename T>
-auto ndarray<T>::var() const -> typename _mean_type<T>::type {
-  using MeanT = typename _mean_type<T>::type;
-  if (_numel() == 0) {
-    throw std::runtime_error("var() on empty array");
-  }
-  long double m = 0.0L, m2 = 0.0L;
-  std::size_t count = 0;
-  _for_each_logical([&](const T &v) {
-    ++count;
-    const long double x = static_cast<long double>(v);
-    const long double delta = x - m;
-    m += delta / static_cast<long double>(count);
-    m2 += delta * (x - m);
-  });
-  return static_cast<MeanT>(m2 / static_cast<long double>(count));
-}
-
-template <typename T>
-auto ndarray<T>::var(int axis, bool keepdims) const
-    -> ndarray<typename _mean_type<T>::type> {
-  return _var_axis<typename _mean_type<T>::type>(axis, keepdims);
-}
-
-template <typename T>
-auto ndarray<T>::std() const -> typename _mean_type<T>::type {
-  return static_cast<typename _mean_type<T>::type>(std::sqrt(var()));
-}
-
-template <typename T>
-auto ndarray<T>::std(int axis, bool keepdims) const
-    -> ndarray<typename _mean_type<T>::type> {
-  auto v = _var_axis<typename _mean_type<T>::type>(axis, keepdims);
-  for (auto &x : v.data()) {
-    x = static_cast<typename _mean_type<T>::type>(std::sqrt(x));
-  }
-  return v;
-}
-
-template <typename T> bool ndarray<T>::all() const {
-  bool result = true;
-  _for_each_logical([&](const T &v) { result = result && (v != T{}); });
-  return result;
-}
-
-template <typename T>
-auto ndarray<T>::all(int axis, bool keepdims) const -> ndarray<bool> {
-  return _reduce_axis<bool>(
-      axis, keepdims, std::optional<bool>(true),
-      [](bool &acc, const T &v) { acc = acc && (v != T{}); });
-}
-
-template <typename T> bool ndarray<T>::any() const {
-  bool result = false;
-  _for_each_logical([&](const T &v) { result = result || (v != T{}); });
-  return result;
-}
-
-template <typename T>
-auto ndarray<T>::any(int axis, bool keepdims) const -> ndarray<bool> {
-  return _reduce_axis<bool>(
-      axis, keepdims, std::optional<bool>(false),
-      [](bool &acc, const T &v) { acc = acc || (v != T{}); });
-}
-
-template <typename T>
-template <typename Cmp>
-auto ndarray<T>::_arg_reduce_axis(int axis, bool keepdims, Cmp &&cmp) const
-    -> ndarray<std::size_t> {
-  axis = _normalize_axis(axis);
-  const int nd = static_cast<int>(shape.size());
-
-  std::vector<int> out_shape = shape;
-  out_shape.erase(out_shape.begin() + axis);
-  if (keepdims) {
-    out_shape.insert(out_shape.begin() + axis, 1);
-  }
-  ndarray<std::size_t> out(out_shape);
-  std::vector<std::uint8_t> first(out.size(), 1u);
-  std::vector<T> best_val(out.size(), T{});
-  std::vector<std::size_t> best_pos(out.size(), 0);
-
-  std::vector<std::size_t> out_idx;
-  out_idx.reserve(nd - 1);
-  detail::Odometer od(shape);
-  while (!od.done()) {
-    const auto &idx = od.idx();
-    out_idx.clear();
-    for (int d = 0; d < nd; ++d) {
-      if (d != axis) {
-        out_idx.push_back(idx[d]);
-      } else if (keepdims) {
-        out_idx.push_back(0);
-      }
-    }
-    const std::size_t of = detail::flat_index(out_idx, out.strides, 0);
-    const T value = (*data_)[_flat(idx)];
-    if (first[of] || cmp(value, best_val[of])) {
-      first[of] = 0;
-      best_val[of] = value;
-      best_pos[of] = idx[axis];
-    }
-    od.advance();
-  }
-  for (std::size_t i = 0; i < out.size(); ++i) {
-    out.data()[i] = best_pos[i];
-  }
-  return out;
-}
-
-template <typename T> std::size_t ndarray<T>::argmax() const {
-  if (_numel() == 0) {
-    throw std::runtime_error("argmax() on empty array");
-  }
-  std::size_t best = 0;
-  std::size_t pos = 0;
-  std::optional<T> best_val;
-  detail::Odometer od(shape);
-  while (!od.done()) {
-    const T v = (*data_)[_flat(od.idx())];
-    if (!best_val.has_value() || v > *best_val) {
-      best_val = v;
-      best = pos;
-    }
-    ++pos;
-    od.advance();
-  }
-  return best;
-}
-
-template <typename T>
-auto ndarray<T>::argmax(int axis, bool keepdims) const -> ndarray<std::size_t> {
-  return _arg_reduce_axis(axis, keepdims,
-                          [](const T &v, const T &b) { return v > b; });
-}
-
-template <typename T> std::size_t ndarray<T>::argmin() const {
-  if (_numel() == 0) {
-    throw std::runtime_error("argmin() on empty array");
-  }
-  std::size_t best = 0;
-  std::size_t pos = 0;
-  std::optional<T> best_val;
-  detail::Odometer od(shape);
-  while (!od.done()) {
-    const T v = (*data_)[_flat(od.idx())];
-    if (!best_val.has_value() || v < *best_val) {
-      best_val = v;
-      best = pos;
-    }
-    ++pos;
-    od.advance();
-  }
-  return best;
-}
-
-template <typename T>
-auto ndarray<T>::argmin(int axis, bool keepdims) const -> ndarray<std::size_t> {
-  return _arg_reduce_axis(axis, keepdims,
-                          [](const T &v, const T &b) { return v < b; });
-}
-
-template <typename T>
-template <typename Acc, typename Fn>
-auto ndarray<T>::_cum_axis(int axis, Fn &&fn) const -> ndarray<Acc> {
-  axis = _normalize_axis(axis);
-  const int nd = static_cast<int>(shape.size());
-  const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
-
-  ndarray<Acc> out(shape);
-  std::vector<int> reduced_shape = shape;
-  reduced_shape.erase(reduced_shape.begin() + axis);
-  const std::vector<std::size_t> red_strides = _c_strides(reduced_shape);
-  const std::size_t n_slots = _numel() / axis_len;
-  std::vector<Acc> acc(n_slots, Acc{});
-
-  std::vector<std::size_t> slot;
-  slot.reserve(nd - 1);
-  std::vector<std::size_t> out_idx;
-  out_idx.reserve(nd);
-  detail::Odometer od(shape);
-  while (!od.done()) {
-    const auto &idx = od.idx();
-    out_idx = idx;
-    slot.clear();
-    for (int d = 0; d < nd; ++d) {
-      if (d != axis) {
-        slot.push_back(idx[d]);
-      }
-    }
-    const std::size_t slot_of = detail::flat_index(slot, red_strides, 0);
-    acc[slot_of] = fn(acc[slot_of], (*data_)[_flat(idx)]);
-    out.data()[detail::flat_index(out_idx, out.strides, 0)] = acc[slot_of];
-    od.advance();
-  }
-  return out;
-}
-
-template <typename T>
-auto ndarray<T>::cumsum() const
-    -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>> {
-  using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
-  ndarray<Acc> out(std::vector<int>{static_cast<int>(_numel())});
-  Acc running{};
-  std::size_t i = 0;
-  _for_each_logical([&](const T &v) {
-    running += v;
-    out.data()[i++] = running;
-  });
-  return out;
-}
-
-template <typename T>
-auto ndarray<T>::cumsum(int axis) const
-    -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>> {
-  using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
-  return _cum_axis<Acc>(axis, [](Acc &acc, const T &v) { return acc + v; });
-}
-
-template <typename T>
-auto ndarray<T>::cumprod() const
-    -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>> {
-  using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
-  ndarray<Acc> out(std::vector<int>{static_cast<int>(_numel())});
-  Acc running{1};
-  std::size_t i = 0;
-  _for_each_logical([&](const T &v) {
-    running *= v;
-    out.data()[i++] = running;
-  });
-  return out;
-}
-
-template <typename T>
-auto ndarray<T>::cumprod(int axis) const
-    -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>> {
-  using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
-  return _cum_axis<Acc>(axis, [](Acc &acc, const T &v) { return acc * v; });
-}
-
-// ---------------------------------------------------------------------
-// Sorting / searching
-// ---------------------------------------------------------------------
-
-template <typename T> void ndarray<T>::sort(int axis) {
-  axis = _normalize_axis(axis);
-  const int nd = static_cast<int>(shape.size());
-  const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
-
-  std::vector<int> slice_shape = shape;
-  slice_shape.erase(slice_shape.begin() + axis);
-
-  std::vector<std::size_t> full(nd);
-  detail::Odometer od(slice_shape);
-  while (!od.done()) {
-    const auto &s = od.idx();
-    std::vector<T> work(axis_len);
-    for (std::size_t p = 0; p < axis_len; ++p) {
-      std::size_t f = 0;
-      for (int d = 0; d < nd; ++d) {
-        full[d] = (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
-        f += full[d] * strides[d];
-      }
-      work[p] = (*data_)[offset + f];
-    }
-    std::stable_sort(work.begin(), work.end());
-    for (std::size_t p = 0; p < axis_len; ++p) {
-      std::size_t f = 0;
-      for (int d = 0; d < nd; ++d) {
-        full[d] = (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
-        f += full[d] * strides[d];
-      }
-      (*data_)[offset + f] = work[p];
-    }
-    od.advance();
-  }
-}
-
-template <typename T> auto ndarray<T>::sorted(int axis) const -> ndarray<T> {
-  ndarray<T> out = *this;
-  out.sort(axis);
-  return out;
-}
-
-template <typename T>
-auto ndarray<T>::argsort(int axis) const -> ndarray<std::size_t> {
-  axis = _normalize_axis(axis);
-  const int nd = static_cast<int>(shape.size());
-  const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
-
-  ndarray<std::size_t> out(shape);
-  std::vector<int> slice_shape = shape;
-  slice_shape.erase(slice_shape.begin() + axis);
-
-  std::vector<std::pair<std::size_t, T>> work;
-  work.reserve(axis_len);
-  detail::Odometer od(slice_shape);
-  while (!od.done()) {
-    const auto &s = od.idx();
-    work.clear();
-    for (std::size_t p = 0; p < axis_len; ++p) {
-      std::size_t f = 0;
-      for (int d = 0; d < nd; ++d) {
-        const std::size_t coord =
-            (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
-        f += coord * strides[d];
-      }
-      work.emplace_back(p, (*data_)[offset + f]);
-    }
-    std::stable_sort(
-        work.begin(), work.end(),
-        [](const auto &a, const auto &b) { return a.second < b.second; });
-    for (std::size_t p = 0; p < axis_len; ++p) {
-      std::size_t f = 0;
-      for (int d = 0; d < nd; ++d) {
-        const std::size_t coord =
-            (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
-        f += coord * out.strides[d];
-      }
-      out.data()[f] = work[p].first;
-    }
-    od.advance();
-  }
-  return out;
-}
-
-template <typename T>
-auto ndarray<T>::argpartition(std::size_t kth, int axis) const
-    -> ndarray<std::size_t> {
-  axis = _normalize_axis(axis);
-  const int nd = static_cast<int>(shape.size());
-  const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
-  if (kth >= axis_len) {
-    throw std::out_of_range("kth out of bounds");
-  }
-
-  ndarray<std::size_t> out(shape);
-  std::vector<int> slice_shape = shape;
-  slice_shape.erase(slice_shape.begin() + axis);
-
-  std::vector<std::pair<std::size_t, T>> work;
-  work.reserve(axis_len);
-  detail::Odometer od(slice_shape);
-  while (!od.done()) {
-    const auto &s = od.idx();
-    work.clear();
-    for (std::size_t p = 0; p < axis_len; ++p) {
-      std::size_t f = 0;
-      for (int d = 0; d < nd; ++d) {
-        const std::size_t coord =
-            (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
-        f += coord * strides[d];
-      }
-      work.emplace_back(p, (*data_)[offset + f]);
-    }
-    std::nth_element(
-        work.begin(), work.begin() + kth, work.end(),
-        [](const auto &a, const auto &b) { return a.second < b.second; });
-    for (std::size_t p = 0; p < axis_len; ++p) {
-      std::size_t f = 0;
-      for (int d = 0; d < nd; ++d) {
-        const std::size_t coord =
-            (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
-        f += coord * out.strides[d];
-      }
-      out.data()[f] = work[p].first;
-    }
-    od.advance();
-  }
-  return out;
-}
-
-template <typename T>
-std::size_t ndarray<T>::searchsorted(const T &value, bool side_right) const {
-  if (shape.size() != 1) {
-    throw std::invalid_argument("searchsorted requires a 1D array");
-  }
-  const auto first = begin();
-  const auto last = end();
-  const auto it = side_right ? std::upper_bound(first, last, value)
-                             : std::lower_bound(first, last, value);
-  return static_cast<std::size_t>(std::distance(first, it));
-}
-
-template <typename T>
-auto ndarray<T>::searchsorted(const ndarray<int> &values) const
-    -> ndarray<std::size_t> {
-  if (shape.size() != 1) {
-    throw std::invalid_argument("searchsorted requires a 1D array");
-  }
-  ndarray<std::size_t> out(std::vector<int>{static_cast<int>(values.size())});
-  for (std::size_t i = 0; i < values.size(); ++i) {
-    out.data()[i] = searchsorted(values.data()[values._flat_logical(i)]);
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------------
-// Shape manipulation
-// ---------------------------------------------------------------------
-
-template <typename T>
-auto ndarray<T>::reshape(const std::vector<int> &new_shape) const -> ndarray {
-  std::vector<int> resolved = new_shape;
-  int neg_count = 0;
-  for (int d : resolved) {
-    if (d == -1) {
-      ++neg_count;
-    } else if (d < 0) {
-      throw std::invalid_argument(
-          "reshape: shape dimensions must be non-negative (except a "
-          "single -1), got " +
-          std::to_string(d));
-    }
-  }
-  if (neg_count > 1) {
-    throw std::invalid_argument("at most one dimension may be -1");
-  }
-  if (neg_count == 1) {
-    std::size_t known = 1;
-    int neg_at = 0;
-    for (std::size_t i = 0; i < resolved.size(); ++i) {
-      if (resolved[i] == -1) {
-        neg_at = static_cast<int>(i);
-      } else {
-        known *= static_cast<std::size_t>(resolved[i]);
-      }
-    }
-    if (known == 0 || _numel() % known != 0) {
-      throw std::invalid_argument("cannot infer -1 dimension");
-    }
-    resolved[neg_at] = static_cast<int>(_numel() / known);
-  }
-  std::size_t total = 1;
-  for (int d : resolved) {
-    total *= static_cast<std::size_t>(d);
-  }
-  if (total != _numel()) {
-    throw std::invalid_argument(
-        "cannot reshape array of size " + std::to_string(_numel()) +
-        " into shape with total size " + std::to_string(total));
-  }
-  if (is_contiguous()) {
-    // View sharing storage
-    return ndarray(data_, resolved, _c_strides(resolved), type, order, offset);
-  }
-  // Copy path
-  ndarray out(resolved, type);
-  std::copy(begin(), end(), out.begin());
-  return out;
-}
-
-template <typename T> auto ndarray<T>::transpose() const -> ndarray {
-  if (shape.empty()) {
-    return *this;
-  }
-  std::vector<int> p(shape.size());
-  std::vector<std::size_t> s(shape.size());
-  for (std::size_t i = 0; i < shape.size(); ++i) {
-    p[i] = shape[shape.size() - 1 - i];
-    s[i] = strides[strides.size() - 1 - i];
-  }
-  matrix::Order o =
-      (order == matrix::Order::C) ? matrix::Order::F : matrix::Order::C;
-  return ndarray(data_, std::move(p), std::move(s), type, o, offset);
-}
-
-template <typename T>
-auto ndarray<T>::transpose(const std::vector<int> &perm) const -> ndarray {
-  if (perm.size() != shape.size()) {
-    throw std::invalid_argument("permutation length must equal ndim");
-  }
-  std::vector<int> p(perm.size());
-  std::vector<std::size_t> s(perm.size());
-  std::vector<std::uint8_t> seen(perm.size(), 0);
-  for (std::size_t i = 0; i < perm.size(); ++i) {
-    int a = perm[i];
-    if (a < 0) {
-      a += static_cast<int>(perm.size());
-    }
-    if (a < 0 || a >= static_cast<int>(perm.size()) || seen[a]) {
-      throw std::invalid_argument("invalid permutation");
-    }
-    seen[a] = 1;
-    p[i] = shape[a];
-    s[i] = strides[a];
-  }
-  return ndarray(data_, std::move(p), std::move(s), type, order, offset);
-}
-
-template <typename T>
-auto ndarray<T>::swapaxes(int axis1, int axis2) const -> ndarray {
-  axis1 = _normalize_axis(axis1);
-  axis2 = _normalize_axis(axis2);
-  std::vector<int> p = shape;
-  std::vector<std::size_t> s = strides;
-  std::swap(p[axis1], p[axis2]);
-  std::swap(s[axis1], s[axis2]);
-  return ndarray(data_, std::move(p), std::move(s), type, order, offset);
-}
-
-template <typename T> auto ndarray<T>::squeeze() const -> ndarray {
-  std::vector<int> p;
-  std::vector<std::size_t> s;
-  p.reserve(shape.size());
-  s.reserve(shape.size());
-  for (std::size_t i = 0; i < shape.size(); ++i) {
-    if (shape[i] != 1) {
-      p.push_back(shape[i]);
-      s.push_back(strides[i]);
-    }
-  }
-  if (p == shape) {
-    return *this;
-  }
-  return ndarray(data_, std::move(p), std::move(s), type, order, offset);
-}
-
-template <typename T> auto ndarray<T>::squeeze(int axis) const -> ndarray {
-  axis = _normalize_axis(axis);
-  if (shape[axis] != 1) {
-    throw std::invalid_argument(
-        "cannot squeeze a dimension that is not of size 1");
-  }
-  std::vector<int> p = shape;
-  std::vector<std::size_t> s = strides;
-  p.erase(p.begin() + axis);
-  s.erase(s.begin() + axis);
-  return ndarray(data_, std::move(p), std::move(s), type, order, offset);
-}
-
-template <typename T> auto ndarray<T>::ravel() const -> ndarray {
-  if (is_contiguous()) {
-    return ndarray(data_, {static_cast<int>(_numel())}, {std::size_t{1}}, type,
-                   order, offset);
-  }
-  return flatten();
-}
-
-template <typename T> auto ndarray<T>::flatten() const -> ndarray {
-  ndarray out({static_cast<int>(_numel())}, type);
-  std::copy(begin(), end(), out.begin());
-  return out;
-}
-
-template <typename T>
-void ndarray<T>::resize(const std::vector<int> &new_shape) {
-  std::size_t total = 1;
-  for (int d : new_shape) {
-    total *= static_cast<std::size_t>(d);
-  }
-  std::vector<T> flat;
-  flat.reserve(total);
-  _for_each_logical([&](const T &v) {
-    if (flat.size() < total) {
-      flat.push_back(v);
-    }
-  });
-  flat.resize(total, T{});
-  shape = new_shape;
-  strides = _c_strides(new_shape);
-  offset = 0;
-  data_ = std::make_shared<std::vector<T>>(std::move(flat));
-  type = type;
-}
-
-// ---------------------------------------------------------------------
-// Manipulation
-// ---------------------------------------------------------------------
-
-template <typename T> void ndarray<T>::fill(const T &value) {
-  if (!data_) {
-    data_ = std::make_shared<std::vector<T>>(_numel(), value);
-    return;
-  }
-  if (is_contiguous()) {
-    std::fill(data_->begin(), data_->end(), value);
-    return;
-  }
-  _for_each_indexed([&](const std::vector<std::size_t> &idx, const T &) {
-    (*data_)[_flat(idx)] = value;
-  });
-}
-
-template <typename T> auto ndarray<T>::copy() const -> ndarray {
-  ndarray out(shape, type);
-  std::copy(begin(), end(), out.begin());
-  return out;
-}
-
-template <typename T> auto ndarray<T>::view() const -> ndarray {
-  return ndarray(data_, shape, strides, type, order, offset);
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::astype() const -> ndarray<U> {
-  ndarray<U> out(shape);
-  std::size_t i = 0;
-  _for_each_logical([&](const T &v) { out.data()[i++] = static_cast<U>(v); });
-  return out;
-}
-
-template <typename T>
-auto ndarray<T>::take(const std::vector<std::size_t> &indices, int axis) const
-    -> ndarray {
-  const int nd = static_cast<int>(shape.size());
-  axis = _normalize_axis(axis);
-  std::vector<int> out_shape = shape;
-  out_shape[axis] = static_cast<int>(indices.size());
-  ndarray out(out_shape, type);
-
-  const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
-  for (std::size_t k = 0; k < indices.size(); ++k) {
-    if (indices[k] >= axis_len) {
-      throw std::out_of_range("take index out of bounds");
-    }
-  }
-
-  std::vector<int> slice_shape = shape;
-  slice_shape.erase(slice_shape.begin() + axis);
-
-  detail::Odometer od(slice_shape);
-  while (!od.done()) {
-    const auto &s = od.idx();
-    for (std::size_t k = 0; k < indices.size(); ++k) {
-      std::size_t in_f = 0, out_f = 0;
-      for (int d = 0; d < nd; ++d) {
-        const std::size_t coord =
-            (d < axis) ? s[d] : (d == axis ? indices[k] : s[d - 1]);
-        in_f += coord * strides[d];
-        const std::size_t out_coord =
-            (d < axis) ? s[d] : (d == axis ? k : s[d - 1]);
-        out_f += out_coord * out.strides[d];
-      }
-      out.data()[out_f] = (*data_)[offset + in_f];
-    }
-    od.advance();
-  }
-  return out;
-}
-
-template <typename T>
-void ndarray<T>::put(const std::vector<std::size_t> &indices,
-                     const std::vector<T> &values, char mode) {
-  const std::size_t n = _numel();
-  for (std::size_t k = 0; k < indices.size(); ++k) {
-    std::size_t p = indices[k];
-    if (mode == 'w') {
-      p %= n;
-    } else if (mode == 'c') {
-      p = std::min(p, n - 1);
-    } else if (p >= n) {
-      throw std::out_of_range("put index out of bounds");
-    }
-    const T &v = values.empty() ? T{} : values[k % values.size()];
-    // logical flat index -> multi-index -> flat storage offset
     std::vector<std::size_t> idx = _shape_u();
-    std::size_t rem = p;
-    for (std::size_t d = shape.size(); d-- > 0;) {
+    std::size_t rem = i;
+    for (std::size_t d = shape.size(); d-- > 0;)
+    {
       idx[d] = rem % static_cast<std::size_t>(shape[d]);
       rem /= static_cast<std::size_t>(shape[d]);
     }
-    (*data_)[_flat(idx)] = v;
+    return _flat(idx);
   }
-}
 
-template <typename T>
-auto ndarray<T>::repeat(std::size_t repeats) const -> ndarray {
-  ndarray out({static_cast<int>(_numel() * repeats)}, type);
-  std::size_t o = 0;
-  _for_each_logical([&](const T &v) {
-    for (std::size_t r = 0; r < repeats; ++r) {
-      out.data()[o++] = v;
+  template <typename T>
+  auto ndarray<T>::_shape_u() const noexcept -> std::vector<std::size_t>
+  {
+    std::vector<std::size_t> u(shape.size());
+    for (std::size_t i = 0; i < shape.size(); ++i)
+    {
+      u[i] = static_cast<std::size_t>(shape[i]);
     }
-  });
-  return out;
-}
+    return u;
+  }
 
-template <typename T>
-auto ndarray<T>::repeat(std::size_t repeats, int axis) const -> ndarray {
-  axis = _normalize_axis(axis);
-  const int nd = static_cast<int>(shape.size());
-  std::vector<int> out_shape = shape;
-  out_shape[axis] =
-      static_cast<int>(static_cast<std::size_t>(shape[axis]) * repeats);
-  ndarray out(out_shape, type);
+  template <typename T>
+  auto ndarray<T>::_normalize_axis(int axis) const -> int
+  {
+    const int nd = static_cast<int>(shape.size());
+    if (axis < 0)
+    {
+      axis += nd;
+    }
+    if (axis < 0 || axis >= nd)
+    {
+      throw np::AxisError(
+          "axis " + std::to_string(axis - (axis < 0 ? nd : 0))
+          + " is out of bounds for array of dimension " + std::to_string(nd));
+    }
+    return axis;
+  }
 
-  detail::Odometer od(shape);
-  while (!od.done()) {
-    const auto &idx = od.idx();
-    for (std::size_t r = 0; r < repeats; ++r) {
-      std::size_t in_f = _flat(idx);
-      std::size_t out_f = 0;
-      for (int d = 0; d < nd; ++d) {
-        const std::size_t coord = (d == axis) ? idx[d] * repeats + r : idx[d];
-        out_f += coord * out.strides[d];
+  template <typename T>
+  template <typename Fn>
+  void ndarray<T>::_for_each_logical(Fn&& fn) const
+  {
+    if (!data_)
+    {
+      return;
+    }
+    if (is_contiguous())
+    {
+      for (const auto& v : *data_)
+      {
+        fn(v);
       }
-      out.data()[out_f] = (*data_)[in_f];
+      return;
     }
-    od.advance();
-  }
-  return out;
-}
-
-template <typename T>
-auto ndarray<T>::clip(const T &min_value, const T &max_value) const -> ndarray {
-  ndarray out(shape, type);
-  std::size_t i = 0;
-  _for_each_logical([&](const T &v) {
-    out.data()[i++] = std::clamp(v, min_value, max_value);
-  });
-  return out;
-}
-
-template <typename T> auto ndarray<T>::round(int decimals) const -> ndarray {
-  ndarray out(shape, type);
-  std::size_t i = 0;
-  _for_each_logical([&](const T &v) {
-    if constexpr (std::is_floating_point_v<T>) {
-      const T factor =
-          static_cast<T>(std::pow(10.0, static_cast<double>(decimals)));
-      out.data()[i++] = std::round(v * factor) / factor;
-    } else {
-      out.data()[i++] = v;
+    detail::Odometer od(shape);
+    while (!od.done())
+    {
+      fn((*data_)[_flat(od.idx())]);
+      od.advance();
     }
-  });
-  return out;
-}
-
-template <typename T> auto ndarray<T>::diagonal(int offset) const -> ndarray {
-  if (shape.size() < 2) {
-    throw np::AxisError("diagonal requires an array with ndim >= 2");
-  }
-  const std::size_t n0 = static_cast<std::size_t>(shape[0]);
-  const std::size_t n1 = static_cast<std::size_t>(shape[1]);
-
-  std::size_t len = 0;
-  if (offset >= 0) {
-    const std::size_t o = static_cast<std::size_t>(offset);
-    len = (n1 > o) ? std::min(n0, n1 - o) : 0;
-  } else {
-    const std::size_t o = static_cast<std::size_t>(-offset);
-    len = (n0 > o) ? std::min(n1, n0 - o) : 0;
   }
 
-  std::vector<int> out_shape;
-  out_shape.push_back(static_cast<int>(len));
-  out_shape.insert(out_shape.end(), shape.begin() + 2, shape.end());
-  ndarray out(out_shape, type);
-
-  detail::Odometer od(out_shape);
-  while (!od.done()) {
-    const auto &oi = od.idx();
-    std::vector<std::size_t> in_idx(shape.size());
-    in_idx[0] = oi[0];
-    in_idx[1] = oi[0] + static_cast<std::size_t>(offset);
-    for (std::size_t d = 2; d < shape.size(); ++d) {
-      in_idx[d] = oi[d - 1];
+  template <typename T>
+  template <typename Fn>
+  void ndarray<T>::_for_each_indexed(Fn&& fn) const
+  {
+    if (!data_)
+    {
+      return;
     }
-    out.data()[detail::flat_index(oi, out.strides, 0)] =
-        (*data_)[_flat(in_idx)];
-    od.advance();
+    detail::Odometer od(shape);
+    while (!od.done())
+    {
+      const auto& idx = od.idx();
+      fn(idx, (*data_)[_flat(idx)]);
+      od.advance();
+    }
   }
-  return out;
-}
 
-template <typename T> T ndarray<T>::trace(int offset) const {
-  if (shape.size() < 2) {
-    throw np::AxisError("trace requires an array with ndim >= 2");
+  template <typename T>
+  void ndarray<T>::_finalize()
+  {
+    _validate_shape(shape);
+    strides = _c_strides(shape);
+    if (!data_)
+    {
+      data_ = std::make_shared<std::vector<T>>(_numel(), T{});
+    }
+    if (type == dtype::void_)
+    {
+      type = dtype_of<T>;
+    }
+    order = matrix::Order::C;
   }
-  auto diag = diagonal(offset);
-  T total{};
-  for (const auto &v : diag) {
-    total += v;
-  }
-  return total;
-}
 
-template <typename T>
-auto ndarray<T>::nonzero() const -> std::vector<ndarray<std::size_t>> {
-  std::vector<ndarray<std::size_t>> result(shape.size());
-  std::vector<std::vector<std::size_t>> per_dim(shape.size());
-  _for_each_indexed([&](const std::vector<std::size_t> &idx, const T &v) {
-    if (v != T{}) {
-      for (std::size_t d = 0; d < idx.size(); ++d) {
-        per_dim[d].push_back(idx[d]);
+  // ---------------------------------------------------------------------
+  // Reductions
+  // ---------------------------------------------------------------------
+
+  template <typename T>
+  template <typename Acc, typename StepFn>
+  auto ndarray<T>::_reduce_axis(
+      int axis, bool keepdims, std::optional<Acc> seed, StepFn&& step) const
+      -> ndarray<Acc>
+  {
+    axis = _normalize_axis(axis);
+    const int nd = static_cast<int>(shape.size());
+
+    std::vector<int> out_shape = shape;
+    out_shape.erase(out_shape.begin() + axis);
+    if (keepdims)
+    {
+      out_shape.insert(out_shape.begin() + axis, 1);
+    }
+
+    ndarray<Acc> out(out_shape);
+    if (seed.has_value())
+    {
+      std::fill(out.data().begin(), out.data().end(), *seed);
+    }
+    std::vector<std::uint8_t> first(out.size(), seed.has_value() ? 0u : 1u);
+
+    std::vector<std::size_t> out_idx;
+    out_idx.reserve(nd - 1);
+    detail::Odometer od(shape);
+    while (!od.done())
+    {
+      const auto& idx = od.idx();
+      out_idx.clear();
+      for (int d = 0; d < nd; ++d)
+      {
+        if (d != axis)
+        {
+          out_idx.push_back(idx[d]);
+        }
+        else if (keepdims)
+        {
+          out_idx.push_back(0);
+        }
       }
-    }
-  });
-  for (std::size_t d = 0; d < result.size(); ++d) {
-    const int n_coords = static_cast<int>(per_dim[d].size());
-    result[d] = ndarray<std::size_t>::from_data(std::vector<int>{n_coords},
-                                                std::move(per_dim[d]));
-  }
-  return result;
-}
-
-template <typename T> auto ndarray<T>::conj() const -> ndarray {
-  ndarray out(shape, type);
-  std::size_t i = 0;
-  _for_each_logical([&](const T &v) {
-    if constexpr (detail::is_complex_v<T>) {
-      out.data()[i++] = std::conj(v);
-    } else {
-      out.data()[i++] = v;
-    }
-  });
-  return out;
-}
-
-template <typename T> void ndarray<T>::byteswap() {
-  if (!data_) {
-    return;
-  }
-  if (is_contiguous()) {
-    for (auto &v : *data_) {
-      char *p = reinterpret_cast<char *>(&v);
-      std::reverse(p, p + sizeof(T));
-    }
-    return;
-  }
-  _for_each_indexed([&](const std::vector<std::size_t> &idx, const T &) {
-    T &v = (*data_)[_flat(idx)];
-    char *p = reinterpret_cast<char *>(&v);
-    std::reverse(p, p + sizeof(T));
-  });
-}
-
-// ---------------------------------------------------------------------
-// Selection / manipulation
-// ---------------------------------------------------------------------
-
-template <typename T> auto ndarray<T>::abs() const -> ndarray {
-  ndarray out(shape, type);
-  std::size_t i = 0;
-  _for_each_logical([&](const T &v) { out.data()[i++] = std::abs(v); });
-  return out;
-}
-
-template <typename T> auto ndarray<T>::conjugate() const -> ndarray {
-  return conj();
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::choose(const std::vector<ndarray<U>> &choices, char mode) const
-    -> ndarray<U> {
-  if (choices.empty()) {
-    throw std::invalid_argument("choose requires at least one choice");
-  }
-  std::vector<int> bshape = shape;
-  for (const auto &c : choices) {
-    bshape = detail::broadcast_shapes(bshape, c.shape);
-  }
-  const std::size_t n = choices.size();
-  ndarray<U> out(bshape);
-  detail::Odometer od(bshape);
-  while (!od.done()) {
-    const auto &idx = od.idx();
-    const T a_v = (*data_)[detail::broadcast_offset(*this, bshape, idx)];
-    long long k = static_cast<long long>(a_v);
-    if (mode == 'w') {
-      k = ((k % static_cast<long long>(n)) + static_cast<long long>(n)) %
-          static_cast<long long>(n);
-    } else if (mode == 'c') {
-      k = std::clamp(k, 0LL, static_cast<long long>(n) - 1);
-    } else if (k < 0 || k >= static_cast<long long>(n)) {
-      throw std::out_of_range("choose index out of range");
-    }
-    const auto &ch = choices[static_cast<std::size_t>(k)];
-    out.data()[detail::flat_index(idx, out.strides, 0)] =
-        ch.data()[detail::broadcast_offset(ch, bshape, idx)];
-    od.advance();
-  }
-  return out;
-}
-
-template <typename T>
-auto ndarray<T>::compress(const ndarray<bool> &condition,
-                          std::optional<int> axis) const -> ndarray {
-  if (condition.ndim() != 1) {
-    throw std::invalid_argument("condition must be 1-D");
-  }
-  const std::size_t cond_len = static_cast<std::size_t>(condition.shape[0]);
-  if (!axis.has_value()) {
-    if (cond_len != _numel()) {
-      throw std::invalid_argument("condition length must match the array size");
-    }
-    const auto flat = ravel();
-    std::vector<T> picked;
-    picked.reserve(cond_len);
-    for (std::size_t i = 0; i < cond_len; ++i) {
-      if (condition.data()[condition._flat_logical(i)]) {
-        picked.push_back(flat.data()[flat._flat_logical(i)]);
+      const std::size_t of = detail::flat_index(out_idx, out.strides, 0);
+      const T value = (*data_)[_flat(idx)];
+      if (first[of])
+      {
+        out.data()[of] = static_cast<Acc>(value);
+        first[of] = 0;
       }
-    }
-    const std::vector<int> out_shp{static_cast<int>(picked.size())};
-    return ndarray::from_data(out_shp, std::move(picked));
-  }
-  const int ax = _normalize_axis(*axis);
-  const std::size_t axis_len = static_cast<std::size_t>(shape[ax]);
-  if (cond_len != axis_len) {
-    throw std::invalid_argument(
-        "condition length must match the array's axis length");
-  }
-  std::vector<std::size_t> keep;
-  keep.reserve(cond_len);
-  for (std::size_t i = 0; i < axis_len; ++i) {
-    if (condition.data()[condition._flat_logical(i)]) {
-      keep.push_back(i);
-    }
-  }
-  std::vector<int> out_shape = shape;
-  out_shape[ax] = static_cast<int>(keep.size());
-  ndarray out(out_shape, type);
-  std::vector<int> rest = shape;
-  rest.erase(rest.begin() + ax);
-  detail::Odometer od(rest);
-  const int nd = static_cast<int>(shape.size());
-  while (!od.done()) {
-    const auto &s = od.idx();
-    for (std::size_t k = 0; k < keep.size(); ++k) {
-      std::size_t in_f = offset, out_f = 0;
-      for (int d = 0; d < nd; ++d) {
-        const std::size_t ic = d == ax ? keep[k] : (d < ax ? s[d] : s[d - 1]);
-        const std::size_t oc = d == ax ? k : (d < ax ? s[d] : s[d - 1]);
-        in_f += ic * strides[d];
-        out_f += oc * out.strides[d];
+      else
+      {
+        step(out.data()[of], value);
       }
-      out.data()[out_f] = (*data_)[in_f];
+      od.advance();
     }
-    od.advance();
-  }
-  return out;
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::dot(const ndarray<U> &b) const
-    -> ndarray<std::common_type_t<T, U>> {
-  return np::linalg::dot(*this, b);
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::matmul(const ndarray<U> &b) const
-    -> ndarray<std::common_type_t<T, U>> {
-  return np::linalg::matmul(*this, b);
-}
-
-template <typename T> void ndarray<T>::partition(std::size_t kth, int axis) {
-  axis = _normalize_axis(axis);
-  const int nd = static_cast<int>(shape.size());
-  const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
-  if (kth >= axis_len) {
-    throw std::out_of_range("kth out of bounds");
-  }
-  std::vector<int> rest = shape;
-  rest.erase(rest.begin() + axis);
-  detail::Odometer od(rest);
-  std::vector<T> work(axis_len);
-  std::vector<std::size_t> full(nd);
-  while (!od.done()) {
-    const auto &s = od.idx();
-    for (std::size_t p = 0; p < axis_len; ++p) {
-      std::size_t f = offset;
-      for (int d = 0; d < nd; ++d) {
-        full[d] = d == axis ? p : (d < axis ? s[d] : s[d - 1]);
-        f += full[d] * strides[d];
-      }
-      work[p] = (*data_)[f];
-    }
-    std::nth_element(work.begin(), work.begin() + kth, work.end());
-    for (std::size_t p = 0; p < axis_len; ++p) {
-      std::size_t f = offset;
-      for (int d = 0; d < nd; ++d) {
-        full[d] = d == axis ? p : (d < axis ? s[d] : s[d - 1]);
-        f += full[d] * strides[d];
-      }
-      (*data_)[f] = work[p];
-    }
-    od.advance();
-  }
-}
-
-template <typename T>
-auto ndarray<T>::real() const
-    -> ndarray<typename detail::_Np_real_of<T>::type> {
-  using R = typename detail::_Np_real_of<T>::type;
-  if constexpr (detail::is_complex_v<T>) {
-    ndarray<R> out(shape);
-    std::size_t i = 0;
-    _for_each_logical([&](const T &v) { out.data()[i++] = v.real(); });
     return out;
-  } else {
-    return view();
   }
-}
 
-template <typename T>
-auto ndarray<T>::imag() const
-    -> ndarray<typename detail::_Np_real_of<T>::type> {
-  using R = typename detail::_Np_real_of<T>::type;
-  if constexpr (detail::is_complex_v<T>) {
-    ndarray<R> out(shape);
-    std::size_t i = 0;
-    _for_each_logical([&](const T &v) { out.data()[i++] = v.imag(); });
-    return out;
-  } else {
-    return ndarray<R>(shape);
+  template <typename T>
+  auto ndarray<T>::sum() const
+      -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>
+  {
+    using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+    Acc total{};
+    _for_each_logical([&](const T& v) { total += v; });
+    return total;
   }
-}
 
-template <typename T> auto ndarray<T>::mT() const -> ndarray {
-  if (shape.size() < 2) {
-    throw np::AxisError("mT requires an array with ndim >= 2");
+  template <typename T>
+  template <typename Acc>
+  auto ndarray<T>::sum(int axis, bool keepdims) const -> ndarray<Acc>
+  {
+    return _reduce_axis<Acc>(
+        axis, keepdims, Acc(0), [](Acc& acc, const T& v) { acc += v; });
   }
-  const std::size_t nd = shape.size();
-  std::vector<int> p = shape;
-  std::vector<std::size_t> s = strides;
-  std::swap(p[nd - 1], p[nd - 2]);
-  std::swap(s[nd - 1], s[nd - 2]);
-  return ndarray(data_, std::move(p), std::move(s), type, order, offset);
-}
 
-template <typename T> void ndarray<T>::setflags(bool writeable) {
-  writeable_ = writeable;
-}
-
-template <typename T> bool ndarray<T>::writeable() const noexcept {
-  return writeable_;
-}
-
-template <typename T> const void *ndarray<T>::base() const noexcept {
-  return is_view_ ? static_cast<const void *>(data_.get()) : nullptr;
-}
-
-template <typename T> bool ndarray<T>::owns_data() const noexcept {
-  return !is_view_;
-}
-
-template <typename T> bool ndarray<T>::is_view() const noexcept {
-  return is_view_;
-}
-
-template <typename T> auto ndarray<T>::flat() const -> ndarray {
-  return ravel();
-}
-
-template <typename T> std::size_t ndarray<T>::len() const {
-  if (shape.empty()) {
-    throw std::invalid_argument("len() of a 0-d array is undefined");
+  template <typename T>
+  auto ndarray<T>::prod() const
+      -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>
+  {
+    using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+    Acc total{1};
+    _for_each_logical([&](const T& v) { total *= v; });
+    return total;
   }
-  return static_cast<std::size_t>(shape[0]);
-}
 
-template <typename T> bool ndarray<T>::contains(const T &value) const {
-  bool found = false;
-  _for_each_logical([&](const T &v) {
-    if (v == value) {
-      found = true;
+  template <typename T>
+  template <typename Acc>
+  auto ndarray<T>::prod(int axis, bool keepdims) const -> ndarray<Acc>
+  {
+    return _reduce_axis<Acc>(
+        axis, keepdims, Acc(1), [](Acc& acc, const T& v) { acc *= v; });
+  }
+
+  template <typename T>
+  T ndarray<T>::min() const
+  {
+    if (_numel() == 0)
+    {
+      throw std::runtime_error("min() on empty array");
     }
-  });
-  return found;
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::floordiv(const ndarray<U> &rhs) const
-    -> ndarray<std::common_type_t<T, U>> {
-  return detail::elementwise(*this, rhs, [](const T &a, const U &b) {
-    return detail::floored_div(a, b);
-  });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::floordiv(const U &scalar) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic");
-  return _scalar_op(
-      scalar, [](const T &a, const U &b) { return detail::floored_div(a, b); });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::divmod(const ndarray<U> &rhs) const
-    -> std::pair<ndarray<std::common_type_t<T, U>>,
-                 ndarray<std::common_type_t<T, U>>> {
-  return {floordiv(rhs), *this % rhs};
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::divmod(const U &scalar) const
-    -> std::pair<ndarray<std::common_type_t<T, U>>,
-                 ndarray<std::common_type_t<T, U>>> {
-  return {floordiv(scalar), *this % scalar};
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::pow(const ndarray<U> &rhs) const
-    -> ndarray<std::common_type_t<T, U>> {
-  return detail::elementwise(*this, rhs, [](const T &a, const U &b) {
-    return detail::power_elem(a, b);
-  });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::pow(const U &scalar) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic");
-  return _scalar_op(
-      scalar, [](const T &a, const U &b) { return detail::power_elem(a, b); });
-}
-
-// ---------------------------------------------------------------------
-// Conversions
-// ---------------------------------------------------------------------
-
-template <typename T> ndarray<T>::operator bool() const {
-  if (_numel() != 1) {
-    throw std::invalid_argument("bool() of a non-single-element array");
+    std::optional<T> best;
+    _for_each_logical(
+        [&](const T& v)
+        {
+          if (!best.has_value() || v < *best)
+          {
+            best = v;
+          }
+        });
+    return *best;
   }
-  return static_cast<bool>(item());
-}
 
-template <typename T> ndarray<T>::operator long long() const {
-  if (_numel() != 1) {
-    throw std::invalid_argument("int() of a non-single-element array");
+  template <typename T>
+  auto ndarray<T>::min(int axis, bool keepdims) const -> ndarray<T>
+  {
+    return _reduce_axis<T>(
+        axis, keepdims, std::nullopt, [](T& acc, const T& v) { acc = std::min(acc, v); });
   }
-  return static_cast<long long>(item());
-}
 
-template <typename T> ndarray<T>::operator double() const {
-  if (_numel() != 1) {
-    throw std::invalid_argument("float() of a non-single-element array");
+  template <typename T>
+  T ndarray<T>::max() const
+  {
+    if (_numel() == 0)
+    {
+      throw std::runtime_error("max() on empty array");
+    }
+    std::optional<T> best;
+    _for_each_logical(
+        [&](const T& v)
+        {
+          if (!best.has_value() || v > *best)
+          {
+            best = v;
+          }
+        });
+    return *best;
   }
-  return static_cast<double>(item());
-}
 
-template <typename T> ndarray<T>::operator std::complex<double>() const {
-  if (_numel() != 1) {
-    throw std::invalid_argument("complex() of a non-single-element array");
+  template <typename T>
+  auto ndarray<T>::max(int axis, bool keepdims) const -> ndarray<T>
+  {
+    return _reduce_axis<T>(
+        axis, keepdims, std::nullopt, [](T& acc, const T& v) { acc = std::max(acc, v); });
   }
-  return std::complex<double>(item());
-}
 
-// ---------------------------------------------------------------------
-// Element-wise operators
-// ---------------------------------------------------------------------
-
-template <typename T> auto ndarray<T>::operator+() const -> ndarray {
-  return *this;
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator%(const ndarray<U> &rhs) const
-    -> ndarray<std::common_type_t<T, U>> {
-  return detail::elementwise(*this, rhs, [](const T &a, const U &b) {
-    return detail::floored_mod(a, b);
-  });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator%(const U &scalar) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic");
-  return _scalar_op(
-      scalar, [](const T &a, const U &b) { return detail::floored_mod(a, b); });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator&(const ndarray<U> &rhs) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
-                "bitwise AND requires integral element types");
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a & b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator&(const U &scalar) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
-                "bitwise AND requires integral element types");
-  return _scalar_op(scalar, [](const T &a, const U &b) { return a & b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator|(const ndarray<U> &rhs) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
-                "bitwise OR requires integral element types");
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a | b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator|(const U &scalar) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
-                "bitwise OR requires integral element types");
-  return _scalar_op(scalar, [](const T &a, const U &b) { return a | b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator^(const ndarray<U> &rhs) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
-                "bitwise XOR requires integral element types");
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a ^ b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator^(const U &scalar) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
-                "bitwise XOR requires integral element types");
-  return _scalar_op(scalar, [](const T &a, const U &b) { return a ^ b; });
-}
-
-template <typename T> auto ndarray<T>::operator~() const -> ndarray {
-  static_assert(std::is_integral_v<T>,
-                "bitwise NOT requires an integral element type");
-  ndarray out(shape, type);
-  std::size_t i = 0;
-  _for_each_logical([&](const T &v) { out.data()[i++] = ~v; });
-  return out;
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator<<(const ndarray<U> &rhs) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
-                "left shift requires integral element types");
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a << b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator<<(const U &scalar) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
-                "left shift requires integral element types");
-  return _scalar_op(scalar, [](const T &a, const U &b) { return a << b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator>>(const ndarray<U> &rhs) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
-                "right shift requires integral element types");
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a >> b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator>>(const U &scalar) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
-                "right shift requires integral element types");
-  return _scalar_op(scalar, [](const T &a, const U &b) { return a >> b; });
-}
-
-// In-place operators (recompute from the element-wise form).
-
-template <typename T> ndarray<T> &ndarray<T>::operator%=(const ndarray &rhs) {
-  *this = *this % rhs;
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::operator%=(const T &scalar) {
-  *this = *this % scalar;
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::operator&=(const ndarray &rhs) {
-  *this = *this & rhs;
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::operator&=(const T &scalar) {
-  *this = *this & scalar;
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::operator|=(const ndarray &rhs) {
-  *this = *this | rhs;
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::operator|=(const T &scalar) {
-  *this = *this | scalar;
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::operator^=(const ndarray &rhs) {
-  *this = *this ^ rhs;
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::operator^=(const T &scalar) {
-  *this = *this ^ scalar;
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::operator<<=(const ndarray &rhs) {
-  *this = *this << rhs;
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::operator<<=(const T &scalar) {
-  *this = *this << scalar;
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::operator>>=(const ndarray &rhs) {
-  *this = *this >> rhs;
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::operator>>=(const T &scalar) {
-  *this = *this >> scalar;
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::floordiv_eq(const ndarray &rhs) {
-  *this = floordiv(rhs);
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::floordiv_eq(const T &scalar) {
-  *this = floordiv(scalar);
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::pow_eq(const ndarray &rhs) {
-  *this = pow(rhs);
-  return *this;
-}
-
-template <typename T> ndarray<T> &ndarray<T>::pow_eq(const T &scalar) {
-  *this = pow(scalar);
-  return *this;
-}
-
-// ---------------------------------------------------------------------
-// Conversions / IO
-// ---------------------------------------------------------------------
-
-template <typename T> auto ndarray<T>::tolist() const -> std::vector<T> {
-  return std::vector<T>(begin(), end());
-}
-
-template <typename T>
-auto ndarray<T>::tobytes() const -> std::vector<std::uint8_t> {
-  std::vector<std::uint8_t> bytes;
-  bytes.reserve(_numel() * sizeof(T));
-  _for_each_logical([&](const T &v) {
-    const std::uint8_t *p = reinterpret_cast<const std::uint8_t *>(&v);
-    bytes.insert(bytes.end(), p, p + sizeof(T));
-  });
-  return bytes;
-}
-
-template <typename T>
-void ndarray<T>::tofile(const std::string &filename) const {
-  std::ofstream out(filename, std::ios::binary);
-  if (!out) {
-    throw std::runtime_error("cannot open file: " + filename);
+  template <typename T>
+  T ndarray<T>::ptp() const
+  {
+    return max() - min();
   }
-  auto bytes = tobytes();
-  out.write(reinterpret_cast<const char *>(bytes.data()),
-            static_cast<std::streamsize>(bytes.size()));
-}
 
-template <typename T> void ndarray<T>::tofile(std::ostream &os) const {
-  auto bytes = tobytes();
-  os.write(reinterpret_cast<const char *>(bytes.data()),
-           static_cast<std::streamsize>(bytes.size()));
-}
-
-template <typename T> void ndarray<T>::print(std::ostream &os) const {
-  _print_to(os);
-  os << '\n';
-}
-
-template <typename T>
-void ndarray<T>::_print_recursive(std::size_t dim, std::size_t flat_offset,
-                                  std::ostream &os) const {
-  if (shape.empty()) {
-    os << (*data_)[offset];
-    return;
+  template <typename T>
+  auto ndarray<T>::ptp(int axis, bool keepdims) const -> ndarray<T>
+  {
+    const ndarray<T> mx = max(axis, keepdims);
+    const ndarray<T> mn = min(axis, keepdims);
+    ndarray<T> out(mx.shape);
+    for (std::size_t i = 0; i < out.size(); ++i)
+    {
+      out.data()[i] = mx.data()[i] - mn.data()[i];
+    }
+    return out;
   }
-  if (dim == shape.size() - 1) {
+
+  template <typename T>
+  auto ndarray<T>::mean() const -> typename _mean_type<T>::type
+  {
+    using MeanT = typename _mean_type<T>::type;
+    if (_numel() == 0)
+    {
+      throw std::runtime_error("mean() on empty array");
+    }
+    long double total = 0;
+    _for_each_logical([&](const T& v) { total += static_cast<long double>(v); });
+    return static_cast<MeanT>(total / static_cast<long double>(_numel()));
+  }
+
+  template <typename T>
+  auto ndarray<T>::mean(int axis, bool keepdims) const
+      -> ndarray<typename _mean_type<T>::type>
+  {
+    using MeanT = typename _mean_type<T>::type;
+    axis = _normalize_axis(axis);
+    const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
+    auto s = _reduce_axis<MeanT>(
+        axis, keepdims, MeanT(0), [](MeanT& acc, const T& v) { acc += v; });
+    for (auto& v : s.data())
+    {
+      v /= static_cast<MeanT>(axis_len);
+    }
+    return s;
+  }
+
+  template <typename T>
+  template <typename MeanT>
+  auto ndarray<T>::_var_axis(int axis, bool keepdims) const -> ndarray<MeanT>
+  {
+    axis = _normalize_axis(axis);
+    const int nd = static_cast<int>(shape.size());
+
+    std::vector<int> out_shape = shape;
+    out_shape.erase(out_shape.begin() + axis);
+    if (keepdims)
+    {
+      out_shape.insert(out_shape.begin() + axis, 1);
+    }
+    ndarray<MeanT> out(out_shape);
+    const std::size_t n_out = out.size();
+    std::vector<long double> m(n_out, 0.0L), m2(n_out, 0.0L);
+    std::vector<std::size_t> count(n_out, 0);
+
+    std::vector<std::size_t> out_idx;
+    out_idx.reserve(nd - 1);
+    detail::Odometer od(shape);
+    while (!od.done())
+    {
+      const auto& idx = od.idx();
+      out_idx.clear();
+      for (int d = 0; d < nd; ++d)
+      {
+        if (d != axis)
+        {
+          out_idx.push_back(idx[d]);
+        }
+        else if (keepdims)
+        {
+          out_idx.push_back(0);
+        }
+      }
+      const std::size_t of = detail::flat_index(out_idx, out.strides, 0);
+      const long double v = static_cast<long double>((*data_)[_flat(idx)]);
+      ++count[of];
+      const long double delta = v - m[of];
+      m[of] += delta / static_cast<long double>(count[of]);
+      m2[of] += delta * (v - m[of]);
+      od.advance();
+    }
+    for (std::size_t i = 0; i < n_out; ++i)
+    {
+      const long double denom = count[i] == 0 ? 1.0L : static_cast<long double>(count[i]);
+      out.data()[i] = static_cast<MeanT>(m2[i] / denom);
+    }
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::var() const -> typename _mean_type<T>::type
+  {
+    using MeanT = typename _mean_type<T>::type;
+    if (_numel() == 0)
+    {
+      throw std::runtime_error("var() on empty array");
+    }
+    long double m = 0.0L, m2 = 0.0L;
+    std::size_t count = 0;
+    _for_each_logical(
+        [&](const T& v)
+        {
+          ++count;
+          const long double x = static_cast<long double>(v);
+          const long double delta = x - m;
+          m += delta / static_cast<long double>(count);
+          m2 += delta * (x - m);
+        });
+    return static_cast<MeanT>(m2 / static_cast<long double>(count));
+  }
+
+  template <typename T>
+  auto ndarray<T>::var(int axis, bool keepdims) const
+      -> ndarray<typename _mean_type<T>::type>
+  {
+    return _var_axis<typename _mean_type<T>::type>(axis, keepdims);
+  }
+
+  template <typename T>
+  auto ndarray<T>::std() const -> typename _mean_type<T>::type
+  {
+    return static_cast<typename _mean_type<T>::type>(std::sqrt(var()));
+  }
+
+  template <typename T>
+  auto ndarray<T>::std(int axis, bool keepdims) const
+      -> ndarray<typename _mean_type<T>::type>
+  {
+    auto v = _var_axis<typename _mean_type<T>::type>(axis, keepdims);
+    for (auto& x : v.data())
+    {
+      x = static_cast<typename _mean_type<T>::type>(std::sqrt(x));
+    }
+    return v;
+  }
+
+  template <typename T>
+  bool ndarray<T>::all() const
+  {
+    bool result = true;
+    _for_each_logical([&](const T& v) { result = result && (v != T{}); });
+    return result;
+  }
+
+  template <typename T>
+  auto ndarray<T>::all(int axis, bool keepdims) const -> ndarray<bool>
+  {
+    return _reduce_axis<bool>(
+        axis,
+        keepdims,
+        std::optional<bool>(true),
+        [](bool& acc, const T& v) { acc = acc && (v != T{}); });
+  }
+
+  template <typename T>
+  bool ndarray<T>::any() const
+  {
+    bool result = false;
+    _for_each_logical([&](const T& v) { result = result || (v != T{}); });
+    return result;
+  }
+
+  template <typename T>
+  auto ndarray<T>::any(int axis, bool keepdims) const -> ndarray<bool>
+  {
+    return _reduce_axis<bool>(
+        axis,
+        keepdims,
+        std::optional<bool>(false),
+        [](bool& acc, const T& v) { acc = acc || (v != T{}); });
+  }
+
+  template <typename T>
+  template <typename Cmp>
+  auto ndarray<T>::_arg_reduce_axis(int axis, bool keepdims, Cmp&& cmp) const
+      -> ndarray<std::size_t>
+  {
+    axis = _normalize_axis(axis);
+    const int nd = static_cast<int>(shape.size());
+
+    std::vector<int> out_shape = shape;
+    out_shape.erase(out_shape.begin() + axis);
+    if (keepdims)
+    {
+      out_shape.insert(out_shape.begin() + axis, 1);
+    }
+    ndarray<std::size_t> out(out_shape);
+    std::vector<std::uint8_t> first(out.size(), 1u);
+    std::vector<T> best_val(out.size(), T{});
+    std::vector<std::size_t> best_pos(out.size(), 0);
+
+    std::vector<std::size_t> out_idx;
+    out_idx.reserve(nd - 1);
+    detail::Odometer od(shape);
+    while (!od.done())
+    {
+      const auto& idx = od.idx();
+      out_idx.clear();
+      for (int d = 0; d < nd; ++d)
+      {
+        if (d != axis)
+        {
+          out_idx.push_back(idx[d]);
+        }
+        else if (keepdims)
+        {
+          out_idx.push_back(0);
+        }
+      }
+      const std::size_t of = detail::flat_index(out_idx, out.strides, 0);
+      const T value = (*data_)[_flat(idx)];
+      if (first[of] || cmp(value, best_val[of]))
+      {
+        first[of] = 0;
+        best_val[of] = value;
+        best_pos[of] = idx[axis];
+      }
+      od.advance();
+    }
+    for (std::size_t i = 0; i < out.size(); ++i)
+    {
+      out.data()[i] = best_pos[i];
+    }
+    return out;
+  }
+
+  template <typename T>
+  std::size_t ndarray<T>::argmax() const
+  {
+    if (_numel() == 0)
+    {
+      throw std::runtime_error("argmax() on empty array");
+    }
+    std::size_t best = 0;
+    std::size_t pos = 0;
+    std::optional<T> best_val;
+    detail::Odometer od(shape);
+    while (!od.done())
+    {
+      const T v = (*data_)[_flat(od.idx())];
+      if (!best_val.has_value() || v > *best_val)
+      {
+        best_val = v;
+        best = pos;
+      }
+      ++pos;
+      od.advance();
+    }
+    return best;
+  }
+
+  template <typename T>
+  auto ndarray<T>::argmax(int axis, bool keepdims) const -> ndarray<std::size_t>
+  {
+    return _arg_reduce_axis(axis, keepdims, [](const T& v, const T& b) { return v > b; });
+  }
+
+  template <typename T>
+  std::size_t ndarray<T>::argmin() const
+  {
+    if (_numel() == 0)
+    {
+      throw std::runtime_error("argmin() on empty array");
+    }
+    std::size_t best = 0;
+    std::size_t pos = 0;
+    std::optional<T> best_val;
+    detail::Odometer od(shape);
+    while (!od.done())
+    {
+      const T v = (*data_)[_flat(od.idx())];
+      if (!best_val.has_value() || v < *best_val)
+      {
+        best_val = v;
+        best = pos;
+      }
+      ++pos;
+      od.advance();
+    }
+    return best;
+  }
+
+  template <typename T>
+  auto ndarray<T>::argmin(int axis, bool keepdims) const -> ndarray<std::size_t>
+  {
+    return _arg_reduce_axis(axis, keepdims, [](const T& v, const T& b) { return v < b; });
+  }
+
+  template <typename T>
+  template <typename Acc, typename Fn>
+  auto ndarray<T>::_cum_axis(int axis, Fn&& fn) const -> ndarray<Acc>
+  {
+    axis = _normalize_axis(axis);
+    const int nd = static_cast<int>(shape.size());
+    const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
+
+    ndarray<Acc> out(shape);
+    std::vector<int> reduced_shape = shape;
+    reduced_shape.erase(reduced_shape.begin() + axis);
+    const std::vector<std::size_t> red_strides = _c_strides(reduced_shape);
+    const std::size_t n_slots = _numel() / axis_len;
+    std::vector<Acc> acc(n_slots, Acc{});
+
+    std::vector<std::size_t> slot;
+    slot.reserve(nd - 1);
+    std::vector<std::size_t> out_idx;
+    out_idx.reserve(nd);
+    detail::Odometer od(shape);
+    while (!od.done())
+    {
+      const auto& idx = od.idx();
+      out_idx = idx;
+      slot.clear();
+      for (int d = 0; d < nd; ++d)
+      {
+        if (d != axis)
+        {
+          slot.push_back(idx[d]);
+        }
+      }
+      const std::size_t slot_of = detail::flat_index(slot, red_strides, 0);
+      acc[slot_of] = fn(acc[slot_of], (*data_)[_flat(idx)]);
+      out.data()[detail::flat_index(out_idx, out.strides, 0)] = acc[slot_of];
+      od.advance();
+    }
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::cumsum() const
+      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+  {
+    using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+    ndarray<Acc> out(std::vector<int>{static_cast<int>(_numel())});
+    Acc running{};
+    std::size_t i = 0;
+    _for_each_logical(
+        [&](const T& v)
+        {
+          running += v;
+          out.data()[i++] = running;
+        });
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::cumsum(int axis) const
+      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+  {
+    using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+    return _cum_axis<Acc>(axis, [](Acc& acc, const T& v) { return acc + v; });
+  }
+
+  template <typename T>
+  auto ndarray<T>::cumprod() const
+      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+  {
+    using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+    ndarray<Acc> out(std::vector<int>{static_cast<int>(_numel())});
+    Acc running{1};
+    std::size_t i = 0;
+    _for_each_logical(
+        [&](const T& v)
+        {
+          running *= v;
+          out.data()[i++] = running;
+        });
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::cumprod(int axis) const
+      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+  {
+    using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+    return _cum_axis<Acc>(axis, [](Acc& acc, const T& v) { return acc * v; });
+  }
+
+  // ---------------------------------------------------------------------
+  // Sorting / searching
+  // ---------------------------------------------------------------------
+
+  template <typename T>
+  void ndarray<T>::sort(int axis)
+  {
+    axis = _normalize_axis(axis);
+    const int nd = static_cast<int>(shape.size());
+    const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
+
+    std::vector<int> slice_shape = shape;
+    slice_shape.erase(slice_shape.begin() + axis);
+
+    std::vector<std::size_t> full(nd);
+    detail::Odometer od(slice_shape);
+    while (!od.done())
+    {
+      const auto& s = od.idx();
+      std::vector<T> work(axis_len);
+      for (std::size_t p = 0; p < axis_len; ++p)
+      {
+        std::size_t f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          full[d] = (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
+          f += full[d] * strides[d];
+        }
+        work[p] = (*data_)[offset + f];
+      }
+      std::stable_sort(work.begin(), work.end());
+      for (std::size_t p = 0; p < axis_len; ++p)
+      {
+        std::size_t f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          full[d] = (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
+          f += full[d] * strides[d];
+        }
+        (*data_)[offset + f] = work[p];
+      }
+      od.advance();
+    }
+  }
+
+  template <typename T>
+  auto ndarray<T>::sorted(int axis) const -> ndarray<T>
+  {
+    ndarray<T> out = *this;
+    out.sort(axis);
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::argsort(int axis) const -> ndarray<std::size_t>
+  {
+    axis = _normalize_axis(axis);
+    const int nd = static_cast<int>(shape.size());
+    const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
+
+    ndarray<std::size_t> out(shape);
+    std::vector<int> slice_shape = shape;
+    slice_shape.erase(slice_shape.begin() + axis);
+
+    std::vector<std::pair<std::size_t, T>> work;
+    work.reserve(axis_len);
+    detail::Odometer od(slice_shape);
+    while (!od.done())
+    {
+      const auto& s = od.idx();
+      work.clear();
+      for (std::size_t p = 0; p < axis_len; ++p)
+      {
+        std::size_t f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          const std::size_t coord = (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
+          f += coord * strides[d];
+        }
+        work.emplace_back(p, (*data_)[offset + f]);
+      }
+      std::stable_sort(
+          work.begin(),
+          work.end(),
+          [](const auto& a, const auto& b) { return a.second < b.second; });
+      for (std::size_t p = 0; p < axis_len; ++p)
+      {
+        std::size_t f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          const std::size_t coord = (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
+          f += coord * out.strides[d];
+        }
+        out.data()[f] = work[p].first;
+      }
+      od.advance();
+    }
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::argpartition(std::size_t kth, int axis) const -> ndarray<std::size_t>
+  {
+    axis = _normalize_axis(axis);
+    const int nd = static_cast<int>(shape.size());
+    const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
+    if (kth >= axis_len)
+    {
+      throw std::out_of_range("kth out of bounds");
+    }
+
+    ndarray<std::size_t> out(shape);
+    std::vector<int> slice_shape = shape;
+    slice_shape.erase(slice_shape.begin() + axis);
+
+    std::vector<std::pair<std::size_t, T>> work;
+    work.reserve(axis_len);
+    detail::Odometer od(slice_shape);
+    while (!od.done())
+    {
+      const auto& s = od.idx();
+      work.clear();
+      for (std::size_t p = 0; p < axis_len; ++p)
+      {
+        std::size_t f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          const std::size_t coord = (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
+          f += coord * strides[d];
+        }
+        work.emplace_back(p, (*data_)[offset + f]);
+      }
+      std::nth_element(
+          work.begin(),
+          work.begin() + kth,
+          work.end(),
+          [](const auto& a, const auto& b) { return a.second < b.second; });
+      for (std::size_t p = 0; p < axis_len; ++p)
+      {
+        std::size_t f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          const std::size_t coord = (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
+          f += coord * out.strides[d];
+        }
+        out.data()[f] = work[p].first;
+      }
+      od.advance();
+    }
+    return out;
+  }
+
+  template <typename T>
+  std::size_t ndarray<T>::searchsorted(const T& value, bool side_right) const
+  {
+    if (shape.size() != 1)
+    {
+      throw std::invalid_argument("searchsorted requires a 1D array");
+    }
+    const auto first = begin();
+    const auto last = end();
+    const auto it = side_right ? std::upper_bound(first, last, value)
+                               : std::lower_bound(first, last, value);
+    return static_cast<std::size_t>(std::distance(first, it));
+  }
+
+  template <typename T>
+  auto ndarray<T>::searchsorted(const ndarray<int>& values) const -> ndarray<std::size_t>
+  {
+    if (shape.size() != 1)
+    {
+      throw std::invalid_argument("searchsorted requires a 1D array");
+    }
+    ndarray<std::size_t> out(std::vector<int>{static_cast<int>(values.size())});
+    for (std::size_t i = 0; i < values.size(); ++i)
+    {
+      out.data()[i] = searchsorted(values.data()[values._flat_logical(i)]);
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------
+  // Shape manipulation
+  // ---------------------------------------------------------------------
+
+  template <typename T>
+  auto ndarray<T>::reshape(const std::vector<int>& new_shape) const -> ndarray
+  {
+    std::vector<int> resolved = new_shape;
+    int neg_count = 0;
+    for (int d : resolved)
+    {
+      if (d == -1)
+      {
+        ++neg_count;
+      }
+      else if (d < 0)
+      {
+        throw std::invalid_argument(
+            "reshape: shape dimensions must be non-negative (except a "
+            "single -1), got "
+            + std::to_string(d));
+      }
+    }
+    if (neg_count > 1)
+    {
+      throw std::invalid_argument("at most one dimension may be -1");
+    }
+    if (neg_count == 1)
+    {
+      std::size_t known = 1;
+      int neg_at = 0;
+      for (std::size_t i = 0; i < resolved.size(); ++i)
+      {
+        if (resolved[i] == -1)
+        {
+          neg_at = static_cast<int>(i);
+        }
+        else
+        {
+          known *= static_cast<std::size_t>(resolved[i]);
+        }
+      }
+      if (known == 0 || _numel() % known != 0)
+      {
+        throw std::invalid_argument("cannot infer -1 dimension");
+      }
+      resolved[neg_at] = static_cast<int>(_numel() / known);
+    }
+    std::size_t total = 1;
+    for (int d : resolved)
+    {
+      total *= static_cast<std::size_t>(d);
+    }
+    if (total != _numel())
+    {
+      throw std::invalid_argument(
+          "cannot reshape array of size " + std::to_string(_numel())
+          + " into shape with total size " + std::to_string(total));
+    }
+    if (is_contiguous())
+    {
+      // View sharing storage
+      return ndarray(data_, resolved, _c_strides(resolved), type, order, offset);
+    }
+    // Copy path
+    ndarray out(resolved, type);
+    std::copy(begin(), end(), out.begin());
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::transpose() const -> ndarray
+  {
+    if (shape.empty())
+    {
+      return *this;
+    }
+    std::vector<int> p(shape.size());
+    std::vector<std::size_t> s(shape.size());
+    for (std::size_t i = 0; i < shape.size(); ++i)
+    {
+      p[i] = shape[shape.size() - 1 - i];
+      s[i] = strides[strides.size() - 1 - i];
+    }
+    matrix::Order o = (order == matrix::Order::C) ? matrix::Order::F : matrix::Order::C;
+    return ndarray(data_, std::move(p), std::move(s), type, o, offset);
+  }
+
+  template <typename T>
+  auto ndarray<T>::transpose(const std::vector<int>& perm) const -> ndarray
+  {
+    if (perm.size() != shape.size())
+    {
+      throw std::invalid_argument("permutation length must equal ndim");
+    }
+    std::vector<int> p(perm.size());
+    std::vector<std::size_t> s(perm.size());
+    std::vector<std::uint8_t> seen(perm.size(), 0);
+    for (std::size_t i = 0; i < perm.size(); ++i)
+    {
+      int a = perm[i];
+      if (a < 0)
+      {
+        a += static_cast<int>(perm.size());
+      }
+      if (a < 0 || a >= static_cast<int>(perm.size()) || seen[a])
+      {
+        throw std::invalid_argument("invalid permutation");
+      }
+      seen[a] = 1;
+      p[i] = shape[a];
+      s[i] = strides[a];
+    }
+    return ndarray(data_, std::move(p), std::move(s), type, order, offset);
+  }
+
+  template <typename T>
+  auto ndarray<T>::swapaxes(int axis1, int axis2) const -> ndarray
+  {
+    axis1 = _normalize_axis(axis1);
+    axis2 = _normalize_axis(axis2);
+    std::vector<int> p = shape;
+    std::vector<std::size_t> s = strides;
+    std::swap(p[axis1], p[axis2]);
+    std::swap(s[axis1], s[axis2]);
+    return ndarray(data_, std::move(p), std::move(s), type, order, offset);
+  }
+
+  template <typename T>
+  auto ndarray<T>::squeeze() const -> ndarray
+  {
+    std::vector<int> p;
+    std::vector<std::size_t> s;
+    p.reserve(shape.size());
+    s.reserve(shape.size());
+    for (std::size_t i = 0; i < shape.size(); ++i)
+    {
+      if (shape[i] != 1)
+      {
+        p.push_back(shape[i]);
+        s.push_back(strides[i]);
+      }
+    }
+    if (p == shape)
+    {
+      return *this;
+    }
+    return ndarray(data_, std::move(p), std::move(s), type, order, offset);
+  }
+
+  template <typename T>
+  auto ndarray<T>::squeeze(int axis) const -> ndarray
+  {
+    axis = _normalize_axis(axis);
+    if (shape[axis] != 1)
+    {
+      throw std::invalid_argument("cannot squeeze a dimension that is not of size 1");
+    }
+    std::vector<int> p = shape;
+    std::vector<std::size_t> s = strides;
+    p.erase(p.begin() + axis);
+    s.erase(s.begin() + axis);
+    return ndarray(data_, std::move(p), std::move(s), type, order, offset);
+  }
+
+  template <typename T>
+  auto ndarray<T>::ravel() const -> ndarray
+  {
+    if (is_contiguous())
+    {
+      return ndarray(
+          data_, {static_cast<int>(_numel())}, {std::size_t{1}}, type, order, offset);
+    }
+    return flatten();
+  }
+
+  template <typename T>
+  auto ndarray<T>::flatten() const -> ndarray
+  {
+    ndarray out({static_cast<int>(_numel())}, type);
+    std::copy(begin(), end(), out.begin());
+    return out;
+  }
+
+  template <typename T>
+  void ndarray<T>::resize(const std::vector<int>& new_shape)
+  {
+    std::size_t total = 1;
+    for (int d : new_shape)
+    {
+      total *= static_cast<std::size_t>(d);
+    }
+    std::vector<T> flat;
+    flat.reserve(total);
+    _for_each_logical(
+        [&](const T& v)
+        {
+          if (flat.size() < total)
+          {
+            flat.push_back(v);
+          }
+        });
+    flat.resize(total, T{});
+    shape = new_shape;
+    strides = _c_strides(new_shape);
+    offset = 0;
+    data_ = std::make_shared<std::vector<T>>(std::move(flat));
+    type = type;
+  }
+
+  // ---------------------------------------------------------------------
+  // Manipulation
+  // ---------------------------------------------------------------------
+
+  template <typename T>
+  void ndarray<T>::fill(const T& value)
+  {
+    if (!data_)
+    {
+      data_ = std::make_shared<std::vector<T>>(_numel(), value);
+      return;
+    }
+    if (is_contiguous())
+    {
+      std::fill(data_->begin(), data_->end(), value);
+      return;
+    }
+    _for_each_indexed([&](const std::vector<std::size_t>& idx, const T&)
+                      { (*data_)[_flat(idx)] = value; });
+  }
+
+  template <typename T>
+  auto ndarray<T>::copy() const -> ndarray
+  {
+    ndarray out(shape, type);
+    std::copy(begin(), end(), out.begin());
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::view() const -> ndarray
+  {
+    return ndarray(data_, shape, strides, type, order, offset);
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::astype() const -> ndarray<U>
+  {
+    ndarray<U> out(shape);
+    std::size_t i = 0;
+    _for_each_logical([&](const T& v) { out.data()[i++] = static_cast<U>(v); });
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::take(const std::vector<std::size_t>& indices, int axis) const
+      -> ndarray
+  {
+    const int nd = static_cast<int>(shape.size());
+    axis = _normalize_axis(axis);
+    std::vector<int> out_shape = shape;
+    out_shape[axis] = static_cast<int>(indices.size());
+    ndarray out(out_shape, type);
+
+    const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
+    for (std::size_t k = 0; k < indices.size(); ++k)
+    {
+      if (indices[k] >= axis_len)
+      {
+        throw std::out_of_range("take index out of bounds");
+      }
+    }
+
+    std::vector<int> slice_shape = shape;
+    slice_shape.erase(slice_shape.begin() + axis);
+
+    detail::Odometer od(slice_shape);
+    while (!od.done())
+    {
+      const auto& s = od.idx();
+      for (std::size_t k = 0; k < indices.size(); ++k)
+      {
+        std::size_t in_f = 0, out_f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          const std::size_t coord =
+              (d < axis) ? s[d] : (d == axis ? indices[k] : s[d - 1]);
+          in_f += coord * strides[d];
+          const std::size_t out_coord = (d < axis) ? s[d] : (d == axis ? k : s[d - 1]);
+          out_f += out_coord * out.strides[d];
+        }
+        out.data()[out_f] = (*data_)[offset + in_f];
+      }
+      od.advance();
+    }
+    return out;
+  }
+
+  template <typename T>
+  void ndarray<T>::put(
+      const std::vector<std::size_t>& indices, const std::vector<T>& values, char mode)
+  {
+    const std::size_t n = _numel();
+    for (std::size_t k = 0; k < indices.size(); ++k)
+    {
+      std::size_t p = indices[k];
+      if (mode == 'w')
+      {
+        p %= n;
+      }
+      else if (mode == 'c')
+      {
+        p = std::min(p, n - 1);
+      }
+      else if (p >= n)
+      {
+        throw std::out_of_range("put index out of bounds");
+      }
+      const T& v = values.empty() ? T{} : values[k % values.size()];
+      // logical flat index -> multi-index -> flat storage offset
+      std::vector<std::size_t> idx = _shape_u();
+      std::size_t rem = p;
+      for (std::size_t d = shape.size(); d-- > 0;)
+      {
+        idx[d] = rem % static_cast<std::size_t>(shape[d]);
+        rem /= static_cast<std::size_t>(shape[d]);
+      }
+      (*data_)[_flat(idx)] = v;
+    }
+  }
+
+  template <typename T>
+  auto ndarray<T>::repeat(std::size_t repeats) const -> ndarray
+  {
+    ndarray out({static_cast<int>(_numel() * repeats)}, type);
+    std::size_t o = 0;
+    _for_each_logical(
+        [&](const T& v)
+        {
+          for (std::size_t r = 0; r < repeats; ++r)
+          {
+            out.data()[o++] = v;
+          }
+        });
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::repeat(std::size_t repeats, int axis) const -> ndarray
+  {
+    axis = _normalize_axis(axis);
+    const int nd = static_cast<int>(shape.size());
+    std::vector<int> out_shape = shape;
+    out_shape[axis] = static_cast<int>(static_cast<std::size_t>(shape[axis]) * repeats);
+    ndarray out(out_shape, type);
+
+    detail::Odometer od(shape);
+    while (!od.done())
+    {
+      const auto& idx = od.idx();
+      for (std::size_t r = 0; r < repeats; ++r)
+      {
+        std::size_t in_f = _flat(idx);
+        std::size_t out_f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          const std::size_t coord = (d == axis) ? idx[d] * repeats + r : idx[d];
+          out_f += coord * out.strides[d];
+        }
+        out.data()[out_f] = (*data_)[in_f];
+      }
+      od.advance();
+    }
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::clip(const T& min_value, const T& max_value) const -> ndarray
+  {
+    ndarray out(shape, type);
+    std::size_t i = 0;
+    _for_each_logical([&](const T& v)
+                      { out.data()[i++] = std::clamp(v, min_value, max_value); });
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::round(int decimals) const -> ndarray
+  {
+    ndarray out(shape, type);
+    std::size_t i = 0;
+    _for_each_logical(
+        [&](const T& v)
+        {
+          if constexpr (std::is_floating_point_v<T>)
+          {
+            const T factor =
+                static_cast<T>(std::pow(10.0, static_cast<double>(decimals)));
+            out.data()[i++] = std::round(v * factor) / factor;
+          }
+          else
+          {
+            out.data()[i++] = v;
+          }
+        });
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::diagonal(int offset) const -> ndarray
+  {
+    if (shape.size() < 2)
+    {
+      throw np::AxisError("diagonal requires an array with ndim >= 2");
+    }
+    const std::size_t n0 = static_cast<std::size_t>(shape[0]);
+    const std::size_t n1 = static_cast<std::size_t>(shape[1]);
+
+    std::size_t len = 0;
+    if (offset >= 0)
+    {
+      const std::size_t o = static_cast<std::size_t>(offset);
+      len = (n1 > o) ? std::min(n0, n1 - o) : 0;
+    }
+    else
+    {
+      const std::size_t o = static_cast<std::size_t>(-offset);
+      len = (n0 > o) ? std::min(n1, n0 - o) : 0;
+    }
+
+    std::vector<int> out_shape;
+    out_shape.push_back(static_cast<int>(len));
+    out_shape.insert(out_shape.end(), shape.begin() + 2, shape.end());
+    ndarray out(out_shape, type);
+
+    detail::Odometer od(out_shape);
+    while (!od.done())
+    {
+      const auto& oi = od.idx();
+      std::vector<std::size_t> in_idx(shape.size());
+      in_idx[0] = oi[0];
+      in_idx[1] = oi[0] + static_cast<std::size_t>(offset);
+      for (std::size_t d = 2; d < shape.size(); ++d)
+      {
+        in_idx[d] = oi[d - 1];
+      }
+      out.data()[detail::flat_index(oi, out.strides, 0)] = (*data_)[_flat(in_idx)];
+      od.advance();
+    }
+    return out;
+  }
+
+  template <typename T>
+  T ndarray<T>::trace(int offset) const
+  {
+    if (shape.size() < 2)
+    {
+      throw np::AxisError("trace requires an array with ndim >= 2");
+    }
+    auto diag = diagonal(offset);
+    T total{};
+    for (const auto& v : diag)
+    {
+      total += v;
+    }
+    return total;
+  }
+
+  template <typename T>
+  auto ndarray<T>::nonzero() const -> std::vector<ndarray<std::size_t>>
+  {
+    std::vector<ndarray<std::size_t>> result(shape.size());
+    std::vector<std::vector<std::size_t>> per_dim(shape.size());
+    _for_each_indexed(
+        [&](const std::vector<std::size_t>& idx, const T& v)
+        {
+          if (v != T{})
+          {
+            for (std::size_t d = 0; d < idx.size(); ++d)
+            {
+              per_dim[d].push_back(idx[d]);
+            }
+          }
+        });
+    for (std::size_t d = 0; d < result.size(); ++d)
+    {
+      const int n_coords = static_cast<int>(per_dim[d].size());
+      result[d] = ndarray<std::size_t>::from_data(
+          std::vector<int>{n_coords}, std::move(per_dim[d]));
+    }
+    return result;
+  }
+
+  template <typename T>
+  auto ndarray<T>::conj() const -> ndarray
+  {
+    ndarray out(shape, type);
+    std::size_t i = 0;
+    _for_each_logical(
+        [&](const T& v)
+        {
+          if constexpr (detail::is_complex_v<T>)
+          {
+            out.data()[i++] = std::conj(v);
+          }
+          else
+          {
+            out.data()[i++] = v;
+          }
+        });
+    return out;
+  }
+
+  template <typename T>
+  void ndarray<T>::byteswap()
+  {
+    if (!data_)
+    {
+      return;
+    }
+    if (is_contiguous())
+    {
+      for (auto& v : *data_)
+      {
+        char* p = reinterpret_cast<char*>(&v);
+        std::reverse(p, p + sizeof(T));
+      }
+      return;
+    }
+    _for_each_indexed(
+        [&](const std::vector<std::size_t>& idx, const T&)
+        {
+          T& v = (*data_)[_flat(idx)];
+          char* p = reinterpret_cast<char*>(&v);
+          std::reverse(p, p + sizeof(T));
+        });
+  }
+
+  // ---------------------------------------------------------------------
+  // Selection / manipulation
+  // ---------------------------------------------------------------------
+
+  template <typename T>
+  auto ndarray<T>::abs() const -> ndarray
+  {
+    ndarray out(shape, type);
+    std::size_t i = 0;
+    _for_each_logical([&](const T& v) { out.data()[i++] = std::abs(v); });
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::conjugate() const -> ndarray
+  {
+    return conj();
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::choose(const std::vector<ndarray<U>>& choices, char mode) const
+      -> ndarray<U>
+  {
+    if (choices.empty())
+    {
+      throw std::invalid_argument("choose requires at least one choice");
+    }
+    std::vector<int> bshape = shape;
+    for (const auto& c : choices)
+    {
+      bshape = detail::broadcast_shapes(bshape, c.shape);
+    }
+    const std::size_t n = choices.size();
+    ndarray<U> out(bshape);
+    detail::Odometer od(bshape);
+    while (!od.done())
+    {
+      const auto& idx = od.idx();
+      const T a_v = (*data_)[detail::broadcast_offset(*this, bshape, idx)];
+      long long k = static_cast<long long>(a_v);
+      if (mode == 'w')
+      {
+        k = ((k % static_cast<long long>(n)) + static_cast<long long>(n))
+            % static_cast<long long>(n);
+      }
+      else if (mode == 'c')
+      {
+        k = std::clamp(k, 0LL, static_cast<long long>(n) - 1);
+      }
+      else if (k < 0 || k >= static_cast<long long>(n))
+      {
+        throw std::out_of_range("choose index out of range");
+      }
+      const auto& ch = choices[static_cast<std::size_t>(k)];
+      out.data()[detail::flat_index(idx, out.strides, 0)] =
+          ch.data()[detail::broadcast_offset(ch, bshape, idx)];
+      od.advance();
+    }
+    return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::compress(const ndarray<bool>& condition, std::optional<int> axis) const
+      -> ndarray
+  {
+    if (condition.ndim() != 1)
+    {
+      throw std::invalid_argument("condition must be 1-D");
+    }
+    const std::size_t cond_len = static_cast<std::size_t>(condition.shape[0]);
+    if (!axis.has_value())
+    {
+      if (cond_len != _numel())
+      {
+        throw std::invalid_argument("condition length must match the array size");
+      }
+      const auto flat = ravel();
+      std::vector<T> picked;
+      picked.reserve(cond_len);
+      for (std::size_t i = 0; i < cond_len; ++i)
+      {
+        if (condition.data()[condition._flat_logical(i)])
+        {
+          picked.push_back(flat.data()[flat._flat_logical(i)]);
+        }
+      }
+      const std::vector<int> out_shp{static_cast<int>(picked.size())};
+      return ndarray::from_data(out_shp, std::move(picked));
+    }
+    const int ax = _normalize_axis(*axis);
+    const std::size_t axis_len = static_cast<std::size_t>(shape[ax]);
+    if (cond_len != axis_len)
+    {
+      throw std::invalid_argument("condition length must match the array's axis length");
+    }
+    std::vector<std::size_t> keep;
+    keep.reserve(cond_len);
+    for (std::size_t i = 0; i < axis_len; ++i)
+    {
+      if (condition.data()[condition._flat_logical(i)])
+      {
+        keep.push_back(i);
+      }
+    }
+    std::vector<int> out_shape = shape;
+    out_shape[ax] = static_cast<int>(keep.size());
+    ndarray out(out_shape, type);
+    std::vector<int> rest = shape;
+    rest.erase(rest.begin() + ax);
+    detail::Odometer od(rest);
+    const int nd = static_cast<int>(shape.size());
+    while (!od.done())
+    {
+      const auto& s = od.idx();
+      for (std::size_t k = 0; k < keep.size(); ++k)
+      {
+        std::size_t in_f = offset, out_f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          const std::size_t ic = d == ax ? keep[k] : (d < ax ? s[d] : s[d - 1]);
+          const std::size_t oc = d == ax ? k : (d < ax ? s[d] : s[d - 1]);
+          in_f += ic * strides[d];
+          out_f += oc * out.strides[d];
+        }
+        out.data()[out_f] = (*data_)[in_f];
+      }
+      od.advance();
+    }
+    return out;
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::dot(const ndarray<U>& b) const -> ndarray<std::common_type_t<T, U>>
+  {
+    return np::linalg::dot(*this, b);
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::matmul(const ndarray<U>& b) const -> ndarray<std::common_type_t<T, U>>
+  {
+    return np::linalg::matmul(*this, b);
+  }
+
+  template <typename T>
+  void ndarray<T>::partition(std::size_t kth, int axis)
+  {
+    axis = _normalize_axis(axis);
+    const int nd = static_cast<int>(shape.size());
+    const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
+    if (kth >= axis_len)
+    {
+      throw std::out_of_range("kth out of bounds");
+    }
+    std::vector<int> rest = shape;
+    rest.erase(rest.begin() + axis);
+    detail::Odometer od(rest);
+    std::vector<T> work(axis_len);
+    std::vector<std::size_t> full(nd);
+    while (!od.done())
+    {
+      const auto& s = od.idx();
+      for (std::size_t p = 0; p < axis_len; ++p)
+      {
+        std::size_t f = offset;
+        for (int d = 0; d < nd; ++d)
+        {
+          full[d] = d == axis ? p : (d < axis ? s[d] : s[d - 1]);
+          f += full[d] * strides[d];
+        }
+        work[p] = (*data_)[f];
+      }
+      std::nth_element(work.begin(), work.begin() + kth, work.end());
+      for (std::size_t p = 0; p < axis_len; ++p)
+      {
+        std::size_t f = offset;
+        for (int d = 0; d < nd; ++d)
+        {
+          full[d] = d == axis ? p : (d < axis ? s[d] : s[d - 1]);
+          f += full[d] * strides[d];
+        }
+        (*data_)[f] = work[p];
+      }
+      od.advance();
+    }
+  }
+
+  template <typename T>
+  auto ndarray<T>::real() const -> ndarray<typename detail::_Np_real_of<T>::type>
+  {
+    using R = typename detail::_Np_real_of<T>::type;
+    if constexpr (detail::is_complex_v<T>)
+    {
+      ndarray<R> out(shape);
+      std::size_t i = 0;
+      _for_each_logical([&](const T& v) { out.data()[i++] = v.real(); });
+      return out;
+    }
+    else
+    {
+      return view();
+    }
+  }
+
+  template <typename T>
+  auto ndarray<T>::imag() const -> ndarray<typename detail::_Np_real_of<T>::type>
+  {
+    using R = typename detail::_Np_real_of<T>::type;
+    if constexpr (detail::is_complex_v<T>)
+    {
+      ndarray<R> out(shape);
+      std::size_t i = 0;
+      _for_each_logical([&](const T& v) { out.data()[i++] = v.imag(); });
+      return out;
+    }
+    else
+    {
+      return ndarray<R>(shape);
+    }
+  }
+
+  template <typename T>
+  auto ndarray<T>::mT() const -> ndarray
+  {
+    if (shape.size() < 2)
+    {
+      throw np::AxisError("mT requires an array with ndim >= 2");
+    }
+    const std::size_t nd = shape.size();
+    std::vector<int> p = shape;
+    std::vector<std::size_t> s = strides;
+    std::swap(p[nd - 1], p[nd - 2]);
+    std::swap(s[nd - 1], s[nd - 2]);
+    return ndarray(data_, std::move(p), std::move(s), type, order, offset);
+  }
+
+  template <typename T>
+  void ndarray<T>::setflags(bool writeable)
+  {
+    writeable_ = writeable;
+  }
+
+  template <typename T>
+  bool ndarray<T>::writeable() const noexcept
+  {
+    return writeable_;
+  }
+
+  template <typename T>
+  const void* ndarray<T>::base() const noexcept
+  {
+    return is_view_ ? static_cast<const void*>(data_.get()) : nullptr;
+  }
+
+  template <typename T>
+  bool ndarray<T>::owns_data() const noexcept
+  {
+    return !is_view_;
+  }
+
+  template <typename T>
+  bool ndarray<T>::is_view() const noexcept
+  {
+    return is_view_;
+  }
+
+  template <typename T>
+  auto ndarray<T>::flat() const -> ndarray
+  {
+    return ravel();
+  }
+
+  template <typename T>
+  std::size_t ndarray<T>::len() const
+  {
+    if (shape.empty())
+    {
+      throw std::invalid_argument("len() of a 0-d array is undefined");
+    }
+    return static_cast<std::size_t>(shape[0]);
+  }
+
+  template <typename T>
+  bool ndarray<T>::contains(const T& value) const
+  {
+    bool found = false;
+    _for_each_logical(
+        [&](const T& v)
+        {
+          if (v == value)
+          {
+            found = true;
+          }
+        });
+    return found;
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::floordiv(const ndarray<U>& rhs) const
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    return detail::elementwise(
+        *this, rhs, [](const T& a, const U& b) { return detail::floored_div(a, b); });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::floordiv(const U& scalar) const -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic");
+    return _scalar_op(
+        scalar, [](const T& a, const U& b) { return detail::floored_div(a, b); });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::divmod(const ndarray<U>& rhs) const
+      -> std::pair<ndarray<std::common_type_t<T, U>>, ndarray<std::common_type_t<T, U>>>
+  {
+    return {floordiv(rhs), *this % rhs};
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::divmod(const U& scalar) const
+      -> std::pair<ndarray<std::common_type_t<T, U>>, ndarray<std::common_type_t<T, U>>>
+  {
+    return {floordiv(scalar), *this % scalar};
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::pow(const ndarray<U>& rhs) const -> ndarray<std::common_type_t<T, U>>
+  {
+    return detail::elementwise(
+        *this, rhs, [](const T& a, const U& b) { return detail::power_elem(a, b); });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::pow(const U& scalar) const -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic");
+    return _scalar_op(
+        scalar, [](const T& a, const U& b) { return detail::power_elem(a, b); });
+  }
+
+  // ---------------------------------------------------------------------
+  // Conversions
+  // ---------------------------------------------------------------------
+
+  template <typename T>
+  ndarray<T>::operator bool() const
+  {
+    if (_numel() != 1)
+    {
+      throw std::invalid_argument("bool() of a non-single-element array");
+    }
+    return static_cast<bool>(item());
+  }
+
+  template <typename T>
+  ndarray<T>::operator long long() const
+  {
+    if (_numel() != 1)
+    {
+      throw std::invalid_argument("int() of a non-single-element array");
+    }
+    return static_cast<long long>(item());
+  }
+
+  template <typename T>
+  ndarray<T>::operator double() const
+  {
+    if (_numel() != 1)
+    {
+      throw std::invalid_argument("float() of a non-single-element array");
+    }
+    return static_cast<double>(item());
+  }
+
+  template <typename T>
+  ndarray<T>::operator std::complex<double>() const
+  {
+    if (_numel() != 1)
+    {
+      throw std::invalid_argument("complex() of a non-single-element array");
+    }
+    return std::complex<double>(item());
+  }
+
+  // ---------------------------------------------------------------------
+  // Element-wise operators
+  // ---------------------------------------------------------------------
+
+  template <typename T>
+  auto ndarray<T>::operator+() const -> ndarray
+  {
+    return *this;
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator%(const ndarray<U>& rhs) const
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    return detail::elementwise(
+        *this, rhs, [](const T& a, const U& b) { return detail::floored_mod(a, b); });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator%(const U& scalar) const -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic");
+    return _scalar_op(
+        scalar, [](const T& a, const U& b) { return detail::floored_mod(a, b); });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator&(const ndarray<U>& rhs) const
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(
+        std::is_integral_v<T> && std::is_integral_v<U>,
+        "bitwise AND requires integral element types");
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a & b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator&(const U& scalar) const -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(
+        std::is_integral_v<T> && std::is_integral_v<U>,
+        "bitwise AND requires integral element types");
+    return _scalar_op(scalar, [](const T& a, const U& b) { return a & b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator|(const ndarray<U>& rhs) const
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(
+        std::is_integral_v<T> && std::is_integral_v<U>,
+        "bitwise OR requires integral element types");
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a | b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator|(const U& scalar) const -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(
+        std::is_integral_v<T> && std::is_integral_v<U>,
+        "bitwise OR requires integral element types");
+    return _scalar_op(scalar, [](const T& a, const U& b) { return a | b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator^(const ndarray<U>& rhs) const
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(
+        std::is_integral_v<T> && std::is_integral_v<U>,
+        "bitwise XOR requires integral element types");
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a ^ b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator^(const U& scalar) const -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(
+        std::is_integral_v<T> && std::is_integral_v<U>,
+        "bitwise XOR requires integral element types");
+    return _scalar_op(scalar, [](const T& a, const U& b) { return a ^ b; });
+  }
+
+  template <typename T>
+  auto ndarray<T>::operator~() const -> ndarray
+  {
+    static_assert(std::is_integral_v<T>, "bitwise NOT requires an integral element type");
+    ndarray out(shape, type);
+    std::size_t i = 0;
+    _for_each_logical([&](const T& v) { out.data()[i++] = ~v; });
+    return out;
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator<<(const ndarray<U>& rhs) const
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(
+        std::is_integral_v<T> && std::is_integral_v<U>,
+        "left shift requires integral element types");
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a << b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator<<(const U& scalar) const -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(
+        std::is_integral_v<T> && std::is_integral_v<U>,
+        "left shift requires integral element types");
+    return _scalar_op(scalar, [](const T& a, const U& b) { return a << b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator>>(const ndarray<U>& rhs) const
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(
+        std::is_integral_v<T> && std::is_integral_v<U>,
+        "right shift requires integral element types");
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a >> b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator>>(const U& scalar) const -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(
+        std::is_integral_v<T> && std::is_integral_v<U>,
+        "right shift requires integral element types");
+    return _scalar_op(scalar, [](const T& a, const U& b) { return a >> b; });
+  }
+
+  // In-place operators (recompute from the element-wise form).
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator%=(const ndarray& rhs)
+  {
+    *this = *this % rhs;
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator%=(const T& scalar)
+  {
+    *this = *this % scalar;
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator&=(const ndarray& rhs)
+  {
+    *this = *this & rhs;
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator&=(const T& scalar)
+  {
+    *this = *this & scalar;
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator|=(const ndarray& rhs)
+  {
+    *this = *this | rhs;
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator|=(const T& scalar)
+  {
+    *this = *this | scalar;
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator^=(const ndarray& rhs)
+  {
+    *this = *this ^ rhs;
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator^=(const T& scalar)
+  {
+    *this = *this ^ scalar;
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator<<=(const ndarray& rhs)
+  {
+    *this = *this << rhs;
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator<<=(const T& scalar)
+  {
+    *this = *this << scalar;
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator>>=(const ndarray& rhs)
+  {
+    *this = *this >> rhs;
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator>>=(const T& scalar)
+  {
+    *this = *this >> scalar;
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::floordiv_eq(const ndarray& rhs)
+  {
+    *this = floordiv(rhs);
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::floordiv_eq(const T& scalar)
+  {
+    *this = floordiv(scalar);
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::pow_eq(const ndarray& rhs)
+  {
+    *this = pow(rhs);
+    return *this;
+  }
+
+  template <typename T>
+  ndarray<T>& ndarray<T>::pow_eq(const T& scalar)
+  {
+    *this = pow(scalar);
+    return *this;
+  }
+
+  // ---------------------------------------------------------------------
+  // Conversions / IO
+  // ---------------------------------------------------------------------
+
+  template <typename T>
+  auto ndarray<T>::tolist() const -> std::vector<T>
+  {
+    return std::vector<T>(begin(), end());
+  }
+
+  template <typename T>
+  auto ndarray<T>::tobytes() const -> std::vector<std::uint8_t>
+  {
+    std::vector<std::uint8_t> bytes;
+    bytes.reserve(_numel() * sizeof(T));
+    _for_each_logical(
+        [&](const T& v)
+        {
+          const std::uint8_t* p = reinterpret_cast<const std::uint8_t*>(&v);
+          bytes.insert(bytes.end(), p, p + sizeof(T));
+        });
+    return bytes;
+  }
+
+  template <typename T>
+  void ndarray<T>::tofile(const std::string& filename) const
+  {
+    std::ofstream out(filename, std::ios::binary);
+    if (!out)
+    {
+      throw std::runtime_error("cannot open file: " + filename);
+    }
+    auto bytes = tobytes();
+    out.write(
+        reinterpret_cast<const char*>(bytes.data()),
+        static_cast<std::streamsize>(bytes.size()));
+  }
+
+  template <typename T>
+  void ndarray<T>::tofile(std::ostream& os) const
+  {
+    auto bytes = tobytes();
+    os.write(
+        reinterpret_cast<const char*>(bytes.data()),
+        static_cast<std::streamsize>(bytes.size()));
+  }
+
+  template <typename T>
+  void ndarray<T>::print(std::ostream& os) const
+  {
+    _print_to(os);
+    os << '\n';
+  }
+
+  template <typename T>
+  void ndarray<T>::_print_recursive(
+      std::size_t dim, std::size_t flat_offset, std::ostream& os) const
+  {
+    if (shape.empty())
+    {
+      os << (*data_)[offset];
+      return;
+    }
+    if (dim == shape.size() - 1)
+    {
+      os << "[";
+      for (std::size_t i = 0; i < static_cast<std::size_t>(shape[dim]); ++i)
+      {
+        if (i != 0)
+        {
+          os << ", ";
+        }
+        os << (*data_)[flat_offset + i * strides[dim]];
+      }
+      os << "]";
+      return;
+    }
     os << "[";
-    for (std::size_t i = 0; i < static_cast<std::size_t>(shape[dim]); ++i) {
-      if (i != 0) {
-        os << ", ";
+    for (std::size_t i = 0; i < static_cast<std::size_t>(shape[dim]); ++i)
+    {
+      if (i != 0)
+      {
+        os << ",\n ";
       }
-      os << (*data_)[flat_offset + i * strides[dim]];
+      _print_recursive(dim + 1, flat_offset + i * strides[dim], os);
     }
     os << "]";
-    return;
   }
-  os << "[";
-  for (std::size_t i = 0; i < static_cast<std::size_t>(shape[dim]); ++i) {
-    if (i != 0) {
-      os << ",\n ";
+
+  template <typename T>
+  void ndarray<T>::_print_to(std::ostream& os) const
+  {
+    if (!data_)
+    {
+      os << "array([])";
+      return;
     }
-    _print_recursive(dim + 1, flat_offset + i * strides[dim], os);
+    os << "array(";
+    _print_recursive(0, offset, os);
+    os << ", dtype=" << dtype_name(type) << ")";
   }
-  os << "]";
-}
 
-template <typename T> void ndarray<T>::_print_to(std::ostream &os) const {
-  if (!data_) {
-    os << "array([])";
-    return;
+  // ---------------------------------------------------------------------
+  // Element-wise arithmetic
+  // ---------------------------------------------------------------------
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator+(const ndarray<U>& rhs) const
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a + b; });
   }
-  os << "array(";
-  _print_recursive(0, offset, os);
-  os << ", dtype=" << dtype_name(type) << ")";
-}
 
-// ---------------------------------------------------------------------
-// Element-wise arithmetic
-// ---------------------------------------------------------------------
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator+(const ndarray<U> &rhs) const
-    -> ndarray<std::common_type_t<T, U>> {
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a + b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator-(const ndarray<U> &rhs) const
-    -> ndarray<std::common_type_t<T, U>> {
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a - b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator*(const ndarray<U> &rhs) const
-    -> ndarray<std::common_type_t<T, U>> {
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a * b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator/(const ndarray<U> &rhs) const
-    -> ndarray<std::common_type_t<T, U>> {
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a / b; });
-}
-
-template <typename T>
-template <typename U, typename Fn>
-auto ndarray<T>::_scalar_op(const U &scalar, Fn &&fn) const
-    -> ndarray<std::common_type_t<T, U>> {
-  using R = std::common_type_t<T, U>;
-  ndarray<R> out(shape);
-  std::size_t i = 0;
-  _for_each_logical([&](const T &v) { out.data()[i++] = fn(v, scalar); });
-  return out;
-}
-
-template <typename T>
-template <typename U, typename Fn>
-auto ndarray<T>::_scalar_left_op(const U &scalar, Fn &&fn) const
-    -> ndarray<std::common_type_t<U, T>> {
-  using R = std::common_type_t<U, T>;
-  ndarray<R> out(shape);
-  std::size_t i = 0;
-  _for_each_logical([&](const T &v) { out.data()[i++] = fn(scalar, v); });
-  return out;
-}
-
-template <typename T>
-template <typename U, typename Fn>
-auto ndarray<T>::_cmp_scalar(const U &scalar, Fn &&fn) const -> ndarray<bool> {
-  ndarray<bool> out(shape, dtype::bool_);
-  std::size_t i = 0;
-  _for_each_logical([&](const T &v) { out.data()[i++] = fn(v, scalar); });
-  return out;
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator+(const U &scalar) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(_is_valid_scalar<U>,
-                "scalar operand must be arithmetic or complex");
-  return _scalar_op(scalar, [](const T &a, const U &b) { return a + b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator-(const U &scalar) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(_is_valid_scalar<U>,
-                "scalar operand must be arithmetic or complex");
-  return _scalar_op(scalar, [](const T &a, const U &b) { return a - b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator*(const U &scalar) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(_is_valid_scalar<U>,
-                "scalar operand must be arithmetic or complex");
-  return _scalar_op(scalar, [](const T &a, const U &b) { return a * b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator/(const U &scalar) const
-    -> ndarray<std::common_type_t<T, U>> {
-  static_assert(_is_valid_scalar<U>,
-                "scalar operand must be arithmetic or complex");
-  return _scalar_op(scalar, [](const T &a, const U &b) { return a / b; });
-}
-
-template <typename T> auto ndarray<T>::operator-() const -> ndarray {
-  ndarray out(shape, type);
-  std::size_t i = 0;
-  _for_each_logical([&](const T &v) { out.data()[i++] = -v; });
-  return out;
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator==(const ndarray<U> &rhs) const -> ndarray<bool> {
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a == b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator!=(const ndarray<U> &rhs) const -> ndarray<bool> {
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a != b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator<(const ndarray<U> &rhs) const -> ndarray<bool> {
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a < b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator<=(const ndarray<U> &rhs) const -> ndarray<bool> {
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a <= b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator>(const ndarray<U> &rhs) const -> ndarray<bool> {
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a > b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator>=(const ndarray<U> &rhs) const -> ndarray<bool> {
-  return detail::elementwise(*this, rhs,
-                             [](const T &a, const U &b) { return a >= b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator==(const U &scalar) const -> ndarray<bool> {
-  static_assert(_is_valid_scalar<U>,
-                "scalar operand must be arithmetic or complex");
-  return _cmp_scalar(scalar, [](const T &a, const U &b) { return a == b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator!=(const U &scalar) const -> ndarray<bool> {
-  static_assert(_is_valid_scalar<U>,
-                "scalar operand must be arithmetic or complex");
-  return _cmp_scalar(scalar, [](const T &a, const U &b) { return a != b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator<(const U &scalar) const -> ndarray<bool> {
-  static_assert(_is_valid_scalar<U>,
-                "scalar operand must be arithmetic or complex");
-  return _cmp_scalar(scalar, [](const T &a, const U &b) { return a < b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator<=(const U &scalar) const -> ndarray<bool> {
-  static_assert(_is_valid_scalar<U>,
-                "scalar operand must be arithmetic or complex");
-  return _cmp_scalar(scalar, [](const T &a, const U &b) { return a <= b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator>(const U &scalar) const -> ndarray<bool> {
-  static_assert(_is_valid_scalar<U>,
-                "scalar operand must be arithmetic or complex");
-  return _cmp_scalar(scalar, [](const T &a, const U &b) { return a > b; });
-}
-
-template <typename T>
-template <typename U>
-auto ndarray<T>::operator>=(const U &scalar) const -> ndarray<bool> {
-  static_assert(_is_valid_scalar<U>,
-                "scalar operand must be arithmetic or complex");
-  return _cmp_scalar(scalar, [](const T &a, const U &b) { return a >= b; });
-}
-
-template <typename T>
-bool ndarray<T>::all_equal(const ndarray &other) const noexcept {
-  if (shape != other.shape || !data_ || !other.data_) {
-    return false;
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator-(const ndarray<U>& rhs) const
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a - b; });
   }
-  try {
-    detail::Odometer od(shape);
-    while (!od.done()) {
-      const auto &idx = od.idx();
-      if (!((*data_)[_flat(idx)] == (*other.data_)[other._flat(idx)])) {
-        return false;
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator*(const ndarray<U>& rhs) const
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a * b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator/(const ndarray<U>& rhs) const
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a / b; });
+  }
+
+  template <typename T>
+  template <typename U, typename Fn>
+  auto ndarray<T>::_scalar_op(const U& scalar, Fn&& fn) const
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    using R = std::common_type_t<T, U>;
+    ndarray<R> out(shape);
+    std::size_t i = 0;
+    _for_each_logical([&](const T& v) { out.data()[i++] = fn(v, scalar); });
+    return out;
+  }
+
+  template <typename T>
+  template <typename U, typename Fn>
+  auto ndarray<T>::_scalar_left_op(const U& scalar, Fn&& fn) const
+      -> ndarray<std::common_type_t<U, T>>
+  {
+    using R = std::common_type_t<U, T>;
+    ndarray<R> out(shape);
+    std::size_t i = 0;
+    _for_each_logical([&](const T& v) { out.data()[i++] = fn(scalar, v); });
+    return out;
+  }
+
+  template <typename T>
+  template <typename U, typename Fn>
+  auto ndarray<T>::_cmp_scalar(const U& scalar, Fn&& fn) const -> ndarray<bool>
+  {
+    ndarray<bool> out(shape, dtype::bool_);
+    std::size_t i = 0;
+    _for_each_logical([&](const T& v) { out.data()[i++] = fn(v, scalar); });
+    return out;
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator+(const U& scalar) const -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic or complex");
+    return _scalar_op(scalar, [](const T& a, const U& b) { return a + b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator-(const U& scalar) const -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic or complex");
+    return _scalar_op(scalar, [](const T& a, const U& b) { return a - b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator*(const U& scalar) const -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic or complex");
+    return _scalar_op(scalar, [](const T& a, const U& b) { return a * b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator/(const U& scalar) const -> ndarray<std::common_type_t<T, U>>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic or complex");
+    return _scalar_op(scalar, [](const T& a, const U& b) { return a / b; });
+  }
+
+  template <typename T>
+  auto ndarray<T>::operator-() const -> ndarray
+  {
+    ndarray out(shape, type);
+    std::size_t i = 0;
+    _for_each_logical([&](const T& v) { out.data()[i++] = -v; });
+    return out;
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator==(const ndarray<U>& rhs) const -> ndarray<bool>
+  {
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a == b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator!=(const ndarray<U>& rhs) const -> ndarray<bool>
+  {
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a != b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator<(const ndarray<U>& rhs) const -> ndarray<bool>
+  {
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a < b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator<=(const ndarray<U>& rhs) const -> ndarray<bool>
+  {
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a <= b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator>(const ndarray<U>& rhs) const -> ndarray<bool>
+  {
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a > b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator>=(const ndarray<U>& rhs) const -> ndarray<bool>
+  {
+    return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a >= b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator==(const U& scalar) const -> ndarray<bool>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic or complex");
+    return _cmp_scalar(scalar, [](const T& a, const U& b) { return a == b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator!=(const U& scalar) const -> ndarray<bool>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic or complex");
+    return _cmp_scalar(scalar, [](const T& a, const U& b) { return a != b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator<(const U& scalar) const -> ndarray<bool>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic or complex");
+    return _cmp_scalar(scalar, [](const T& a, const U& b) { return a < b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator<=(const U& scalar) const -> ndarray<bool>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic or complex");
+    return _cmp_scalar(scalar, [](const T& a, const U& b) { return a <= b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator>(const U& scalar) const -> ndarray<bool>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic or complex");
+    return _cmp_scalar(scalar, [](const T& a, const U& b) { return a > b; });
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::operator>=(const U& scalar) const -> ndarray<bool>
+  {
+    static_assert(_is_valid_scalar<U>, "scalar operand must be arithmetic or complex");
+    return _cmp_scalar(scalar, [](const T& a, const U& b) { return a >= b; });
+  }
+
+  template <typename T>
+  bool ndarray<T>::all_equal(const ndarray& other) const noexcept
+  {
+    if (shape != other.shape || !data_ || !other.data_)
+    {
+      return false;
+    }
+    try
+    {
+      detail::Odometer od(shape);
+      while (!od.done())
+      {
+        const auto& idx = od.idx();
+        if (!((*data_)[_flat(idx)] == (*other.data_)[other._flat(idx)]))
+        {
+          return false;
+        }
+        od.advance();
       }
-      od.advance();
     }
-  } catch (...) {
-    return false;
+    catch (...)
+    {
+      return false;
+    }
+    return true;
   }
-  return true;
-}
 
-template <typename T>
-bool ndarray<T>::all_equal(const T &value) const noexcept {
-  try {
-    detail::Odometer od(shape);
-    while (!od.done()) {
-      const auto &idx = od.idx();
-      if (!((*data_)[_flat(idx)] == value)) {
-        return false;
+  template <typename T>
+  bool ndarray<T>::all_equal(const T& value) const noexcept
+  {
+    try
+    {
+      detail::Odometer od(shape);
+      while (!od.done())
+      {
+        const auto& idx = od.idx();
+        if (!((*data_)[_flat(idx)] == value))
+        {
+          return false;
+        }
+        od.advance();
       }
-      od.advance();
     }
-  } catch (...) {
-    return false;
+    catch (...)
+    {
+      return false;
+    }
+    return true;
   }
-  return true;
-}
 
-template <typename T> ndarray<T> &ndarray<T>::operator+=(const ndarray &rhs) {
-  *this = *this + rhs;
-  return *this;
-}
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator+=(const ndarray& rhs)
+  {
+    *this = *this + rhs;
+    return *this;
+  }
 
-template <typename T> ndarray<T> &ndarray<T>::operator-=(const ndarray &rhs) {
-  *this = *this - rhs;
-  return *this;
-}
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator-=(const ndarray& rhs)
+  {
+    *this = *this - rhs;
+    return *this;
+  }
 
-template <typename T> ndarray<T> &ndarray<T>::operator*=(const ndarray &rhs) {
-  *this = *this * rhs;
-  return *this;
-}
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator*=(const ndarray& rhs)
+  {
+    *this = *this * rhs;
+    return *this;
+  }
 
-template <typename T> ndarray<T> &ndarray<T>::operator/=(const ndarray &rhs) {
-  *this = *this / rhs;
-  return *this;
-}
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator/=(const ndarray& rhs)
+  {
+    *this = *this / rhs;
+    return *this;
+  }
 
-template <typename T> ndarray<T> &ndarray<T>::operator+=(const T &scalar) {
-  *this = *this + scalar;
-  return *this;
-}
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator+=(const T& scalar)
+  {
+    *this = *this + scalar;
+    return *this;
+  }
 
-template <typename T> ndarray<T> &ndarray<T>::operator-=(const T &scalar) {
-  *this = *this - scalar;
-  return *this;
-}
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator-=(const T& scalar)
+  {
+    *this = *this - scalar;
+    return *this;
+  }
 
-template <typename T> ndarray<T> &ndarray<T>::operator*=(const T &scalar) {
-  *this = *this * scalar;
-  return *this;
-}
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator*=(const T& scalar)
+  {
+    *this = *this * scalar;
+    return *this;
+  }
 
-template <typename T> ndarray<T> &ndarray<T>::operator/=(const T &scalar) {
-  *this = *this / scalar;
-  return *this;
-}
+  template <typename T>
+  ndarray<T>& ndarray<T>::operator/=(const T& scalar)
+  {
+    *this = *this / scalar;
+    return *this;
+  }
 
 } // namespace np
 

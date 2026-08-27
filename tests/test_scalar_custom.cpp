@@ -20,31 +20,45 @@
 
 // A user-defined scalar: routes through the scalar_traits customization
 // point exactly like the _Np_dtype classifiers.
-struct temperature {
+struct temperature
+{
   double value = 0.0;
 };
 
-namespace np::detail::fixed {
+namespace np::detail::fixed
+{
 
-template <> struct scalar_traits<::temperature> {
-  static constexpr bool is_custom = true;
-  using value_type = double;
-  static constexpr const double &get(const ::temperature &v) noexcept {
-    return v.value;
-  }
-  static constexpr ::temperature make(const double &v) noexcept {
-    return ::temperature{v};
-  }
-  static constexpr double zero() noexcept { return 0.0; }
-  static constexpr double one() noexcept { return 1.0; }
-  static constexpr bool truthy(const ::temperature &v) noexcept {
-    return v.value != 0.0;
-  }
-};
+  template <>
+  struct scalar_traits<::temperature>
+  {
+    static constexpr bool is_custom = true;
+    using value_type = double;
+    static constexpr const double& get(const ::temperature& v) noexcept
+    {
+      return v.value;
+    }
+    static constexpr ::temperature make(const double& v) noexcept
+    {
+      return ::temperature{v};
+    }
+    static constexpr double zero() noexcept
+    {
+      return 0.0;
+    }
+    static constexpr double one() noexcept
+    {
+      return 1.0;
+    }
+    static constexpr bool truthy(const ::temperature& v) noexcept
+    {
+      return v.value != 0.0;
+    }
+  };
 
 } // namespace np::detail::fixed
 
-int main() {
+int main()
+{
   using i64 = np::_Np_dtype::_Np_int64;
   using f64 = np::_Np_dtype::_Np_float64;
 
@@ -58,7 +72,7 @@ int main() {
 
     np::ndarrayf<i64, 2, 3> b{{1, 2, 3}, {4, 5, 6}};
     test::check(b(1, 2).value() == 6, "custom operator() 2-D");
-    const auto &cb = b;
+    const auto& cb = b;
     test::check(cb(0, 1).value() == 2, "custom const access");
   }
 
@@ -68,18 +82,15 @@ int main() {
     np::ndarrayf<i64, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
     test::check(a.sum().value() == 21, "custom sum all");
     test::check(a.prod().value() == 720, "custom prod all");
-    test::check(a.min().value() == 1 && a.max().value() == 6,
-                "custom min/max");
+    test::check(a.min().value() == 1 && a.max().value() == 6, "custom min/max");
     test::check(a.argmin() == 0 && a.argmax() == 5, "custom argmin/argmax");
     test::check(test::approx(a.mean(), 3.5), "custom mean promotes to double");
 
     const auto rowsum = a.sum<1>();
-    test::check(rowsum.rank == 1 && rowsum[0] == 6 && rowsum[1] == 15,
-                "custom sum axis");
+    test::check(rowsum.rank == 1 && rowsum[0] == 6 && rowsum[1] == 15, "custom sum axis");
 
     const auto rowmax = a.max<1>();
-    test::check(rowmax[0].value() == 3 && rowmax[1].value() == 6,
-                "custom max axis");
+    test::check(rowmax[0].value() == 3 && rowmax[1].value() == 6, "custom max axis");
 
     test::check(a.all(), "custom all");
     np::ndarrayf<i64, 3> zero{0, 0, 0};
@@ -114,8 +125,9 @@ int main() {
 
     // Comparisons/logical kernels yield bool (NumPy semantics).
     const auto eq = a == a;
-    static_assert(std::is_same_v<decltype(eq.eval()), np::ndarrayf<bool, 2, 3>>,
-                  "custom == materializes a bool array");
+    static_assert(
+        std::is_same_v<decltype(eq.eval()), np::ndarrayf<bool, 2, 3>>,
+        "custom == materializes a bool array");
     test::check(eq[0] == true && eq[5] == true, "custom a == a");
     const auto lt = a < 3;
     test::check(lt(0, 2) == false && lt(0, 1) == true, "custom a < scalar");
@@ -126,20 +138,21 @@ int main() {
     np::ndarrayf<i64, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
     np::ndarrayf<i64, 3> row{10, 20, 30};
     const auto out = a + row;
-    test::check(out(0, 2).value() == 33 && out(1, 2).value() == 36,
-                "custom broadcast row");
+    test::check(
+        out(0, 2).value() == 33 && out(1, 2).value() == 36, "custom broadcast row");
     np::ndarrayf<i64, 2, 1> mx{{1}, {100}};
     const auto col = a * mx;
-    test::check(col(0, 1).value() == 2 && col(1, 2).value() == 600,
-                "custom broadcast col");
+    test::check(
+        col(0, 1).value() == 2 && col(1, 2).value() == 600, "custom broadcast col");
   }
 
   // Manipulation retains the custom element type.
   {
     np::ndarrayf<i64, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
     auto t = a.transpose();
-    static_assert(std::is_same_v<decltype(t), np::ndarrayf<i64, 3, 2>>,
-                  "custom transpose keeps the dtype");
+    static_assert(
+        std::is_same_v<decltype(t), np::ndarrayf<i64, 3, 2>>,
+        "custom transpose keeps the dtype");
     test::check(t(1, 0).value() == 2, "custom transpose value");
     const auto fl = a.flatten();
     test::check(fl[5].value() == 6, "custom flatten value");
@@ -147,9 +160,8 @@ int main() {
 
   // A fully user-defined scalar type works through the same code path.
   {
-    np::ndarrayf<::temperature, 3> temps{::temperature{1.0},
-                                        ::temperature{2.5},
-                                        ::temperature{-0.5}};
+    np::ndarrayf<::temperature, 3> temps{
+        ::temperature{1.0}, ::temperature{2.5}, ::temperature{-0.5}};
     test::check(test::approx(temps.sum().value, 3.0), "user scalar sum");
     test::check(test::approx(temps.mean(), 1.0), "user scalar mean");
     const auto d = temps * 2;
@@ -160,8 +172,7 @@ int main() {
 
   // String-branch classifiers: get/make/truthy operate on the text core.
   {
-    np::ndarrayf<np::_Np_dtype::_Np_string, 2> s{std::string{"ab"},
-                                                 std::string{"cd"}};
+    np::ndarrayf<np::_Np_dtype::_Np_string, 2> s{std::string{"ab"}, std::string{"cd"}};
     test::check(s[0].value() == "ab", "string element");
     test::check(s.all(), "string all");
   }
