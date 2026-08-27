@@ -770,6 +770,51 @@ namespace np
     }
 
     /**
+     * @brief Vectorized multiplication for double arrays (AVX-512).
+     */
+    inline void
+    mul_f64_avx512(const double* a, const double* b, double* out, std::size_t n)
+    {
+      std::size_t i = 0;
+      const std::size_t vec_end = n - (n % 8);
+
+      for (; i < vec_end; i += 8)
+      {
+        __m512d va = _mm512_loadu_pd(a + i);
+        __m512d vb = _mm512_loadu_pd(b + i);
+        __m512d vout = _mm512_mul_pd(va, vb);
+        _mm512_storeu_pd(out + i, vout);
+      }
+
+      for (; i < n; ++i)
+      {
+        out[i] = a[i] * b[i];
+      }
+    }
+
+    /**
+     * @brief Vectorized multiplication for float arrays (AVX-512).
+     */
+    inline void mul_f32_avx512(const float* a, const float* b, float* out, std::size_t n)
+    {
+      std::size_t i = 0;
+      const std::size_t vec_end = n - (n % 16);
+
+      for (; i < vec_end; i += 16)
+      {
+        __m512 va = _mm512_loadu_ps(a + i);
+        __m512 vb = _mm512_loadu_ps(b + i);
+        __m512 vout = _mm512_mul_ps(va, vb);
+        _mm512_storeu_ps(out + i, vout);
+      }
+
+      for (; i < n; ++i)
+      {
+        out[i] = a[i] * b[i];
+      }
+    }
+
+    /**
      * @brief Vectorized division for double arrays (AVX-512).
      */
     inline void
@@ -995,7 +1040,9 @@ namespace np
     {
       if constexpr (std::is_same_v<T, double>)
       {
-#if defined(NP_SIMD_AVX)
+#if defined(NP_SIMD_AVX512)
+        mul_f64_avx512(a, b, out, n);
+#elif defined(NP_SIMD_AVX)
         mul_f64_avx(a, b, out, n);
 #elif defined(NP_SIMD_SSE2)
         mul_f64_sse2(a, b, out, n);
@@ -1008,7 +1055,9 @@ namespace np
       }
       else if constexpr (std::is_same_v<T, float>)
       {
-#if defined(NP_SIMD_AVX)
+#if defined(NP_SIMD_AVX512)
+        mul_f32_avx512(a, b, out, n);
+#elif defined(NP_SIMD_AVX)
         mul_f32_avx(a, b, out, n);
 #elif defined(NP_SIMD_SSE2)
         mul_f32_sse(a, b, out, n);
