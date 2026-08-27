@@ -638,6 +638,65 @@ namespace np
     return grids;
   }
 
+  /** @brief Convert input to ndarray – passes through if already ndarray (np.asanyarray).
+   * Reference: numpy.asanyarray
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto asanyarray(const ndarray<T>& a) -> ndarray<T>
+  {
+    return a;
+  }
+  NP_API template <typename T>
+  NP_NODISCARD auto asanyarray(const std::vector<T>& v) -> ndarray<T>
+  {
+    return asarray(v);
+  }
+
+  /** @brief Ensure C-contiguous (np.ascontiguousarray). */
+  NP_API template <typename T>
+  NP_NODISCARD auto ascontiguousarray(const ndarray<T>& a) -> ndarray<T>
+  {
+    if (a.is_contiguous())
+      return a;
+    return a.copy();
+  }
+
+  /** @brief Create array from buffer (np.frombuffer). Copies data.
+   * @param buffer raw vector of bytes reinterpreted as T
+   * @param dtype ignored – T determines dtype
+   * @param count number of items to read (-1 all)
+   * @param offset bytes to skip
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto frombuffer(const std::vector<char>& buffer, int count = -1,
+                              std::size_t offset = 0) -> ndarray<T>
+  {
+    if (offset > buffer.size())
+      throw std::invalid_argument("frombuffer: offset out of range");
+    std::size_t avail = (buffer.size() - offset) / sizeof(T);
+    std::size_t n = count < 0 ? avail : static_cast<std::size_t>(count);
+    if (n > avail)
+      throw std::invalid_argument("frombuffer: count exceeds buffer");
+    ndarray<T> out(std::vector<int>{static_cast<int>(n)});
+    std::memcpy(out.data().data(), buffer.data() + offset, n * sizeof(T));
+    return out;
+  }
+
+  /** @brief Alias to asarray with order flag (np.require). Only C flag honored. */
+  NP_API template <typename T>
+  NP_NODISCARD auto require(const ndarray<T>& a, const std::string& requirements = "C")
+      -> ndarray<T>
+  {
+    if (requirements.find('C') != std::string::npos ||
+        requirements.find('A') != std::string::npos)
+    {
+      if (a.is_contiguous())
+        return a;
+      return a.copy();
+    }
+    return a;
+  }
+
 } // namespace np
 
 #endif // NP_CREATION_HPP

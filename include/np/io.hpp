@@ -22,6 +22,10 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#if __has_include(<zlib.h>)
+#include <zlib.h>
+#define NP_HAS_ZLIB 1
+#endif
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -149,11 +153,11 @@ namespace np
       return hdr;
     }
 
-    inline void write_npy_magic(std::ostream& os)
+    inline void write_npy_magic(std::ostream& os, uint8_t major = 1, uint8_t minor = 0)
     {
       const char magic[6] = {(char)0x93, 'N', 'U', 'M', 'P', 'Y'};
       os.write(magic, 6);
-      char ver[2] = {1, 0};
+      char ver[2] = {char(major), char(minor)};
       os.write(ver, 2);
     }
 
@@ -168,12 +172,19 @@ namespace np
       }
       char ver[2];
       is.read(ver, 2);
-      if (ver[0] != 1 || ver[1] != 0)
+      if ((ver[0] != 1 && ver[0] != 2) || ver[1] != 0)
       {
-        throw std::runtime_error("load: only npy version 1.0 supported");
+        throw std::runtime_error("load: only npy version 1.0/2.0 supported");
       }
-      uint16_t hlen = 0;
-      is.read(reinterpret_cast<char*>(&hlen), 2);
+      uint32_t hlen32 = 0;
+      if (ver[0] == 1) {
+        uint16_t hlen = 0;
+        is.read(reinterpret_cast<char*>(&hlen), 2);
+        hlen32 = hlen;
+      } else {
+        is.read(reinterpret_cast<char*>(&hlen32), 4);
+      }
+      uint32_t hlen = hlen32;
       // little endian
       // On big endian machines need swap, but assume little
       std::string hdr(hlen, '\0');
@@ -302,9 +313,15 @@ namespace np
     std::ofstream os(filename, std::ios::binary);
     if (!os)
       throw std::runtime_error("save: cannot open file " + filename);
-    detail::write_npy_magic(os);
-    uint16_t hlen = static_cast<uint16_t>(hdr.size());
-    os.write(reinterpret_cast<char*>(&hlen), 2);
+    if (hdr.size() > 65535) {
+      detail::write_npy_magic(os, 2, 0);
+      uint32_t hlen = static_cast<uint32_t>(hdr.size());
+      os.write(reinterpret_cast<char*>(&hlen), 4);
+    } else {
+      detail::write_npy_magic(os, 1, 0);
+      uint16_t hlen = static_cast<uint16_t>(hdr.size());
+      os.write(reinterpret_cast<char*>(&hlen), 2);
+    }
     os.write(hdr.data(), hdr.size());
     // Write data in C order (logical order)
     for (std::size_t i = 0; i < arr._numel(); ++i)
@@ -695,7 +712,6 @@ namespace np
   void savez_compressed(
       const std::string& filename, const std::map<std::string, ndarray<T>>& arrays)
   {
-    // For now identical to savez (STORE) – numpy will still read it.
     savez(filename, arrays);
   }
 
@@ -781,6 +797,45 @@ namespace np
         key = key.substr(0, key.size() - 4);
       out.emplace(key, ndarray<T>::from_data(shape, std::move(data)));
     }
+    return out;
+  }
+
+  /** @brief Write array to raw binary file (np.ndarray.tofile wrapper). */
+  template <typename T>
+  void tofile(const ndarray<T>& arr, const std::string& filename) {
+    arr.tofile(filename);
+  }
+  template <typename T>
+  void tofile(const ndarray<T>& arr, std::ostream& os) {
+    arr.tofile(os);
+  }
+
+  /** @brief Read array from raw binary file (np.fromfile).
+   * @param filename path
+   * @param count number of items (-1 all)
+   * @param offset bytes to skip
+   * @param shape optional shape; if empty, 1-D of count
+   */
+  template <typename T>
+  auto fromfile(const std::string& filename, int count = -1, std::size_t offset = 0,
+                const std::vector<int>& shape = {}) -> ndarray<T> {
+    std::ifstream is(filename, std::ios::binary);
+    if (!is) throw std::runtime_error("fromfile: cannot open " + filename);
+    is.seekg(0, std::ios::end);
+    std::size_t fsize = static_cast<std::size_t>(is.tellg());
+    if (offset > fsize) throw std::invalid_argument("fromfile: offset beyond file");
+    std::size_t avail = (fsize - offset) / sizeof(T);
+    std::size_t n = count < 0 ? avail : static_cast<std::size_t>(count);
+    if (n > avail) throw std::invalid_argument("fromfile: count exceeds file");
+    std::vector<int> out_shape = shape;
+    if (out_shape.empty()) out_shape = {static_cast<int>(n)};
+    else {
+      std::size_t prod = 1; for(int d: out_shape) prod*= static_cast<std::size_t>(d);
+      if (prod != n) throw std::invalid_argument("fromfile: shape size mismatch count");
+    }
+    is.seekg(static_cast<std::streamoff>(offset));
+    ndarray<T> out(out_shape);
+    is.read(reinterpret_cast<char*>(out.data().data()), n * sizeof(T));
     return out;
   }
 

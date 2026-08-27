@@ -1506,6 +1506,202 @@ namespace np
     return out;
   }
 
+  /** @brief Move axis to new position (np.moveaxis). */
+  NP_API template <typename T>
+  NP_NODISCARD auto moveaxis(const ndarray<T>& a, int source, int destination) -> ndarray<T>
+  {
+    int nd = static_cast<int>(a.ndim());
+    if (source < 0)
+      source += nd;
+    if (destination < 0)
+      destination += nd;
+    if (source < 0 || source >= nd || destination < 0 || destination >= nd)
+      throw AxisError("moveaxis: axis out of bounds");
+    std::vector<int> perm(nd);
+    for (int i = 0; i < nd; ++i)
+      perm[i] = i;
+    int val = perm[source];
+    perm.erase(perm.begin() + source);
+    perm.insert(perm.begin() + destination, val);
+    return a.transpose(perm);
+  }
+
+  /** @brief Roll axis to start position (np.rollaxis). */
+  NP_API template <typename T>
+  NP_NODISCARD auto rollaxis(const ndarray<T>& a, int axis, int start = 0) -> ndarray<T>
+  {
+    int nd = static_cast<int>(a.ndim());
+    if (axis < 0)
+      axis += nd;
+    if (start < 0)
+      start += nd;
+    if (axis < 0 || axis >= nd || start < 0 || start > nd)
+      throw AxisError("rollaxis: axis out of bounds");
+    if (axis == start)
+      return a.copy();
+    // Equivalent to moveaxis with destination handling for start > axis case
+    int dest = start;
+    if (axis < start)
+      dest = start - 1;
+    return moveaxis(a, axis, dest);
+  }
+
+  /** @brief Stack 1-D arrays as columns (np.column_stack). */
+  NP_API template <typename T>
+  NP_NODISCARD auto column_stack(const std::vector<ndarray<T>>& tup) -> ndarray<T>
+  {
+    if (tup.empty())
+      throw std::invalid_argument("column_stack: need at least one array");
+    // If all 1-D, stack as columns -> shape (N, K)
+    bool all1d = true;
+    for (auto& arr : tup)
+      if (arr.ndim() != 1)
+        all1d = false;
+    if (all1d)
+    {
+      int n = tup[0].shape[0];
+      for (auto& arr : tup)
+        if (arr.shape[0] != n)
+          throw std::invalid_argument("column_stack: 1-D arrays must have same length");
+      ndarray<T> out(std::vector<int>{n, static_cast<int>(tup.size())});
+      for (std::size_t k = 0; k < tup.size(); ++k)
+        for (int i = 0; i < n; ++i)
+          out.at(static_cast<std::size_t>(i), k) = tup[k].at(static_cast<std::size_t>(i));
+      return out;
+    }
+    // Otherwise hstack
+    // Fallback to hstack via concatenate along axis 1 (requires same rows)
+    int rows = tup[0].shape[0];
+    for (auto& arr : tup)
+      if (arr.shape[0] != rows)
+        throw std::invalid_argument("column_stack: arrays must have same first dimension");
+    // Concatenate along last axis (1 for 2-D)
+    int total_cols = 0;
+    for (auto& arr : tup)
+      total_cols += arr.shape[1];
+    ndarray<T> out(std::vector<int>{rows, total_cols});
+    int col_off = 0;
+    for (auto& arr : tup)
+    {
+      for (int i = 0; i < rows; ++i)
+        for (int j = 0; j < arr.shape[1]; ++j)
+          out.at(static_cast<std::size_t>(i), static_cast<std::size_t>(col_off + j)) =
+              arr.at(static_cast<std::size_t>(i), static_cast<std::size_t>(j));
+      col_off += arr.shape[1];
+    }
+    return out;
+  }
+
+  /** @brief Stack arrays vertically (np.row_stack / vstack). */
+  NP_API template <typename T>
+  NP_NODISCARD auto row_stack(const std::vector<ndarray<T>>& tup) -> ndarray<T>
+  {
+    if (tup.empty())
+      throw std::invalid_argument("row_stack: need at least one array");
+    // Promote 1-D to 2-D row (1, N) then vstack
+    std::vector<ndarray<T>> tmp;
+    tmp.reserve(tup.size());
+    for (auto& arr : tup)
+    {
+      if (arr.ndim() == 1)
+        tmp.push_back(arr.reshape(std::vector<int>{1, arr.shape[0]}));
+      else
+        tmp.push_back(arr);
+    }
+    int cols = tmp[0].shape[1];
+    for (auto& arr : tmp)
+      if (arr.shape[1] != cols)
+        throw std::invalid_argument("row_stack: arrays must have same number of columns");
+    int total_rows = 0;
+    for (auto& arr : tmp)
+      total_rows += arr.shape[0];
+    ndarray<T> out(std::vector<int>{total_rows, cols});
+    int row_off = 0;
+    for (auto& arr : tmp)
+    {
+      for (int i = 0; i < arr.shape[0]; ++i)
+        for (int j = 0; j < cols; ++j)
+          out.at(static_cast<std::size_t>(row_off + i), static_cast<std::size_t>(j)) =
+              arr.at(static_cast<std::size_t>(i), static_cast<std::size_t>(j));
+      row_off += arr.shape[0];
+    }
+    return out;
+  }
+
+  /** @brief Assemble array from blocks (np.block) – 2-D case. */
+  NP_API template <typename T>
+  NP_NODISCARD auto block(const std::vector<std::vector<ndarray<T>>>& blocks)
+      -> ndarray<T>
+  {
+    if (blocks.empty() || blocks[0].empty())
+      throw std::invalid_argument("block: need at least one block");
+    // First, hstack each row, then vstack rows
+    std::vector<ndarray<T>> row_stacked;
+    row_stacked.reserve(blocks.size());
+    for (auto& row : blocks)
+    {
+      if (row.empty())
+        throw std::invalid_argument("block: empty row");
+      int h = row[0].shape[0];
+      for (auto& b : row)
+        if (b.shape[0] != h)
+          throw std::invalid_argument("block: blocks in row must have same rows");
+      int total_w = 0;
+      for (auto& b : row)
+        total_w += b.shape[1];
+      ndarray<T> r(std::vector<int>{h, total_w});
+      int col_off = 0;
+      for (auto& b : row)
+      {
+        for (int i = 0; i < h; ++i)
+          for (int j = 0; j < b.shape[1]; ++j)
+            r.at(static_cast<std::size_t>(i), static_cast<std::size_t>(col_off + j)) =
+                b.at(static_cast<std::size_t>(i), static_cast<std::size_t>(j));
+        col_off += b.shape[1];
+      }
+      row_stacked.push_back(std::move(r));
+    }
+    // vstack
+    int total_h = 0;
+    int w = row_stacked[0].shape[1];
+    for (auto& r : row_stacked)
+    {
+      if (r.shape[1] != w)
+        throw std::invalid_argument("block: rows must have same width");
+      total_h += r.shape[0];
+    }
+    ndarray<T> out(std::vector<int>{total_h, w});
+    int row_off = 0;
+    for (auto& r : row_stacked)
+    {
+      for (int i = 0; i < r.shape[0]; ++i)
+        for (int j = 0; j < w; ++j)
+          out.at(static_cast<std::size_t>(row_off + i), static_cast<std::size_t>(j)) =
+              r.at(static_cast<std::size_t>(i), static_cast<std::size_t>(j));
+      row_off += r.shape[0];
+    }
+    return out;
+  }
+
+  /** @brief Broadcast arrays to common shape (np.broadcast_arrays). */
+  NP_API template <typename T>
+  NP_NODISCARD auto broadcast_arrays(const std::vector<ndarray<T>>& arrays)
+      -> std::vector<ndarray<T>>
+  {
+    if (arrays.empty())
+      return {};
+    std::vector<int> common = arrays[0].shape;
+    for (std::size_t i = 1; i < arrays.size(); ++i)
+      common = detail::broadcast_shapes(common, arrays[i].shape);
+    std::vector<ndarray<T>> out;
+    out.reserve(arrays.size());
+    for (auto& arr : arrays)
+    {
+      out.push_back(broadcast_to(arr, common));
+    }
+    return out;
+  }
+
 } // namespace np
 
 #endif // NP_MANIPULATION_HPP
