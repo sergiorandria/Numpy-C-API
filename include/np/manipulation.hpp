@@ -1170,6 +1170,113 @@ inline auto where(const ndarray<bool> &condition)
   return indices;
 }
 
+/**
+ * @brief Broadcast array to a new shape.
+ *
+ * Mirrors `np.broadcast_to`. The new shape must be broadcast-compatible
+ * with the input shape.
+ *
+ * @tparam T Element type.
+ * @param arr Input array.
+ * @param shape Target shape.
+ * @return View/copy broadcast to shape.
+ *
+ * Reference: numpy-reference/reference/generated/numpy.broadcast_to.html
+ */
+NP_API template <typename T>
+NP_NODISCARD auto broadcast_to(const ndarray<T> &arr, const std::vector<int> &shape)
+    -> ndarray<T> {
+  // Validate broadcast compatibility via detail::broadcast_shapes
+  (void)detail::broadcast_shapes(arr.shape, shape);
+  ndarray<T> out(shape);
+  detail::Odometer od(shape);
+  while (!od.done()) {
+    const auto &idx = od.idx();
+    // Map output index to input via broadcast rules
+    std::vector<std::size_t> src_idx(arr.ndim(), 0);
+    std::size_t out_dim = shape.size();
+    std::size_t in_dim = arr.ndim();
+    for (std::size_t d = 0; d < out_dim; ++d) {
+      std::ptrdiff_t in_d = static_cast<std::ptrdiff_t>(d) - static_cast<std::ptrdiff_t>(out_dim - in_dim);
+      if (in_d < 0) continue;
+      if (arr.shape[static_cast<std::size_t>(in_d)] == 1) src_idx[static_cast<std::size_t>(in_d)] = 0;
+      else src_idx[static_cast<std::size_t>(in_d)] = idx[d];
+    }
+    out.set(idx, arr.get(src_idx));
+    od.advance();
+  }
+  return out;
+}
+
+/**
+ * @brief Expand dimensions of an array.
+ *
+ * Inserts a new axis at `axis` (mirrors `np.expand_dims`).
+ *
+ * @tparam T Element type.
+ * @param arr Input array.
+ * @param axis Position of new axis (may be negative).
+ * @return View with expanded shape.
+ */
+NP_API template <typename T>
+NP_NODISCARD auto expand_dims(const ndarray<T> &arr, int axis) -> ndarray<T> {
+  int nd = static_cast<int>(arr.ndim());
+  if (axis < 0) axis += nd + 1;
+  if (axis < 0 || axis > nd) throw AxisError("expand_dims: axis out of bounds");
+  std::vector<int> new_shape = arr.shape;
+  new_shape.insert(new_shape.begin() + axis, 1);
+  return arr.reshape(new_shape);
+}
+
+/**
+ * @brief Ensure array is at least 1-D.
+ *
+ * Mirrors `np.atleast_1d`. 0-D arrays become 1-D with single element.
+ */
+NP_API template <typename T>
+NP_NODISCARD auto atleast_1d(const ndarray<T> &arr) -> ndarray<T> {
+  if (arr.ndim() >= 1) return arr.copy();
+  ndarray<T> out(std::vector<int>{1});
+  out.data()[0] = arr.item();
+  return out;
+}
+
+/**
+ * @brief Ensure array is at least 2-D.
+ *
+ * Mirrors `np.atleast_2d`. 1-D becomes (1, N).
+ */
+NP_API template <typename T>
+NP_NODISCARD auto atleast_2d(const ndarray<T> &arr) -> ndarray<T> {
+  if (arr.ndim() >= 2) return arr.copy();
+  if (arr.ndim() == 1) {
+    return arr.reshape(std::vector<int>{1, static_cast<int>(arr.size())});
+  }
+  // 0-D -> (1,1)
+  ndarray<T> out(std::vector<int>{1, 1});
+  out.data()[0] = arr.item();
+  return out;
+}
+
+/**
+ * @brief Ensure array is at least 3-D.
+ *
+ * Mirrors `np.atleast_3d`. 1-D (N,) -> (1,N,1), 2-D (M,N) -> (M,N,1).
+ */
+NP_API template <typename T>
+NP_NODISCARD auto atleast_3d(const ndarray<T> &arr) -> ndarray<T> {
+  if (arr.ndim() >= 3) return arr.copy();
+  if (arr.ndim() == 2) {
+    return arr.reshape(std::vector<int>{arr.shape[0], arr.shape[1], 1});
+  }
+  if (arr.ndim() == 1) {
+    return arr.reshape(std::vector<int>{1, static_cast<int>(arr.size()), 1});
+  }
+  ndarray<T> out(std::vector<int>{1, 1, 1});
+  out.data()[0] = arr.item();
+  return out;
+}
+
 } // namespace np
 
 #endif // NP_MANIPULATION_HPP
