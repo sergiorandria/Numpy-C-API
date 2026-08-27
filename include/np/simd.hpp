@@ -17,11 +17,16 @@
 #include <type_traits>
 
 // Detect SIMD capabilities at compile time
+// AVX512 implies AVX2 and AVX, AVX2 implies AVX – define all lower levels
+// so kernels gated on NP_SIMD_AVX are visible in AVX2/AVX-512 builds.
 #if defined(__AVX512F__)
 #define NP_SIMD_AVX512
+#define NP_SIMD_AVX2
+#define NP_SIMD_AVX
 #include <immintrin.h>
 #elif defined(__AVX2__)
 #define NP_SIMD_AVX2
+#define NP_SIMD_AVX
 #include <immintrin.h>
 #elif defined(__AVX__)
 #define NP_SIMD_AVX

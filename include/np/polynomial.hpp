@@ -173,7 +173,7 @@ namespace np
     return {q_arr, r_arr};
   }
 
-  // Normal comment: roots – quadratic and linear only for simplicity
+  // Normal comment: roots – arbitrary degree via companion matrix eigenvalues
   NP_API inline auto roots(const ndarray<double>& p) -> ndarray<std::complex<double>>
   {
     // trim leading zeros
@@ -185,7 +185,8 @@ namespace np
       throw std::invalid_argument("roots: zero polynomial");
     if (n == 1)
       return ndarray<std::complex<double>>(std::vector<int>{0});
-    if (n == 2)
+    std::size_t deg = n - 1;
+    if (deg == 1)
     {
       double a = p.data()[p._flat_logical(start)];
       double b = p.data()[p._flat_logical(start + 1)];
@@ -194,7 +195,7 @@ namespace np
       out.data()[0] = r;
       return out;
     }
-    if (n == 3)
+    if (deg == 2)
     {
       double a = p.data()[p._flat_logical(start)];
       double b = p.data()[p._flat_logical(start + 1)];
@@ -205,8 +206,24 @@ namespace np
       out.data()[1] = (-b - disc) / (2 * a);
       return out;
     }
-    throw std::invalid_argument(
-        "roots: only degree <=2 supported in this minimal implementation");
+    // General case: companion matrix eigenvalues
+    double lead = p.data()[p._flat_logical(start)];
+    ndarray<double> C(std::vector<int>{static_cast<int>(deg), static_cast<int>(deg)});
+    // first row: -a1/a0 ... -an/a0
+    for (std::size_t j = 0; j < deg; ++j)
+    {
+      double coeff = p.data()[p._flat_logical(start + 1 + j)];
+      C.at(0, j) = -coeff / lead;
+    }
+    // subdiagonal ones
+    for (std::size_t i = 1; i < deg; ++i)
+    {
+      for (std::size_t j = 0; j < deg; ++j)
+        C.at(i, j) = 0.0;
+      C.at(i, i - 1) = 1.0;
+    }
+    auto eig_res = linalg::eig(C);
+    return eig_res.w;
   }
 
   // Normal comment: polyfit – least squares via Vandermonde + lstsq

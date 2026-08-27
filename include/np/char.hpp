@@ -212,15 +212,50 @@ namespace np
       ndarray<std::string> result = empty<std::string>(a.shape);
       for (std::size_t i = 0; i < a.size(); ++i)
       {
-        // Simplified: just replace first %s with value
-        std::string fmt = a.data()[i];
-        std::string val = values.data()[i];
-        std::size_t pos = fmt.find("%s");
-        if (pos != std::string::npos)
+        const std::string& fmt = a.data()[i];
+        const std::string& val = values.data()[i];
+        std::string out;
+        out.reserve(fmt.size() + val.size());
+        for (std::size_t p = 0; p < fmt.size(); ++p)
         {
-          fmt.replace(pos, 2, val);
+          if (fmt[p] == '%' && p + 1 < fmt.size())
+          {
+            if (fmt[p + 1] == '%')
+            {
+              out.push_back('%');
+              ++p;
+            }
+            else
+            {
+              // Find end of format specifier: flags/width/precision then type
+              std::size_t q = p + 1;
+              while (q < fmt.size() && std::string("-+ #0").find(fmt[q]) != std::string::npos)
+                ++q;
+              while (q < fmt.size() && std::isdigit(static_cast<unsigned char>(fmt[q])))
+                ++q;
+              if (q < fmt.size() && fmt[q] == '.')
+              {
+                ++q;
+                while (q < fmt.size() && std::isdigit(static_cast<unsigned char>(fmt[q])))
+                  ++q;
+              }
+              if (q < fmt.size() && std::string("diouxXeEfFgGcrs").find(fmt[q]) != std::string::npos)
+              {
+                out += val;
+                p = q;
+              }
+              else
+              {
+                out.push_back(fmt[p]);
+              }
+            }
+          }
+          else
+          {
+            out.push_back(fmt[p]);
+          }
         }
-        result.data()[i] = fmt;
+        result.data()[i] = out;
       }
       return result;
     }
@@ -1455,18 +1490,16 @@ namespace np
      */
     NP_API inline auto
     split(const ndarray<std::string>& a, const std::string& sep = "", int maxsplit = -1)
-        -> ndarray<std::string>
+        -> std::vector<ndarray<std::string>>
     {
-      std::vector<std::string> all_parts;
-
+      std::vector<ndarray<std::string>> out;
+      out.reserve(a.size());
       for (std::size_t i = 0; i < a.size(); ++i)
       {
         const std::string& s = a.data()[i];
         std::vector<std::string> parts;
-
         if (sep.empty())
         {
-          // Split on whitespace
           std::istringstream iss(s);
           std::string word;
           while (iss >> word)
@@ -1478,7 +1511,6 @@ namespace np
         }
         else
         {
-          // Split on separator
           std::size_t start = 0;
           std::size_t pos;
           int count = 0;
@@ -1492,14 +1524,30 @@ namespace np
           }
           parts.push_back(s.substr(start));
         }
-
-        all_parts.insert(all_parts.end(), parts.begin(), parts.end());
+        ndarray<std::string> arr =
+            empty<std::string>(std::vector<int>{static_cast<int>(parts.size())});
+        arr.data() = parts;
+        out.push_back(std::move(arr));
       }
+      return out;
+    }
 
-      ndarray<std::string> result =
-          empty<std::string>(std::vector<int>{static_cast<int>(all_parts.size())});
-      result.data() = all_parts;
-      return result;
+    // Backward-compat flattened overload (deprecated)
+    NP_API inline auto split_flattened(
+        const ndarray<std::string>& a,
+        const std::string& sep = "",
+        int maxsplit = -1) -> ndarray<std::string>
+    {
+      auto grouped = split(a, sep, maxsplit);
+      std::size_t total = 0;
+      for (auto& g : grouped)
+        total += g.size();
+      ndarray<std::string> res = empty<std::string>(std::vector<int>{static_cast<int>(total)});
+      std::size_t p = 0;
+      for (auto& g : grouped)
+        for (std::size_t i = 0; i < g.size(); ++i)
+          res.data()[p++] = g.data()[i];
+      return res;
     }
 
     /**
@@ -1514,28 +1562,23 @@ namespace np
      */
     NP_API inline auto
     rsplit(const ndarray<std::string>& a, const std::string& sep = "", int maxsplit = -1)
-        -> ndarray<std::string>
+        -> std::vector<ndarray<std::string>>
     {
-      std::vector<std::string> all_parts;
-
+      std::vector<ndarray<std::string>> out;
+      out.reserve(a.size());
       for (std::size_t i = 0; i < a.size(); ++i)
       {
         const std::string& s = a.data()[i];
         std::vector<std::string> parts;
-
         if (sep.empty())
         {
-          // Split on whitespace (same as split for simplicity)
           std::istringstream iss(s);
           std::string word;
           while (iss >> word)
-          {
             parts.push_back(word);
-          }
         }
         else
         {
-          // Split from right
           std::size_t end = s.size();
           int count = 0;
           while (end > 0)
@@ -1546,8 +1589,7 @@ namespace np
               parts.insert(parts.begin(), s.substr(0, end));
               break;
             }
-            parts.insert(
-                parts.begin(), s.substr(pos + sep.size(), end - pos - sep.size()));
+            parts.insert(parts.begin(), s.substr(pos + sep.size(), end - pos - sep.size()));
             end = pos;
             ++count;
             if (maxsplit >= 0 && count >= maxsplit)
@@ -1557,14 +1599,29 @@ namespace np
             }
           }
         }
-
-        all_parts.insert(all_parts.end(), parts.begin(), parts.end());
+        ndarray<std::string> arr =
+            empty<std::string>(std::vector<int>{static_cast<int>(parts.size())});
+        arr.data() = parts;
+        out.push_back(std::move(arr));
       }
+      return out;
+    }
 
-      ndarray<std::string> result =
-          empty<std::string>(std::vector<int>{static_cast<int>(all_parts.size())});
-      result.data() = all_parts;
-      return result;
+    NP_API inline auto rsplit_flattened(
+        const ndarray<std::string>& a,
+        const std::string& sep = "",
+        int maxsplit = -1) -> ndarray<std::string>
+    {
+      auto grouped = rsplit(a, sep, maxsplit);
+      std::size_t total = 0;
+      for (auto& g : grouped)
+        total += g.size();
+      ndarray<std::string> res = empty<std::string>(std::vector<int>{static_cast<int>(total)});
+      std::size_t p = 0;
+      for (auto& g : grouped)
+        for (std::size_t i = 0; i < g.size(); ++i)
+          res.data()[p++] = g.data()[i];
+      return res;
     }
 
     /**
@@ -1577,29 +1634,45 @@ namespace np
      * @return Flattened array of lines
      */
     NP_API inline auto splitlines(const ndarray<std::string>& a, bool keepends = false)
-        -> ndarray<std::string>
+        -> std::vector<ndarray<std::string>>
     {
-      std::vector<std::string> all_lines;
-
+      std::vector<ndarray<std::string>> out;
+      out.reserve(a.size());
       for (std::size_t i = 0; i < a.size(); ++i)
       {
         const std::string& s = a.data()[i];
         std::istringstream iss(s);
         std::string line;
+        std::vector<std::string> parts;
         while (std::getline(iss, line))
         {
-          if (keepends && !line.empty())
-          {
+          if (keepends)
             line += '\n';
-          }
-          all_lines.push_back(line);
+          parts.push_back(line);
         }
+        // Handle trailing newline producing extra empty? mimic numpy: if s ends with \n and keepends false, don't add empty
+        ndarray<std::string> arr =
+            empty<std::string>(std::vector<int>{static_cast<int>(parts.size())});
+        arr.data() = parts;
+        out.push_back(std::move(arr));
       }
+      return out;
+    }
 
-      ndarray<std::string> result =
-          empty<std::string>(std::vector<int>{static_cast<int>(all_lines.size())});
-      result.data() = all_lines;
-      return result;
+    NP_API inline auto splitlines_flattened(
+        const ndarray<std::string>& a,
+        bool keepends = false) -> ndarray<std::string>
+    {
+      auto grouped = splitlines(a, keepends);
+      std::size_t total = 0;
+      for (auto& g : grouped)
+        total += g.size();
+      ndarray<std::string> res = empty<std::string>(std::vector<int>{static_cast<int>(total)});
+      std::size_t p = 0;
+      for (auto& g : grouped)
+        for (std::size_t i = 0; i < g.size(); ++i)
+          res.data()[p++] = g.data()[i];
+      return res;
     }
 
     /**
@@ -1706,13 +1779,13 @@ namespace np
      * @param x2 Second string array
      * @param cmp Comparison operator ("==", "!=", "<", "<=", ">", ">=")
      * @param rstrip Strip trailing whitespace before comparison
-     * @return Integer array: -1 (less), 0 (equal), 1 (greater)
+     * @return Boolean array – true where comparison holds
      */
     NP_API inline auto compare_chararrays(
         const ndarray<std::string>& x1,
         const ndarray<std::string>& x2,
         const std::string& cmp,
-        bool rstrip = false) -> ndarray<int>
+        bool rstrip = false) -> ndarray<bool>
     {
       if (x1.shape != x2.shape)
       {
@@ -1720,7 +1793,7 @@ namespace np
             "compare_chararrays: arrays must have the same shape");
       }
 
-      ndarray<int> result = empty<int>(x1.shape);
+      ndarray<bool> result = empty<bool>(x1.shape);
       for (std::size_t i = 0; i < x1.size(); ++i)
       {
         std::string s1 = x1.data()[i];
@@ -1728,34 +1801,42 @@ namespace np
 
         if (rstrip)
         {
-          s1.erase(s1.find_last_not_of(" \t\n\r") + 1);
-          s2.erase(s2.find_last_not_of(" \t\n\r") + 1);
+          auto p1 = s1.find_last_not_of(" \t\n\r");
+          if (p1 == std::string::npos)
+            s1.clear();
+          else
+            s1.erase(p1 + 1);
+          auto p2 = s2.find_last_not_of(" \t\n\r");
+          if (p2 == std::string::npos)
+            s2.clear();
+          else
+            s2.erase(p2 + 1);
         }
 
         int cmp_result = s1.compare(s2);
         if (cmp == "==")
         {
-          result.data()[i] = (cmp_result == 0) ? 1 : 0;
+          result.data()[i] = (cmp_result == 0);
         }
         else if (cmp == "!=")
         {
-          result.data()[i] = (cmp_result != 0) ? 1 : 0;
+          result.data()[i] = (cmp_result != 0);
         }
         else if (cmp == "<")
         {
-          result.data()[i] = (cmp_result < 0) ? 1 : 0;
+          result.data()[i] = (cmp_result < 0);
         }
         else if (cmp == "<=")
         {
-          result.data()[i] = (cmp_result <= 0) ? 1 : 0;
+          result.data()[i] = (cmp_result <= 0);
         }
         else if (cmp == ">")
         {
-          result.data()[i] = (cmp_result > 0) ? 1 : 0;
+          result.data()[i] = (cmp_result > 0);
         }
         else if (cmp == ">=")
         {
-          result.data()[i] = (cmp_result >= 0) ? 1 : 0;
+          result.data()[i] = (cmp_result >= 0);
         }
         else
         {

@@ -302,44 +302,36 @@ namespace np
 
   /** @brief Determinant via Gaussian elimination with partial pivoting.
    *
-   * Promotes all elements to double. Time complexity: O(n^3).
+   * Handles both real and complex via common type. Time complexity: O(n^3).
    *
    * @tparam T  Element type of the matrix.
    * @param m   Square matrix.
-   * @return    Determinant as double.
+   * @return    Determinant as double or complex<double>.
    * @throws    std::invalid_argument if the matrix is not square.
    */
   template <typename T>
-  NP_API NP_NODISCARD auto det(const Matrix<T>& m) -> double
+  NP_API NP_NODISCARD auto det(const Matrix<T>& m)
+      -> std::conditional_t<detail::is_complex_v<T>, std::complex<double>, double>
   {
+    using R = std::conditional_t<detail::is_complex_v<T>, std::complex<double>, double>;
     if (!m.is_square())
     {
       throw std::invalid_argument("det requires a square matrix");
     }
     const std::size_t n = m.rows();
-    std::vector<std::vector<double>> a(n, std::vector<double>(n));
+    std::vector<std::vector<R>> a(n, std::vector<R>(n));
     for (std::size_t i = 0; i < n; ++i)
-    {
       for (std::size_t j = 0; j < n; ++j)
-      {
-        a[i][j] = static_cast<double>(m(i, j));
-      }
-    }
-    double detv = 1.0;
+        a[i][j] = static_cast<R>(m(i, j));
+    R detv = R{1};
     for (std::size_t col = 0; col < n; ++col)
     {
       std::size_t piv = col;
       for (std::size_t r = col + 1; r < n; ++r)
-      {
         if (std::abs(a[r][col]) > std::abs(a[piv][col]))
-        {
           piv = r;
-        }
-      }
-      if (a[piv][col] == 0.0)
-      {
-        return 0.0;
-      }
+      if (a[piv][col] == R{0})
+        return R{0};
       if (piv != col)
       {
         std::swap(a[piv], a[col]);
@@ -348,11 +340,9 @@ namespace np
       detv *= a[col][col];
       for (std::size_t r = col + 1; r < n; ++r)
       {
-        const double f = a[r][col] / a[col][col];
+        const R f = a[r][col] / a[col][col];
         for (std::size_t c = col + 1; c < n; ++c)
-        {
           a[r][c] -= f * a[col][c];
-        }
       }
     }
     return detv;
@@ -360,54 +350,42 @@ namespace np
 
   /** @brief Inverse via Gauss-Jordan elimination.
    *
-   * Promotes all elements to double. Time complexity: O(n^3).
+   * Handles real and complex via common type. Time complexity: O(n^3).
    *
    * @tparam T  Element type of the matrix.
    * @param m   Square matrix.
-   * @return    Inverse matrix as Matrix<double>.
+   * @return    Inverse matrix.
    * @throws    std::invalid_argument if the matrix is not square or singular.
    */
   template <typename T>
-  NP_API NP_NODISCARD auto inverse(const Matrix<T>& m) -> Matrix<double>
+  NP_API NP_NODISCARD auto inverse(const Matrix<T>& m)
+      -> Matrix<std::conditional_t<detail::is_complex_v<T>, std::complex<double>, double>>
   {
+    using R = std::conditional_t<detail::is_complex_v<T>, std::complex<double>, double>;
     if (!m.is_square())
-    {
       throw std::invalid_argument("inverse requires a square matrix");
-    }
     const std::size_t n = m.rows();
-    std::vector<std::vector<double>> a(n, std::vector<double>(n));
+    std::vector<std::vector<R>> a(n, std::vector<R>(n));
     for (std::size_t i = 0; i < n; ++i)
-    {
       for (std::size_t j = 0; j < n; ++j)
-      {
-        a[i][j] = static_cast<double>(m(i, j));
-      }
-    }
-    std::vector<std::vector<double>> inv(n, std::vector<double>(n, 0.0));
+        a[i][j] = static_cast<R>(m(i, j));
+    std::vector<std::vector<R>> inv(n, std::vector<R>(n, R{0}));
     for (std::size_t i = 0; i < n; ++i)
-    {
-      inv[i][i] = 1.0;
-    }
+      inv[i][i] = R{1};
     for (std::size_t col = 0; col < n; ++col)
     {
       std::size_t piv = col;
       for (std::size_t r = col + 1; r < n; ++r)
-      {
         if (std::abs(a[r][col]) > std::abs(a[piv][col]))
-        {
           piv = r;
-        }
-      }
-      if (a[piv][col] == 0.0)
-      {
+      if (a[piv][col] == R{0})
         throw std::invalid_argument("matrix is singular");
-      }
       if (piv != col)
       {
         std::swap(a[piv], a[col]);
         std::swap(inv[piv], inv[col]);
       }
-      const double diag = a[col][col];
+      const R diag = a[col][col];
       for (std::size_t c = 0; c < n; ++c)
       {
         a[col][c] /= diag;
@@ -416,10 +394,8 @@ namespace np
       for (std::size_t r = 0; r < n; ++r)
       {
         if (r == col)
-        {
           continue;
-        }
-        const double f = a[r][col];
+        const R f = a[r][col];
         for (std::size_t c = 0; c < n; ++c)
         {
           a[r][c] -= f * a[col][c];
@@ -427,97 +403,70 @@ namespace np
         }
       }
     }
-    Matrix<double> out(n, n);
+    Matrix<R> out(n, n);
     for (std::size_t i = 0; i < n; ++i)
-    {
       for (std::size_t j = 0; j < n; ++j)
-      {
         out(i, j) = inv[i][j];
-      }
-    }
     return out;
   }
 
   /** @brief Solve A x = b via Gaussian elimination with partial pivoting.
    *
-   * Promotes all elements to double. Time complexity: O(n^3) for an
-   * n x n system.
+   * Handles real and complex via common type. Time complexity: O(n^3).
    *
    * @tparam T  Element type of matrix A.
    * @tparam U  Element type of vector b.
    * @param a   Square coefficient matrix (n x n).
    * @param b   Right-hand side vector (length n).
-   * @return    Solution vector x as ndarray<double>.
+   * @return    Solution vector x.
    * @throws    std::invalid_argument if b is not 1-D, shapes are
    *            incompatible, or the matrix is singular.
    */
   template <typename T, typename U>
   NP_API NP_NODISCARD auto solve(const Matrix<T>& a, const ndarray<U>& b)
-      -> ndarray<double>
   {
+    using R0 = std::common_type_t<T, U>;
+    using R = std::conditional_t<detail::is_complex_v<R0>, std::complex<double>, double>;
     if (b.ndim() != 1)
-    {
       throw std::invalid_argument("solve: b must be a 1D array");
-    }
     if (!a.is_square() || a.rows() != static_cast<std::size_t>(b.shape[0]))
-    {
       throw std::invalid_argument("solve: incompatible shapes");
-    }
     const std::size_t n = a.rows();
-    std::vector<std::vector<double>> m(n, std::vector<double>(n));
+    std::vector<std::vector<R>> m(n, std::vector<R>(n));
     for (std::size_t i = 0; i < n; ++i)
-    {
       for (std::size_t j = 0; j < n; ++j)
-      {
-        m[i][j] = static_cast<double>(a(i, j));
-      }
-    }
-    std::vector<double> rhs(n);
+        m[i][j] = static_cast<R>(a(i, j));
+    std::vector<R> rhs(n);
     for (std::size_t i = 0; i < n; ++i)
-    {
-      rhs[i] = static_cast<double>(b.at(i));
-    }
+      rhs[i] = static_cast<R>(b.at(i));
     for (std::size_t col = 0; col < n; ++col)
     {
       std::size_t piv = col;
       for (std::size_t r = col + 1; r < n; ++r)
-      {
         if (std::abs(m[r][col]) > std::abs(m[piv][col]))
-        {
           piv = r;
-        }
-      }
-      if (m[piv][col] == 0.0)
-      {
+      if (m[piv][col] == R{0})
         throw std::invalid_argument("matrix is singular");
-      }
       if (piv != col)
       {
         std::swap(m[piv], m[col]);
         std::swap(rhs[piv], rhs[col]);
       }
-      const double diag = m[col][col];
+      const R diag = m[col][col];
       for (std::size_t c = col; c < n; ++c)
-      {
         m[col][c] /= diag;
-      }
       rhs[col] /= diag;
       for (std::size_t r = 0; r < n; ++r)
       {
         if (r == col)
-        {
           continue;
-        }
-        const double f = m[r][col];
+        const R f = m[r][col];
         for (std::size_t c = col; c < n; ++c)
-        {
           m[r][c] -= f * m[col][c];
-        }
         rhs[r] -= f * rhs[col];
       }
     }
-    return ndarray<double>::from_data(
-        std::vector<int>{static_cast<int>(n)}, std::move(rhs));
+    return ndarray<R>::from_data(std::vector<int>{static_cast<int>(n)}, std::move(rhs));
   }
 
 } // namespace np
