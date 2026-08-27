@@ -1843,6 +1843,143 @@ auto fma(const ndarray<T> &x1, const ndarray<U> &x2, const ndarray<V> &x3,
   });
 }
 
+// =================================================================
+// Additional math utilities (sinc, unwrap, angle, fix, ediff1d)
+// Reference: numpy-reference/reference/routines.math.html
+// =================================================================
+
+/** @brief Sinc function: sin(pi*x)/(pi*x), with sinc(0)=1.
+ *
+ * @tparam T Floating-point element type.
+ * @param x Input array.
+ * @return ndarray<T> with sinc values.
+ */
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto sinc(const ndarray<T> &x) -> ndarray<T> {
+  return detail::ufunc_unary(x, [](const T &v) -> T {
+    if (v == T{0}) return T{1};
+    T pi_v = std::numbers::pi_v<T>;
+    T arg = pi_v * v;
+    return std::sin(arg) / arg;
+  });
+}
+
+/** @brief sinc() writing into `out`. Same shape as `x`. */
+NP_API template <detail::FloatingPoint T>
+auto sinc(const ndarray<T> &x, ndarray<T> &out) -> ndarray<T> & {
+  return detail::ufunc_unary_into(x, out, [](const T &v) -> T {
+    if (v == T{0}) return T{1};
+    T pi_v = std::numbers::pi_v<T>;
+    T arg = pi_v * v;
+    return std::sin(arg) / arg;
+  });
+}
+
+/** @brief Unwrap phase (1-D).
+ *
+ * Unwraps `p` by adding multiples of 2*pi when the jump exceeds `discont`
+ * (default pi). Mirrors `np.unwrap`.
+ *
+ * @tparam T Floating-point type.
+ * @param p Phase array (1-D).
+ * @param discont Maximum discontinuity between values.
+ * @param axis Axis along which to unwrap (only -1/0 supported for 1-D).
+ * @return ndarray<T> unwrapped.
+ */
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto unwrap(const ndarray<T> &p, T discont = std::numbers::pi_v<T>,
+                         int axis = -1) -> ndarray<T> {
+  if (p.ndim() != 1) {
+    throw std::invalid_argument("unwrap: only 1-D supported in this implementation");
+  }
+  (void)axis;
+  ndarray<T> out(p.shape);
+  if (p.size() == 0) return out;
+  out.data()[0] = p.data()[p._flat_logical(0)];
+  T two_pi = T{2} * std::numbers::pi_v<T>;
+  for (std::size_t i = 1; i < p.size(); ++i) {
+    T d = p.data()[p._flat_logical(i)] - p.data()[p._flat_logical(i - 1)];
+    // numpy: d = d - round(d/2pi)*2pi  when |d|>discont else d
+    if (std::abs(d) > discont) {
+      d -= std::round(d / two_pi) * two_pi;
+    }
+    out.data()[i] = out.data()[i - 1] + d;
+  }
+  return out;
+}
+
+/** @brief Element-wise angle (phase) of complex array.
+ *
+ * For real input returns 0 for >=0 and pi for <0.
+ *
+ * @tparam T Element type (arithmetic or complex).
+ * @param x Input array.
+ * @return ndarray<double> phases in radians.
+ */
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto angle(const ndarray<T> &x) -> ndarray<double> {
+  ndarray<double> out(x.shape);
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    T v = x.data()[x._flat_logical(i)];
+    double ph;
+    if constexpr (detail::is_complex_v<T>) {
+      ph = std::arg(v);
+    } else {
+      ph = v < T{0} ? std::numbers::pi : 0.0;
+      if constexpr (std::is_floating_point_v<T>) {
+        if (std::isnan(static_cast<double>(v))) ph = std::numeric_limits<double>::quiet_NaN();
+      }
+    }
+    out.data()[i] = ph;
+  }
+  return out;
+}
+
+/** @brief Fix: round to nearest integer towards zero.
+ *
+ * Mirrors `np.fix`. Equivalent to trunc for floating types, identity
+ * for integers.
+ *
+ * @tparam T Numeric type.
+ * @param x Input array.
+ * @return ndarray<T> with fixed values.
+ */
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto fix(const ndarray<T> &x) -> ndarray<T> {
+  return detail::ufunc_unary(x, [](const T &v) -> T {
+    if constexpr (std::is_floating_point_v<T>) {
+      return std::trunc(v);
+    } else if constexpr (detail::is_complex_v<T>) {
+      return T{std::trunc(v.real()), std::trunc(v.imag())};
+    } else {
+      return v;
+    }
+  });
+}
+
+/** @brief Differences between consecutive elements (1-D).
+ *
+ * Mirrors `np.ediff1d` for 1-D arrays (without to_begin/to_end).
+ *
+ * @tparam T Element type.
+ * @param ary Input 1-D array.
+ * @return ndarray<T> of size N-1 with ary[1:]-ary[:-1].
+ */
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto ediff1d(const ndarray<T> &ary) -> ndarray<T> {
+  if (ary.ndim() != 1) {
+    throw std::invalid_argument("ediff1d: input must be 1-D");
+  }
+  if (ary.size() <= 1) {
+    return ndarray<T>(std::vector<int>{0});
+  }
+  ndarray<T> out(std::vector<int>{static_cast<int>(ary.size() - 1)});
+  for (std::size_t i = 0; i + 1 < ary.size(); ++i) {
+    out.data()[i] = ary.data()[ary._flat_logical(i + 1)] - ary.data()[ary._flat_logical(i)];
+  }
+  return out;
+}
+
 } // namespace np
 
 #endif // NP_MATH_HPP
