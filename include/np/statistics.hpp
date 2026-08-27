@@ -222,11 +222,8 @@ namespace np
 
   } // namespace detail
 
-  // ----------------------------------------------------------------
-  // Median / percentile / quantile
-  // ----------------------------------------------------------------
-
-  /**
+    // Median / percentile / quantile
+    /**
    * @brief Median of all elements.
    *
    * Sorts a copy of the (flattened) input and returns the middle value;
@@ -431,12 +428,9 @@ namespace np
     return percentile(arr, p * 100.0, axis);
   }
 
-  // ----------------------------------------------------------------
-  // NaN-skipping reduction family (nanmin/nanmax/nansum/nanprod/
+    // NaN-skipping reduction family (nanmin/nanmax/nansum/nanprod/
   // nanmean/nanvar/nanstd/nanmedian/nanpercentile/nanquantile)
-  // ----------------------------------------------------------------
-
-  /**
+    /**
    * @brief Minimum of all elements, ignoring NaN.
    *
    * Reference: numpy-reference/reference/generated/numpy.nanmin.html
@@ -889,11 +883,8 @@ namespace np
     return nanpercentile(arr, p * 100.0, axis);
   }
 
-  // ----------------------------------------------------------------
-  // nanargmin / nanargmax (NaN-skipping index reductions)
-  // ----------------------------------------------------------------
-
-  /**
+    // nanargmin / nanargmax (NaN-skipping index reductions)
+    /**
    * @brief Index of the smallest element, ignoring NaN (flattened).
    *
    * Reference:
@@ -1045,11 +1036,8 @@ namespace np
         });
   }
 
-  // ----------------------------------------------------------------
-  // nancumsum / nancumprod (NaN-skipping cumulative reductions)
-  // ----------------------------------------------------------------
-
-  /**
+    // nancumsum / nancumprod (NaN-skipping cumulative reductions)
+    /**
    * @brief Cumulative sum over all elements (flattened), ignoring NaN.
    *
    * Reference:
@@ -1293,11 +1281,8 @@ namespace np
         });
   }
 
-  // ----------------------------------------------------------------
-  // ptp (peak-to-peak) -- free wrapper of ndarray::ptp
-  // ----------------------------------------------------------------
-
-  /**
+    // ptp (peak-to-peak) -- free wrapper of ndarray::ptp
+    /**
    * @brief Peak-to-peak (max - min) over all elements.
    *
    * Reference: numpy-reference/reference/generated/numpy.ptp.html
@@ -1329,11 +1314,8 @@ namespace np
     return arr.ptp(axis);
   }
 
-  // ----------------------------------------------------------------
-  // Covariance / correlation
-  // ----------------------------------------------------------------
-
-  /**
+    // Covariance / correlation
+    /**
    * @brief Two internal helpers.
    * @internal
    */
@@ -1616,11 +1598,8 @@ namespace np
     return detail::matrix_to_ndarray(cr);
   }
 
-  // ----------------------------------------------------------------
-  // Histogram / bincount / digitize
-  // ----------------------------------------------------------------
-
-  /**
+    // Histogram / bincount / digitize
+    /**
    * @brief Result of np::histogram.
    */
   struct Histogram
@@ -1839,11 +1818,8 @@ namespace np
     return out;
   }
 
-  // ----------------------------------------------------------------
-  // Free mean / var / std wrappers (numpy: mean, var, std)
-  // ----------------------------------------------------------------
-
-  /** @brief Mean of all elements (free fn, mirrors ndarray::mean). */
+    // Free mean / var / std wrappers (numpy: mean, var, std)
+    /** @brief Mean of all elements (free fn, mirrors ndarray::mean). */
   NP_API template <typename T>
   NP_NODISCARD auto mean(const ndarray<T>& a) -> typename _mean_type<T>::type
   {
@@ -1956,11 +1932,8 @@ namespace np
     return out;
   }
 
-  // ----------------------------------------------------------------
-  // Histogram 2D / DD (np.histogram2d, histogramdd)
-  // ----------------------------------------------------------------
-
-  struct Histogram2D
+    // Histogram 2D / DD (np.histogram2d, histogramdd)
+    struct Histogram2D
   {
     ndarray<std::size_t> counts; // bins x bins
     ndarray<double> xedges;
@@ -2111,11 +2084,8 @@ namespace np
     return {counts, edges};
   }
 
-  // ----------------------------------------------------------------
-  // Var / Std with ddof (numpy keeps population default ddof=0)
-  // ----------------------------------------------------------------
-
-  NP_API template <typename T>
+    // Var / Std with ddof (numpy keeps population default ddof=0)
+    NP_API template <typename T>
   NP_NODISCARD auto var_ddof(const ndarray<T>& a, int ddof) ->
       typename _mean_type<T>::type
   {

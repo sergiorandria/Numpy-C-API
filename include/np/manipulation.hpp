@@ -296,11 +296,8 @@ namespace np
     return result;
   }
 
-  // ----------------------------------------------------------------
-  // Tiling Arrays
-  // ----------------------------------------------------------------
-
-  /**
+    // Tiling Arrays
+    /**
    * @brief Construct an array by repeating arr the number of times given by reps.
    *
    * Reference: numpy-reference/reference/generated/numpy.tile.html
@@ -369,11 +366,8 @@ namespace np
     return result;
   }
 
-  // ----------------------------------------------------------------
-  // Building Matrices
-  // ----------------------------------------------------------------
-
-  /**
+    // Building Matrices
+    /**
    * @brief Extract or construct a diagonal array.
    *
    * Reference: numpy-reference/reference/generated/numpy.diag.html
@@ -690,11 +684,8 @@ namespace np
     return result;
   }
 
-  // ----------------------------------------------------------------
-  // Splitting Arrays
-  // ----------------------------------------------------------------
-
-  /**
+    // Splitting Arrays
+    /**
    * @brief Split array into multiple sub-arrays.
    *
    * Reference: numpy-reference/reference/generated/numpy.split.html
@@ -920,11 +911,8 @@ namespace np
     return split(arr, indices_or_sections, 2);
   }
 
-  // ----------------------------------------------------------------
-  // Adding/Removing Elements
-  // ----------------------------------------------------------------
-
-  /**
+    // Adding/Removing Elements
+    /**
    * @brief Return a new array with sub-arrays along an axis deleted.
    *
    * Reference: numpy-reference/reference/generated/numpy.delete.html
@@ -1329,11 +1317,8 @@ namespace np
     return {result_vals, result_index, result_inverse, result_counts};
   }
 
-  // ----------------------------------------------------------------
-  // Conditional Selection
-  // ----------------------------------------------------------------
-
-  /**
+    // Conditional Selection
+    /**
    * @brief Return elements chosen from x or y depending on condition.
    *
    * Reference: numpy-reference/reference/generated/numpy.where.html

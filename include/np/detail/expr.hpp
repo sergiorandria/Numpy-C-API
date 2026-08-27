@@ -84,10 +84,7 @@ concept fixed_source = requires(const S& s, std::size_t i) {
  */
 template <typename Op> struct op_tag {};
 
-// ---------------------------------------------------------------------
 // Compile-time broadcasting (numpy-reference/user/basics.broadcasting.html)
-// ---------------------------------------------------------------------
-
 template <int A, int B> struct dim_merge {
     static constexpr int value = (A == B) ? A : (A == 1) ? B : (B == 1) ? A : -1;
     static constexpr bool ok = value != -1;
@@ -141,10 +138,7 @@ template <typename LA, typename LB> struct merged {
 /** @brief True when L and R can be broadcast together (SFINAE helper). */
 template <typename L, typename R> inline constexpr bool broadcast_valid = merged<L, R>::valid;
 
-// ---------------------------------------------------------------------
 // Index arithmetic (constexpr)
-// ---------------------------------------------------------------------
-
 /** @brief Row-major unflattening of a flat index. */
 template <std::size_t R>
 constexpr std::array<std::size_t, R> unflatten(std::size_t flat, const std::array<int, R>& shape) {
@@ -186,10 +180,7 @@ constexpr typename S::value_type gather(const S& src, const std::array<std::size
     return src[idx];
 }
 
-// ---------------------------------------------------------------------
 // Scalar wrapper: a rank-0 source broadcastable to anything.
-// ---------------------------------------------------------------------
-
 template <typename T> struct scalar_expr {
     using value_type = T;
     static constexpr std::size_t rank = 0;
@@ -207,10 +198,7 @@ template <typename T> struct shape_tag_of<scalar_expr<T>> {
     using type = shape_tag<>;
 };
 
-// ---------------------------------------------------------------------
 // Nodes
-// ---------------------------------------------------------------------
-
 /**
  * @brief Lazy elementwise binary operation over two broadcast sources.
  */
@@ -325,10 +313,7 @@ public:
     }
 };
 
-// ---------------------------------------------------------------------
 // Shape metaprogramming helpers shared with ndarray_fixed.hpp
-// ---------------------------------------------------------------------
-
 /** @brief Static shape of a lazily evaluated expression node. */
 template <typename Op, typename L, typename R> struct shape_tag_of<binary_expr<Op, L, R>> {
     using type = typename binary_expr<Op, L, R>::tag;

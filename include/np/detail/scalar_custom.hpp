@@ -28,10 +28,7 @@
 
 namespace np::detail::fixed {
 
-// ---------------------------------------------------------------------
 // scalar_traits for the _Np_dtype storage classifiers
-// ---------------------------------------------------------------------
-
 /**
  * @brief Numeric branch: the classifier holds a contiguous scalar core.
  *
@@ -90,13 +87,10 @@ template <auto D> struct scalar_traits<_Np_dtype::_Np_StorageClassifier<D, true>
     }
 };
 
-// ---------------------------------------------------------------------
 // Elementwise kernel dispatch for the custom branch.
 // Operands are unwrapped to their computation cores, the functor runs on
 // the cores, and the result is re-wrapped into the custom element type.
 // Comparisons/logical kernels that yield bool stay bool (NumPy semantics).
-// ---------------------------------------------------------------------
-
 /** @brief Result element type of a binary expression over custom operands.
  *
  * When both operands are the same custom classifier, the classifier is

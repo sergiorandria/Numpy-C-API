@@ -83,7 +83,6 @@ template <typename T> struct scalar_traits {
 /** @brief Computation core of any element type (identity for plain). */
 template <typename T> using scalar_core_t = typename scalar_traits<std::remove_cv_t<T>>::value_type;
 
-// ---------------------------------------------------------------------
 // Elementwise kernel dispatch (used by detail/expr.hpp nodes).
 //
 // `binary_apply<Op, A, B, Custom>` maps an elementwise functor over a pair
@@ -91,8 +90,6 @@ template <typename T> using scalar_core_t = typename scalar_traits<std::remove_c
 // builtin branch (this header) feeds the stored values straight to the
 // functor; scalar_custom.hpp supplies the `true` specialization that
 // unwraps custom classifiers first.
-// ---------------------------------------------------------------------
-
 /** @brief True when a binary kernel must unwrap at least one operand. */
 template <typename A, typename B>
 inline constexpr bool needs_custom_kernel =

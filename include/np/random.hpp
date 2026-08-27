@@ -50,11 +50,8 @@ namespace np::random
     {
     }
 
-    // ----------------------------------------------------------------
-    // Simple Random Data
-    // ----------------------------------------------------------------
-
-    /**
+        // Simple Random Data
+        /**
      * @brief Random integers from low (inclusive) to high (exclusive).
      * Reference:
      * numpy-reference/reference/random/generated/numpy.random.Generator.integers.html
@@ -127,11 +124,8 @@ namespace np::random
       return result;
     }
 
-    // ----------------------------------------------------------------
-    // Permutations
-    // ----------------------------------------------------------------
-
-    /**
+        // Permutations
+        /**
      * @brief Randomly permute a sequence or array.
      * Reference:
      * numpy-reference/reference/random/generated/numpy.random.Generator.permutation.html
@@ -237,11 +231,8 @@ namespace np::random
       return ndarray<T>::from_data({static_cast<int>(size)}, std::move(result_data));
     }
 
-    // ----------------------------------------------------------------
-    // Distributions
-    // ----------------------------------------------------------------
-
-    /**
+        // Distributions
+        /**
      * @brief Draw samples from a uniform distribution over [low, high).
      * Reference:
      * numpy-reference/reference/random/generated/numpy.random.Generator.uniform.html
@@ -957,11 +948,8 @@ namespace np::random
       return result;
     }
 
-    // ----------------------------------------------------------------
-    // Helper Methods
-    // ----------------------------------------------------------------
-
-    /**
+        // Helper Methods
+        /**
      * @brief Get the underlying random engine.
      */
     engine_type& engine()
@@ -1007,11 +995,8 @@ namespace np::random
     }
   };
 
-  // ----------------------------------------------------------------
-  // Convenience Functions (Module-Level API)
-  // ----------------------------------------------------------------
-
-  namespace
+    // Convenience Functions (Module-Level API)
+    namespace
   {
     // Thread-local default generator
     thread_local Generator default_generator_;

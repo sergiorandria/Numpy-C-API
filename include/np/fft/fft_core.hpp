@@ -325,10 +325,7 @@ inline std::vector<int> with_axis_len(const std::vector<int>& shape, int axis, s
     return s;
 }
 
-// ---------------------------------------------------------------------
 // Applying a 1-D transform along an arbitrary axis
-// ---------------------------------------------------------------------
-
 /**
  * @brief Transform every 1-D line of `src` along `axis`.
  *

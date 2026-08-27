@@ -264,11 +264,8 @@ namespace np
     return out;
   }
 
-  // ---------------------------------------------------------------------
-  // Free wrappers mirroring NumPy API
-  // ---------------------------------------------------------------------
-
-  /** @brief Sorted copy (np.sort). */
+    // Free wrappers mirroring NumPy API
+    /** @brief Sorted copy (np.sort). */
   NP_API template <typename T>
   NP_NODISCARD auto sort(const ndarray<T>& a, int axis = -1) -> ndarray<T>
   {

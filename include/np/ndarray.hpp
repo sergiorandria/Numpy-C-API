@@ -190,11 +190,8 @@ namespace np
   template <typename T>
   class Matrix;
 
-  // ---------------------------------------------------------------------
-  // Logical iterator (stride-aware, correct for views)
-  // ---------------------------------------------------------------------
-
-  /**
+    // Logical iterator (stride-aware, correct for views)
+    /**
    * @brief Forward iterator visiting array elements in logical (C) order.
    *
    * Iterates over the logical (row-major) element order, correctly
@@ -328,11 +325,8 @@ namespace np
     bool done_;
   };
 
-  // ---------------------------------------------------------------------
-  // ndarray
-  // ---------------------------------------------------------------------
-
-  /**
+    // ndarray
+    /**
    * @brief A NumPy-style multidimensional array container.
    *
    * Stores elements in a shared `std::vector<T>` buffer, enabling
@@ -370,11 +364,8 @@ namespace np
     matrix::Order order = matrix::Order::C; ///< Memory layout
     std::size_t offset = 0;                 ///< Element offset into storage (views)
 
-    // ----------------------------------------------------------------
-    // Construction
-    // ----------------------------------------------------------------
-
-    /**
+        // Construction
+        /**
      * @brief Default constructor: empty 0-dimensional array.
      */
     ndarray() = default;
@@ -444,11 +435,8 @@ namespace np
     /** @brief Move assignment: transfers storage in O(1). */
     ndarray& operator=(ndarray&&) noexcept = default;
 
-    // ----------------------------------------------------------------
-    // Attributes
-    // ----------------------------------------------------------------
-
-    /**
+        // Attributes
+        /**
      * @brief Total number of elements.
      * @return `product(shape)`.
      * @complexity O(ndim).
@@ -540,11 +528,8 @@ namespace np
      */
     [[nodiscard]] std::size_t _flat_logical(std::size_t i) const noexcept;
 
-    // ----------------------------------------------------------------
-    // Iterators
-    // ----------------------------------------------------------------
-
-    /**
+        // Iterators
+        /**
      * @brief Returns a mutable iterator to the first element.
      * @return Iterator pointing to the first logical element.
      */
@@ -580,11 +565,8 @@ namespace np
       return end();
     }
 
-    // ----------------------------------------------------------------
-    // Element access
-    // ----------------------------------------------------------------
-
-    /**
+        // Element access
+        /**
      * @brief Chained subscript access (read/write).
      *
      * Each call reduces one dimension; e.g. `a[i][j]` for a 2-D
@@ -754,11 +736,8 @@ namespace np
      */
     explicit operator std::complex<double>() const;
 
-    // ----------------------------------------------------------------
-    // Reductions
-    // ----------------------------------------------------------------
-
-    /**
+        // Reductions
+        /**
      * @brief Sum over all elements.
      * @return Sum of all elements. For `bool` arrays the return type
      *         is `std::int64_t` (NumPy semantics).
@@ -1033,11 +1012,8 @@ namespace np
     auto cumprod(int axis) const
         -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
 
-    // ----------------------------------------------------------------
-    // Sorting / searching
-    // ----------------------------------------------------------------
-
-    /**
+        // Sorting / searching
+        /**
      * @brief In-place sort along an axis (default: last axis).
      * @param axis Axis along which to sort. Negative indices
      *        count from the last axis.
@@ -1099,11 +1075,8 @@ namespace np
      */
     auto searchsorted(const ndarray<int>& values) const -> ndarray<std::size_t>;
 
-    // ----------------------------------------------------------------
-    // Shape manipulation
-    // ----------------------------------------------------------------
-
-    /**
+        // Shape manipulation
+        /**
      * @brief View (when contiguous) or copy with a new shape.
      *
      * If the array is C-contiguous, returns a view sharing
@@ -1186,11 +1159,8 @@ namespace np
      */
     void resize(const std::vector<int>& new_shape);
 
-    // ----------------------------------------------------------------
-    // Manipulation
-    // ----------------------------------------------------------------
-
-    /**
+        // Manipulation
+        /**
      * @brief Fill every element with a value.
      * @param value Value to fill with.
      * @complexity O(n).
@@ -1323,11 +1293,8 @@ namespace np
      */
     void byteswap();
 
-    // ----------------------------------------------------------------
-    // Selection / manipulation (numpy.ndarray.choose / compress / ...)
-    // ----------------------------------------------------------------
-
-    /**
+        // Selection / manipulation (numpy.ndarray.choose / compress / ...)
+        /**
      * @brief Element-wise absolute value.
      * @return New array with absolute values.
      * @complexity O(n).
@@ -1561,11 +1528,8 @@ namespace np
     template <typename U>
     auto pow(const U& scalar) const -> ndarray<std::common_type_t<T, U>>;
 
-    // ----------------------------------------------------------------
-    // Conversions / IO
-    // ----------------------------------------------------------------
-
-    /**
+        // Conversions / IO
+        /**
      * @brief Flat logical elements as a std::vector.
      * @return Vector of all logical elements in C order.
      * @complexity O(n).
@@ -1601,11 +1565,8 @@ namespace np
      */
     void print(std::ostream& os = std::cout) const;
 
-    // ----------------------------------------------------------------
-    // Element-wise arithmetic (broadcasting)
-    // ----------------------------------------------------------------
-
-    /**
+        // Element-wise arithmetic (broadcasting)
+        /**
      * @brief Element-wise addition with another array.
      * @tparam U Right-hand operand element type.
      * @param rhs Right-hand operand.
@@ -2257,11 +2218,8 @@ namespace np
     }
 
   private:
-    // -----------------------------------------------------------------
-    // Internals
-    // -----------------------------------------------------------------
-
-    template <typename U>
+        // Internals
+        template <typename U>
     friend class ndarray;
 
     std::shared_ptr<std::vector<T>> data_; ///< Shared storage (enables views)
@@ -2503,11 +2461,8 @@ namespace np
         -> ndarray<std::common_type_t<T, U>>;
   } // namespace linalg
 
-  // ----------------------------------------------------------------
-  // Broadcasting helpers
-  // ----------------------------------------------------------------
-
-  namespace detail
+    // Broadcasting helpers
+    namespace detail
   {
 
     /**
@@ -2647,11 +2602,8 @@ namespace np
 
   } // namespace detail
 
-  // ----------------------------------------------------------------
-  // Implementation
-  // ----------------------------------------------------------------
-
-  template <typename T>
+    // Implementation
+    template <typename T>
   ndarray<T>::ndarray(const std::vector<int>& shape, np::dtype type, const T& fill)
       : shape(shape), type(type),
         data_(std::make_shared<std::vector<T>>(_checked_numel(shape), fill))
@@ -2747,11 +2699,8 @@ namespace np
   {
   }
 
-  // ---------------------------------------------------------------------
-  // Attributes
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Attributes
+    template <typename T>
   auto ndarray<T>::size() const noexcept -> std::size_t
   {
     return _numel();
@@ -2826,11 +2775,8 @@ namespace np
     return *data_;
   }
 
-  // ---------------------------------------------------------------------
-  // Iterators
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Iterators
+    template <typename T>
   auto ndarray<T>::_raw_ptr() noexcept -> T*
   {
     return data_ ? data_->data() + offset : nullptr;
@@ -2866,11 +2812,8 @@ namespace np
     return const_iterator(_raw_ptr(), _shape_u(), strides, true);
   }
 
-  // ---------------------------------------------------------------------
-  // Element access
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Element access
+    template <typename T>
   auto ndarray<T>::operator[](std::size_t index) -> Proxy<T>
   {
     detail::IndexStack<> idx;
@@ -3078,11 +3021,8 @@ namespace np
     return (*data_)[offset + i * strides[0] + j * strides[1]];
   }
 
-  // ---------------------------------------------------------------------
-  // Internals
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Internals
+    template <typename T>
   void ndarray<T>::_validate_shape(const std::vector<int>& s)
   {
     for (int d : s)
@@ -3242,11 +3182,8 @@ namespace np
     order = matrix::Order::C;
   }
 
-  // ---------------------------------------------------------------------
-  // Reductions
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Reductions
+    template <typename T>
   template <typename Acc, typename StepFn>
   auto ndarray<T>::_reduce_axis(
       int axis, bool keepdims, std::optional<Acc> seed, StepFn&& step) const
@@ -3780,11 +3717,8 @@ namespace np
     return _cum_axis<Acc>(axis, [](Acc& acc, const T& v) { return acc * v; });
   }
 
-  // ---------------------------------------------------------------------
-  // Sorting / searching
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Sorting / searching
+    template <typename T>
   void ndarray<T>::sort(int axis)
   {
     axis = _normalize_axis(axis);
@@ -3961,11 +3895,8 @@ namespace np
     return out;
   }
 
-  // ---------------------------------------------------------------------
-  // Shape manipulation
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Shape manipulation
+    template <typename T>
   auto ndarray<T>::reshape(const std::vector<int>& new_shape) const -> ndarray
   {
     std::vector<int> resolved = new_shape;
@@ -4171,11 +4102,8 @@ namespace np
     type = type;
   }
 
-  // ---------------------------------------------------------------------
-  // Manipulation
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Manipulation
+    template <typename T>
   void ndarray<T>::fill(const T& value)
   {
     if (!data_)
@@ -4500,11 +4428,8 @@ namespace np
         });
   }
 
-  // ---------------------------------------------------------------------
-  // Selection / manipulation
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Selection / manipulation
+    template <typename T>
   auto ndarray<T>::abs() const -> ndarray
   {
     ndarray out(shape, type);
@@ -4850,11 +4775,8 @@ namespace np
         scalar, [](const T& a, const U& b) { return detail::power_elem(a, b); });
   }
 
-  // ---------------------------------------------------------------------
-  // Conversions
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Conversions
+    template <typename T>
   ndarray<T>::operator bool() const
   {
     if (_numel() != 1)
@@ -4894,11 +4816,8 @@ namespace np
     return std::complex<double>(item());
   }
 
-  // ---------------------------------------------------------------------
-  // Element-wise operators
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Element-wise operators
+    template <typename T>
   auto ndarray<T>::operator+() const -> ndarray
   {
     return *this;
@@ -5151,11 +5070,8 @@ namespace np
     return *this;
   }
 
-  // ---------------------------------------------------------------------
-  // Conversions / IO
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Conversions / IO
+    template <typename T>
   auto ndarray<T>::tolist() const -> std::vector<T>
   {
     return std::vector<T>(begin(), end());
@@ -5253,11 +5169,8 @@ namespace np
     os << ", dtype=" << dtype_name(type) << ")";
   }
 
-  // ---------------------------------------------------------------------
-  // Element-wise arithmetic
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // Element-wise arithmetic
+    template <typename T>
   template <typename U>
   auto ndarray<T>::operator+(const ndarray<U>& rhs) const
       -> ndarray<std::common_type_t<T, U>>

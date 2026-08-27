@@ -25,11 +25,8 @@
 namespace np
 {
 
-  // ----------------------------------------------------------------
-  // Internal helpers
-  // ----------------------------------------------------------------
-
-  namespace detail
+    // Internal helpers
+    namespace detail
   {
 
     /** @brief Advance an odometer-style multi-index through `shape`.
@@ -83,12 +80,9 @@ namespace np
 
   } // namespace detail
 
-  // ----------------------------------------------------------------
-  // Concatenate
+    // Concatenate
   // Reference: numpy-reference/reference/generated/numpy.concatenate.html
-  // ----------------------------------------------------------------
-
-  /** @brief Join a sequence of arrays along an existing axis.
+    /** @brief Join a sequence of arrays along an existing axis.
    *
    * All arrays must have the same shape except in the
    * concatenation axis. The output shape matches the input
@@ -178,12 +172,9 @@ namespace np
     return result;
   }
 
-  // ----------------------------------------------------------------
-  // Stack
+    // Stack
   // Reference: numpy-reference/reference/generated/numpy.stack.html
-  // ----------------------------------------------------------------
-
-  /** @brief Join a sequence of arrays along a new axis.
+    /** @brief Join a sequence of arrays along a new axis.
    *
    * All arrays must have the same shape. The output has one
    * additional dimension compared to the inputs.
@@ -263,12 +254,9 @@ namespace np
     return result;
   }
 
-  // ----------------------------------------------------------------
-  // Convenience stacking functions
+    // Convenience stacking functions
   // Reference: numpy-reference/reference/generated/numpy.vstack.html (etc.)
-  // ----------------------------------------------------------------
-
-  /** @brief Stack arrays vertically (row-wise).
+    /** @brief Stack arrays vertically (row-wise).
    *
    * Equivalent to concatenate(arrays, axis=0) for 2D+ arrays.
    * For 1D arrays, stacks them as rows into a 2D array.

@@ -606,11 +606,8 @@ namespace np
     }
   }
 
-  // ---------------------------------------------------------------------
-  // NPZ (zip of .npy) – savez / savez_compressed / load_npz
-  // ---------------------------------------------------------------------
-
-  template <typename T>
+    // NPZ (zip of .npy) – savez / savez_compressed / load_npz
+    template <typename T>
   std::string npy_bytes_for_array(const ndarray<T>& arr)
   {
     std::string descr = detail::dtype_descr<T>();
