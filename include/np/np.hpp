@@ -24,6 +24,7 @@
 #include "ndarray_fixed.hpp"
 #include "sorting.hpp"
 #include "statistics.hpp"
+#include "io.hpp"
 // Note: random.hpp and concatenate.hpp are not included by default.
 // Include them explicitly if needed to avoid template conflicts.
 
