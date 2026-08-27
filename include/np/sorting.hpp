@@ -52,6 +52,7 @@ namespace np
       if (k.size() != n)
         throw std::invalid_argument("lexsort: keys length mismatch");
     }
+
     std::vector<std::size_t> idx(n);
     std::iota(idx.begin(), idx.end(), 0);
     std::stable_sort(
@@ -144,6 +145,7 @@ namespace np
     std::size_t N = nz[0].size();
     std::size_t nd = arr.ndim();
     ndarray<std::size_t> out(std::vector<int>{static_cast<int>(N), static_cast<int>(nd)});
+
     for (std::size_t i = 0; i < N; ++i)
     {
       for (std::size_t d = 0; d < nd; ++d)
@@ -166,14 +168,18 @@ namespace np
   {
     std::vector<std::size_t> idx;
     std::size_t flat = 0;
+
     for (auto it = arr.begin(); it != arr.end(); ++it, ++flat)
     {
       if (static_cast<bool>(*it))
         idx.push_back(flat);
     }
+
     ndarray<std::size_t> out(std::vector<int>{static_cast<int>(idx.size())});
+
     for (std::size_t i = 0; i < idx.size(); ++i)
       out.data()[i] = idx[i];
+
     return out;
   }
 
@@ -202,13 +208,15 @@ namespace np
   NP_NODISCARD auto count_nonzero(const ndarray<T>& arr, int axis) -> ndarray<std::size_t>
   {
     axis = static_cast<int>(arr.ndim()) > 0
-        ? [&]
+        ? [&](void)
     {
       int a = axis;
       if (a < 0)
         a += static_cast<int>(arr.ndim());
+
       if (a < 0 || a >= static_cast<int>(arr.ndim()))
         throw AxisError("count_nonzero: axis out of bounds");
+
       return a;
     }()
         : throw std::invalid_argument("count_nonzero: 0-d array has no axis");
@@ -217,6 +225,7 @@ namespace np
     out_shape.erase(out_shape.begin() + axis);
     ndarray<std::size_t> out(out_shape);
     std::fill(out.data().begin(), out.data().end(), 0);
+
     // Iterate over all elements and increment output bin
     detail::Odometer od(arr.shape);
     while (!od.done())
@@ -226,15 +235,18 @@ namespace np
       {
         std::vector<std::size_t> oidx;
         oidx.reserve(out_shape.size());
+
         for (std::size_t d = 0; d < idx.size(); ++d)
           if (static_cast<int>(d) != axis)
             oidx.push_back(idx[d]);
+
         // compute flat offset into out
         std::size_t flat = 0;
         for (std::size_t d = 0; d < oidx.size(); ++d)
         {
           flat = flat * static_cast<std::size_t>(out.shape[d]) + oidx[d];
         }
+
         // Need strides-aware offset, but out is contiguous so flat works
         // For views, use set
         if (oidx.empty())
@@ -264,8 +276,8 @@ namespace np
     return out;
   }
 
-    // Free wrappers mirroring NumPy API
-    /** @brief Sorted copy (np.sort). */
+  // Free wrappers mirroring NumPy API
+  /** @brief Sorted copy (np.sort). */
   NP_API template <typename T>
   NP_NODISCARD auto sort(const ndarray<T>& a, int axis = -1) -> ndarray<T>
   {

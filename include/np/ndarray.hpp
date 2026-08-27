@@ -231,7 +231,7 @@ namespace np
      * @brief Dereference: returns the element at the current logical position.
      * @return Reference to the element.
      */
-    [[nodiscard]] reference operator*() const
+    NP_NODISCARD reference operator*() const
     {
       return base_[detail::flat_index(idx_, strides_, 0)];
     }
@@ -240,7 +240,7 @@ namespace np
      * @brief Member access: returns a pointer to the current element.
      * @return Pointer to the element.
      */
-    [[nodiscard]] pointer operator->() const
+    NP_NODISCARD pointer operator->() const
     {
       return &base_[detail::flat_index(idx_, strides_, 0)];
     }
@@ -273,7 +273,7 @@ namespace np
      * @param o Other iterator.
      * @return true if both iterators refer to the same position.
      */
-    [[nodiscard]] bool operator==(const ndarray_iterator& o) const noexcept
+    NP_NODISCARD bool operator==(const ndarray_iterator& o) const noexcept
     {
       if (base_ != o.base_ || done_ != o.done_)
       {
@@ -287,7 +287,7 @@ namespace np
      * @param o Other iterator.
      * @return true if the iterators refer to different positions.
      */
-    [[nodiscard]] bool operator!=(const ndarray_iterator& o) const noexcept
+    NP_NODISCARD bool operator!=(const ndarray_iterator& o) const noexcept
     {
       return !(*this == o);
     }
@@ -441,35 +441,35 @@ namespace np
      * @return `product(shape)`.
      * @complexity O(ndim).
      */
-    [[nodiscard]] std::size_t size() const noexcept;
+    NP_NODISCARD std::size_t size() const noexcept;
 
     /**
      * @brief Number of dimensions.
      * @return `shape.size()`.
      * @complexity O(1).
      */
-    [[nodiscard]] std::size_t ndim() const noexcept;
+    NP_NODISCARD std::size_t ndim() const noexcept;
 
     /**
      * @brief Bytes per element.
      * @return `sizeof(T)`.
      * @complexity O(1).
      */
-    [[nodiscard]] std::size_t itemsize() const noexcept;
+    NP_NODISCARD std::size_t itemsize() const noexcept;
 
     /**
      * @brief Total bytes consumed by the logical elements.
      * @return `size() * sizeof(T)`.
      * @complexity O(1).
      */
-    [[nodiscard]] std::size_t nbytes() const noexcept;
+    NP_NODISCARD std::size_t nbytes() const noexcept;
 
     /**
      * @brief True if the array has no elements.
      * @return `size() == 0`.
      * @complexity O(1).
      */
-    [[nodiscard]] bool empty() const noexcept;
+    NP_NODISCARD bool empty() const noexcept;
 
     /**
      * @brief True when the logical elements are laid out contiguously
@@ -478,7 +478,7 @@ namespace np
      *         `offset == 0`.
      * @complexity O(ndim).
      */
-    [[nodiscard]] bool is_contiguous() const noexcept;
+    NP_NODISCARD bool is_contiguous() const noexcept;
 
     /**
      * @brief True when the logical elements are laid out
@@ -487,7 +487,7 @@ namespace np
      *         `offset == 0`.
      * @complexity O(ndim).
      */
-    [[nodiscard]] bool is_f_contiguous() const noexcept;
+    NP_NODISCARD bool is_f_contiguous() const noexcept;
 
     /**
      * @brief Writable access to the underlying storage buffer.
@@ -502,14 +502,14 @@ namespace np
      * @return Const reference to the internal `std::vector<T>`.
      * @throws std::runtime_error if the array has no data buffer.
      */
-    [[nodiscard]] const std::vector<T>& data() const;
+    NP_NODISCARD const std::vector<T>& data() const;
 
     /**
      * @brief Product of the shape (total element count).
      * @return `size()`.
      * @complexity O(ndim).
      */
-    [[nodiscard]] std::size_t _numel() const noexcept;
+    NP_NODISCARD std::size_t _numel() const noexcept;
 
     /**
      * @brief Flat logical offset of a multi-index.
@@ -518,7 +518,7 @@ namespace np
      *         strides and `offset`).
      * @complexity O(ndim).
      */
-    [[nodiscard]] std::size_t _flat(const std::vector<std::size_t>& idx) const noexcept;
+    NP_NODISCARD std::size_t _flat(const std::vector<std::size_t>& idx) const noexcept;
 
     /**
      * @brief Physical storage offset of flat logical position `i`.
@@ -526,7 +526,7 @@ namespace np
      * @return Physical offset into the storage buffer.
      * @complexity O(ndim).
      */
-    [[nodiscard]] std::size_t _flat_logical(std::size_t i) const noexcept;
+    NP_NODISCARD std::size_t _flat_logical(std::size_t i) const noexcept;
 
         // Iterators
         /**
@@ -565,8 +565,8 @@ namespace np
       return end();
     }
 
-        // Element access
-        /**
+    // Element access
+    /**
      * @brief Chained subscript access (read/write).
      *
      * Each call reduces one dimension; e.g. `a[i][j]` for a 2-D
@@ -736,8 +736,8 @@ namespace np
      */
     explicit operator std::complex<double>() const;
 
-        // Reductions
-        /**
+    // Reductions
+    /**
      * @brief Sum over all elements.
      * @return Sum of all elements. For `bool` arrays the return type
      *         is `std::int64_t` (NumPy semantics).
@@ -1012,8 +1012,8 @@ namespace np
     auto cumprod(int axis) const
         -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
 
-        // Sorting / searching
-        /**
+    // Sorting / searching
+    /**
      * @brief In-place sort along an axis (default: last axis).
      * @param axis Axis along which to sort. Negative indices
      *        count from the last axis.
@@ -1075,8 +1075,8 @@ namespace np
      */
     auto searchsorted(const ndarray<int>& values) const -> ndarray<std::size_t>;
 
-        // Shape manipulation
-        /**
+    // Shape manipulation
+    /**
      * @brief View (when contiguous) or copy with a new shape.
      *
      * If the array is C-contiguous, returns a view sharing
@@ -1159,8 +1159,8 @@ namespace np
      */
     void resize(const std::vector<int>& new_shape);
 
-        // Manipulation
-        /**
+    // Manipulation
+    /**
      * @brief Fill every element with a value.
      * @param value Value to fill with.
      * @complexity O(n).
@@ -1293,8 +1293,8 @@ namespace np
      */
     void byteswap();
 
-        // Selection / manipulation (numpy.ndarray.choose / compress / ...)
-        /**
+    // Selection / manipulation (numpy.ndarray.choose / compress / ...)
+    /**
      * @brief Element-wise absolute value.
      * @return New array with absolute values.
      * @complexity O(n).
@@ -1421,7 +1421,7 @@ namespace np
      * @brief Current WRITEABLE flag.
      * @return true if the array is writable.
      */
-    [[nodiscard]] bool writeable() const noexcept;
+    NP_NODISCARD bool writeable() const noexcept;
 
     /**
      * @brief Base storage pointer when the array borrows memory
@@ -1430,20 +1430,20 @@ namespace np
      * @return Raw pointer to the parent's data buffer, or
      *         nullptr if this array owns its data.
      */
-    [[nodiscard]] const void* base() const noexcept;
+    NP_NODISCARD const void* base() const noexcept;
 
     /**
      * @brief True when the array owns its own data buffer.
      * @return true if `data_` is owned exclusively.
      */
-    [[nodiscard]] bool owns_data() const noexcept;
+    NP_NODISCARD bool owns_data() const noexcept;
 
     /**
      * @brief True when the array shares storage with a parent
      *        view.
      * @return true if this is a view.
      */
-    [[nodiscard]] bool is_view() const noexcept;
+    NP_NODISCARD bool is_view() const noexcept;
 
     /**
      * @brief 1-D view of the logical elements (numpy.ndarray.flat).
@@ -1456,7 +1456,7 @@ namespace np
      * @return `shape[0]`.
      * @throws std::invalid_argument if the array is 0-D.
      */
-    [[nodiscard]] std::size_t len() const;
+    NP_NODISCARD std::size_t len() const;
 
     /**
      * @brief True when any element equals `value` (numpy `in`).
@@ -1464,7 +1464,7 @@ namespace np
      * @return true if `value` is found.
      * @complexity O(n).
      */
-    [[nodiscard]] bool contains(const T& value) const;
+    NP_NODISCARD bool contains(const T& value) const;
 
     /**
      * @brief Element-wise floor division (numpy `//`).
@@ -2253,7 +2253,7 @@ namespace np
      * @return Stride vector in elements for C-order layout.
      * @complexity O(ndim).
      */
-    [[nodiscard]] static std::vector<std::size_t>
+    NP_NODISCARD static std::vector<std::size_t>
     _c_strides(const std::vector<int>& shape) noexcept;
 
     /**
@@ -2274,14 +2274,14 @@ namespace np
      * @return `product(s)`.
      * @throws std::invalid_argument if any dimension is negative.
      */
-    [[nodiscard]] static std::size_t _checked_numel(const std::vector<int>& s);
+    NP_NODISCARD static std::size_t _checked_numel(const std::vector<int>& s);
 
     /**
      * @brief shape as std::size_t vector.
      * @return Shape converted to `std::size_t`.
      * @complexity O(ndim).
      */
-    [[nodiscard]] std::vector<std::size_t> _shape_u() const noexcept;
+    NP_NODISCARD std::vector<std::size_t> _shape_u() const noexcept;
 
     /**
      * @brief Normalize a possibly negative axis.
@@ -2290,7 +2290,7 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(1).
      */
-    [[nodiscard]] int _normalize_axis(int axis) const;
+    NP_NODISCARD int _normalize_axis(int axis) const;
 
     /**
      * @brief Visit every logical element.
@@ -2477,7 +2477,7 @@ namespace np
      *         broadcast together.
      * @complexity O(max(a.size(), b.size())).
      */
-    [[nodiscard]] inline std::vector<int>
+    NP_NODISCARD inline std::vector<int>
     broadcast_shapes(const std::vector<int>& a, const std::vector<int>& b)
     {
       const int na = static_cast<int>(a.size());
@@ -2580,7 +2580,7 @@ namespace np
      * @complexity O(out_shape.size()).
      */
     template <typename R>
-    [[nodiscard]] inline std::size_t broadcast_offset(
+    NP_NODISCARD inline std::size_t broadcast_offset(
         const ndarray<R>& a,
         const std::vector<int>& out_shape,
         const std::vector<std::size_t>& idx)
