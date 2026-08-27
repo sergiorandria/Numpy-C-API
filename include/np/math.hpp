@@ -2174,6 +2174,161 @@ NP_NODISCARD auto signbit(const ndarray<T> &x) -> ndarray<bool> {
   return out;
 }
 
+/** @brief Modf – fractional and integral parts (np.modf). */
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto modf(const ndarray<T> &x)
+    -> std::pair<ndarray<T>, ndarray<T>> {
+  ndarray<T> frac(x.shape), integ(x.shape);
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    T v = x.data()[x._flat_logical(i)];
+    T iv;
+    T fv = std::modf(v, &iv);
+    frac.data()[frac._flat_logical(i)] = fv;
+    integ.data()[integ._flat_logical(i)] = iv;
+  }
+  return {frac, integ};
+}
+
+/** @brief Frexp – mantissa and exponent (np.frexp). */
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto frexp(const ndarray<T> &x)
+    -> std::pair<ndarray<T>, ndarray<int>> {
+  ndarray<T> mant(x.shape);
+  ndarray<int> exp(x.shape);
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    T v = x.data()[x._flat_logical(i)];
+    int e;
+    T m = std::frexp(v, &e);
+    mant.data()[mant._flat_logical(i)] = m;
+    exp.data()[exp._flat_logical(i)] = e;
+  }
+  return {mant, exp};
+}
+
+/** @brief Ldexp – x1 * 2**x2 (np.ldexp). */
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto ldexp(const ndarray<T> &x1, const ndarray<int> &x2)
+    -> ndarray<T> {
+  return detail::elementwise(x1, x2, [](const T &a, const int &b) -> T { return std::ldexp(a, b); });
+}
+
+/** @brief Discrete difference (np.diff) – n-th order along axis. */
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto diff(const ndarray<T> &a, std::size_t n = 1, int axis = -1) -> ndarray<T> {
+  if (n == 0) return a.copy();
+  if (a.ndim() == 0) throw std::invalid_argument("diff: 0-d array");
+  int ax = axis == -1 ? static_cast<int>(a.ndim() - 1) : axis;
+  if (ax < 0) ax += static_cast<int>(a.ndim());
+  if (ax < 0 || ax >= static_cast<int>(a.ndim())) throw std::invalid_argument("diff: axis out of range");
+  ndarray<T> cur = a;
+  for (std::size_t iter = 0; iter < n; ++iter) {
+    if (cur.shape[ax] <= 1) return ndarray<T>(std::vector<int>{0});
+    std::vector<int> out_shape = cur.shape;
+    out_shape[ax] -= 1;
+    ndarray<T> nxt(out_shape);
+    detail::Odometer od(out_shape);
+    while (!od.done()) {
+      const auto &idx = od.idx();
+      std::vector<std::size_t> idx0(idx.size()), idx1(idx.size());
+      for (std::size_t d = 0; d < idx.size(); ++d) { idx0[d] = idx[d]; idx1[d] = idx[d]; }
+      idx1[static_cast<std::size_t>(ax)] += 1;
+      nxt.set(idx, cur.get(idx1) - cur.get(idx0));
+      od.advance();
+    }
+    cur = std::move(nxt);
+  }
+  return cur;
+}
+
+/** @brief Gradient – central differences, 1-D only (np.gradient). */
+NP_API template <detail::FloatingPoint T>
+NP_NODISCARD auto gradient(const ndarray<T> &f, T dx = T{1}) -> ndarray<T> {
+  if (f.ndim() != 1) throw std::invalid_argument("gradient: only 1-D supported");
+  std::size_t n = f.size();
+  if (n == 0) return ndarray<T>(std::vector<int>{0});
+  if (n == 1) {
+    ndarray<T> out(std::vector<int>{1});
+    out.data()[0] = T{0};
+    return out;
+  }
+  ndarray<T> out(f.shape);
+  // edges: forward/backward
+  out.data()[out._flat_logical(0)] = (f.data()[f._flat_logical(1)] - f.data()[f._flat_logical(0)]) / dx;
+  out.data()[out._flat_logical(n-1)] = (f.data()[f._flat_logical(n-1)] - f.data()[f._flat_logical(n-2)]) / dx;
+  for (std::size_t i = 1; i + 1 < n; ++i) {
+    out.data()[out._flat_logical(i)] = (f.data()[f._flat_logical(i+1)] - f.data()[f._flat_logical(i-1)]) / (T{2} * dx);
+  }
+  return out;
+}
+
+/** @brief Trapezoidal integration (np.trapz) – 1-D scalar. */
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto trapz(const ndarray<T> &y, T dx = T{1}) -> std::conditional_t<(std::is_same_v<T,bool>), double, T> {
+  using R = std::conditional_t<std::is_same_v<T,bool>, double, T>;
+  if (y.ndim() != 1) throw std::invalid_argument("trapz: only 1-D supported in this overload, use trapz(y,dx,axis) for ND");
+  if (y.size() < 2) return R{0};
+  R sum = R{0};
+  for (std::size_t i = 0; i + 1 < y.size(); ++i) {
+    R y0 = static_cast<R>(y.data()[y._flat_logical(i)]);
+    R y1 = static_cast<R>(y.data()[y._flat_logical(i+1)]);
+    sum += (y0 + y1) * static_cast<R>(dx) / R{2};
+  }
+  return sum;
+}
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto trapz(const ndarray<T> &y, T dx, int axis) -> ndarray<std::conditional_t<std::is_same_v<T,bool>, double, T>> {
+  using R = std::conditional_t<std::is_same_v<T,bool>, double, T>;
+  if (y.ndim() == 0) throw std::invalid_argument("trapz: 0-d");
+  int ax = axis;
+  if (ax < 0) ax += static_cast<int>(y.ndim());
+  if (ax < 0 || ax >= static_cast<int>(y.ndim())) throw std::invalid_argument("trapz: axis out of range");
+  std::vector<int> out_shape = y.shape;
+  out_shape.erase(out_shape.begin()+ax);
+  ndarray<R> out(out_shape);
+  std::fill(out.data().begin(), out.data().end(), R{0});
+  detail::Odometer od(out_shape);
+  std::vector<std::size_t> full(y.ndim(), 0);
+  while (!od.done()) {
+    const auto &red = od.idx();
+    for (std::size_t d=0, r=0; d<y.ndim(); ++d) if (static_cast<int>(d)!=ax) full[d]= red[r++]; else full[d]=0;
+    R acc = R{0};
+    std::size_t alen = static_cast<std::size_t>(y.shape[ax]);
+    for (std::size_t k=0;k+1<alen;++k){
+      full[static_cast<std::size_t>(ax)]=k;
+      R y0 = static_cast<R>(y.get(full));
+      full[static_cast<std::size_t>(ax)]=k+1;
+      R y1 = static_cast<R>(y.get(full));
+      acc += (y0 + y1) * static_cast<R>(dx) / R{2};
+    }
+    std::size_t flat = 0; std::size_t stride=1;
+    for (int d = static_cast<int>(out_shape.size())-1; d>=0; --d){ flat += red[static_cast<std::size_t>(d)]*stride; stride*= static_cast<std::size_t>(out_shape[static_cast<std::size_t>(d)]); }
+    if (out_shape.empty()) out.data()[0]=acc;
+    else out.data()[flat]=acc;
+    od.advance();
+  }
+  return out;
+}
+NP_API template <detail::Numeric T>
+NP_NODISCARD auto trapz(const ndarray<T> &y, const ndarray<T> &x, int axis = -1) -> std::conditional_t<(std::is_same_v<T,bool>), double, T> {
+  // x is coordinates, size must match y.shape[axis]
+  using R = std::conditional_t<std::is_same_v<T,bool>, double, T>;
+  if (x.ndim()!=1) throw std::invalid_argument("trapz: x must be 1-D");
+  int ax = axis==-1? static_cast<int>(y.ndim()-1): axis;
+  if (ax<0) ax+= static_cast<int>(y.ndim());
+  if (static_cast<std::size_t>(x.size()) != static_cast<std::size_t>(y.shape[ax])) throw std::invalid_argument("trapz: x size mismatch");
+  if (y.ndim()==1){
+    if (y.size()<2) return R{0};
+    R sum=R{0};
+    for(std::size_t i=0;i+1<y.size();++i){
+      R y0= static_cast<R>(y.data()[y._flat_logical(i)]);
+      R y1= static_cast<R>(y.data()[y._flat_logical(i+1)]);
+      R dx= static_cast<R>(x.data()[x._flat_logical(i+1)] - x.data()[x._flat_logical(i)]);
+      sum+= (y0+y1)*dx/R{2};
+    }
+    return sum;
+  }
+  throw std::invalid_argument("trapz: ND with x not yet implemented (use dx version)");
+}
 } // namespace np
 
 #endif // NP_MATH_HPP
