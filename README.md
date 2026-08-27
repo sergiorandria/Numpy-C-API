@@ -315,13 +315,13 @@ Numpy-C-API/
 
 ## Implementation Status
 
-Current implementation covers approximately **78%** of the core NumPy API:
+Current implementation covers approximately **82%** of the core NumPy API:
 
 **Completed:**
 - Array creation and manipulation (70%)
 - Mathematical functions (80%)
-- Logic functions (98%)
-- Statistical functions (95%)
+- Logic functions (100%)
+- Statistical functions (100%)
 - Linear algebra basics (75%)
 - Sorting and searching (80%)
 - Random number generation (100%)
