@@ -639,6 +639,37 @@ NP_NODISCARD auto nanstd(const ndarray<T> &arr) ->
   return static_cast<R>(std::sqrt(static_cast<long double>(nanvar(arr))));
 }
 
+/** @brief Variance along an axis, ignoring NaN (population). */
+NP_API template <typename T>
+NP_NODISCARD auto nanvar(const ndarray<T> &arr, int axis)
+    -> ndarray<typename np::_mean_type<T>::type> {
+  using R = typename np::_mean_type<T>::type;
+  return detail::stat_axis_map<R>(arr, axis, [](const std::vector<T> &slice) -> R {
+    long double sum = 0;
+    std::size_t n = 0;
+    for (auto &v : slice) if (!detail::is_nan_elem(v)) { sum += static_cast<long double>(v); ++n; }
+    if (n == 0) return static_cast<R>(std::numeric_limits<double>::quiet_NaN());
+    long double mean = sum / static_cast<long double>(n);
+    long double acc = 0;
+    for (auto &v : slice) if (!detail::is_nan_elem(v)) {
+      long double d = static_cast<long double>(v) - mean;
+      acc += d*d;
+    }
+    return static_cast<R>(acc / static_cast<long double>(n));
+  });
+}
+
+/** @brief Standard deviation along an axis, ignoring NaN. */
+NP_API template <typename T>
+NP_NODISCARD auto nanstd(const ndarray<T> &arr, int axis)
+    -> ndarray<typename np::_mean_type<T>::type> {
+  using R = typename np::_mean_type<T>::type;
+  auto v = nanvar(arr, axis);
+  ndarray<R> out(v.shape);
+  for (std::size_t i = 0; i < v.size(); ++i) out.data()[i] = static_cast<R>(std::sqrt(static_cast<long double>(v.data()[i])));
+  return out;
+}
+
 /**
  * @brief Median of all elements, ignoring NaN.
  *

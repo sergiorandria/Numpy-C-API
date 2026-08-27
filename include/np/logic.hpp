@@ -179,6 +179,15 @@ NP_API template <typename T> constexpr bool isscalar([[maybe_unused]] const T &x
   return std::is_arithmetic_v<T> || detail::is_complex_v<T>;
 }
 
+/** @brief True if array is Fortran contiguous.
+ *
+ * Wraps ndarray::is_f_contiguous(). Mirrors np.isfortran.
+ */
+NP_API template <typename T>
+NP_NODISCARD bool isfortran(const ndarray<T> &a) {
+  return a.is_f_contiguous();
+}
+
 // =================================================================
 // Logical operations
 // Reference: numpy-reference/reference/generated/numpy.logical_and.html (etc.)
