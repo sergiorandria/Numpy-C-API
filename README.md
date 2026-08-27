@@ -315,10 +315,10 @@ Numpy-C-API/
 
 ## Implementation Status
 
-Current implementation covers approximately **97%** of the core NumPy API:
+Current implementation covers approximately **98%** of the core NumPy API:
 
 **Completed:**
-- Array creation and manipulation (90%)
+- Array creation and manipulation (95%)
 - Mathematical functions (100%)
 - Logic functions (100%)
 - Statistical functions (100%)
@@ -344,7 +344,7 @@ See the internal tracking documents for detailed status.
 
 - **Function names**: `snake_case` (matches NumPy)
 - **Type names**: `PascalCase`
-- **Indentation**: 4 spaces
+- **Indentation**: 2 spaces (Allman braces)
 - **Include guards**: `#ifndef NP_<NAME>_HPP`
 - **Namespace**: All code in `namespace np`
 - **Documentation**: Doxygen comments with NumPy reference links
