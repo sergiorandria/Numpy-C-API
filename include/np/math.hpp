@@ -45,9 +45,9 @@ namespace np
   namespace detail
   {
 
-    // =================================================================
+    // ----------------------------------------------------------------
     // Type constraints
-    // =================================================================
+    // ----------------------------------------------------------------
 
     /** @brief Accepts arithmetic types and std::complex specializations. */
     template <typename T>
@@ -61,9 +61,9 @@ namespace np
     template <typename T>
     concept Arithmetic = std::is_arithmetic_v<T>;
 
-    // =================================================================
+    // ----------------------------------------------------------------
     // Element-wise helpers
-    // =================================================================
+    // ----------------------------------------------------------------
 
     /** @brief Apply unary function element-wise with broadcasting.
      *
@@ -317,10 +317,10 @@ namespace np
 
   } // namespace detail
 
-  // =================================================================
+  // ----------------------------------------------------------------
   // Trigonometric functions
   // Reference: numpy-reference/reference/generated/numpy.sin.html (etc.)
-  // =================================================================
+  // ----------------------------------------------------------------
 
   /** @brief Trigonometric sine, element-wise.
    *
@@ -607,10 +607,10 @@ namespace np
     return radians(x, out);
   }
 
-  // =================================================================
+  // ----------------------------------------------------------------
   // Hyperbolic functions
   // Reference: numpy-reference/reference/generated/numpy.sinh.html (etc.)
-  // =================================================================
+  // ----------------------------------------------------------------
 
   /** @brief Hyperbolic sine, element-wise.
    *
@@ -736,10 +736,10 @@ namespace np
     return detail::ufunc_unary_into(x, out, [](const T& v) { return std::atanh(v); });
   }
 
-  // =================================================================
+  // ----------------------------------------------------------------
   // Exponential and logarithmic functions
   // Reference: numpy-reference/reference/generated/numpy.exp.html (etc.)
-  // =================================================================
+  // ----------------------------------------------------------------
 
   /** @brief Calculate the exponential of all elements.
    *
@@ -1047,10 +1047,10 @@ namespace np
         });
   }
 
-  // =================================================================
+  // ----------------------------------------------------------------
   // Rounding functions
   // Reference: numpy-reference/reference/generated/numpy.floor.html (etc.)
-  // =================================================================
+  // ----------------------------------------------------------------
 
   /** @brief Return the floor of the input, element-wise.
    *
@@ -1225,10 +1225,10 @@ namespace np
     return round(x, decimals, out);
   }
 
-  // =================================================================
+  // ----------------------------------------------------------------
   // Arithmetic functions
   // Reference: numpy-reference/reference/generated/numpy.absolute.html (etc.)
-  // =================================================================
+  // ----------------------------------------------------------------
 
   /** @brief Calculate the absolute value element-wise.
    *
@@ -1949,10 +1949,10 @@ namespace np
         x1, x2, out, [](const T& a, const U& b) { return detail::floored_div(a, b); });
   }
 
-  // =================================================================
+  // ----------------------------------------------------------------
   // Miscellaneous
   // Reference: numpy-reference/reference/generated/numpy.clip.html (etc.)
-  // =================================================================
+  // ----------------------------------------------------------------
 
   /** @brief Clip values to [a_min, a_max].
    *
@@ -2097,10 +2097,10 @@ namespace np
         });
   }
 
-  // =================================================================
+  // ----------------------------------------------------------------
   // Additional math utilities (sinc, unwrap, angle, fix, ediff1d)
   // Reference: numpy-reference/reference/routines.math.html
-  // =================================================================
+  // ----------------------------------------------------------------
 
   /** @brief Sinc function: sin(pi*x)/(pi*x), with sinc(0)=1.
    *
@@ -2272,9 +2272,9 @@ namespace np
     return out;
   }
 
-  // =================================================================
+  // ----------------------------------------------------------------
   // Additional arithmetic / utility ufuncs
-  // =================================================================
+  // ----------------------------------------------------------------
 
   /** @brief Element-wise addition with broadcasting (np.add). */
   NP_API template <detail::Numeric T, detail::Numeric U>
