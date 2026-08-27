@@ -126,21 +126,22 @@ int main()
     test::check(translated.array().data()[0] == "Hello", "chararray: translate");
   }
 
-  /* Test split methods */
+  /* Test split methods – grouped per element */
   {
     auto arr = array(std::vector<std::string>{"hello world", "foo bar baz"});
     chararray ca(arr);
 
     auto splits = ca.split(" ");
-    test::check(splits.size() > 0, "chararray: split returns results");
+    test::check(splits.size() == 2, "chararray: split groups");
+    test::check(splits[0].size() == 2 && splits[1].size() == 3, "chararray: split per-element");
 
     auto rsplits = ca.rsplit(" ");
-    test::check(rsplits.size() > 0, "chararray: rsplit returns results");
+    test::check(rsplits.size() == 2, "chararray: rsplit groups");
 
     auto arr2 = array(std::vector<std::string>{"line1\nline2"});
     chararray ca2(arr2);
     auto lines = ca2.splitlines();
-    test::check(lines.size() == 2, "chararray: splitlines");
+    test::check(lines.size() == 1 && lines[0].size() == 2, "chararray: splitlines grouped");
   }
 
   /* Test partition methods */

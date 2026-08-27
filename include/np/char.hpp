@@ -2018,18 +2018,19 @@ namespace np
         return chararray(ch::translate(data_, table));
       }
 
-      /* Splitting methods (return ndarray<std::string>) */
+      /* Splitting methods – grouped per element */
       auto split(const std::string& sep = "", int maxsplit = -1) const
-          -> ndarray<std::string>
+          -> std::vector<ndarray<std::string>>
       {
         return ch::split(data_, sep, maxsplit);
       }
       auto rsplit(const std::string& sep = "", int maxsplit = -1) const
-          -> ndarray<std::string>
+          -> std::vector<ndarray<std::string>>
       {
         return ch::rsplit(data_, sep, maxsplit);
       }
-      auto splitlines(bool keepends = false) const -> ndarray<std::string>
+      auto splitlines(bool keepends = false) const
+          -> std::vector<ndarray<std::string>>
       {
         return ch::splitlines(data_, keepends);
       }

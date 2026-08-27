@@ -329,30 +329,38 @@ int main()
     test::check(result.data()[2] == "c", "rpartition: after");
   }
 
-  // Test split
+  // Test split – now grouped per element
   {
     auto a = array(std::vector<std::string>{"a b c"});
     auto result = split(a);
-    test::check(result.size() == 3, "split: whitespace count");
-    test::check(result.data()[0] == "a", "split: part 1");
-    test::check(result.data()[1] == "b", "split: part 2");
-    test::check(result.data()[2] == "c", "split: part 3");
+    test::check(result.size() == 1, "split: one input -> one group");
+    test::check(result[0].size() == 3, "split: whitespace count");
+    test::check(result[0].data()[0] == "a", "split: part 1");
+    test::check(result[0].data()[1] == "b", "split: part 2");
+    test::check(result[0].data()[2] == "c", "split: part 3");
 
     auto a2 = array(std::vector<std::string>{"a,b,c"});
     auto result2 = split(a2, ",");
-    test::check(result2.data()[0] == "a", "split: sep part 1");
-    test::check(result2.data()[1] == "b", "split: sep part 2");
-    test::check(result2.data()[2] == "c", "split: sep part 3");
+    test::check(result2[0].data()[0] == "a", "split: sep part 1");
+    test::check(result2[0].data()[1] == "b", "split: sep part 2");
+    test::check(result2[0].data()[2] == "c", "split: sep part 3");
+
+    // Multi-element grouping: 2 strings -> 2 groups
+    auto a3 = array(std::vector<std::string>{"a b", "c d"});
+    auto result3 = split(a3);
+    test::check(result3.size() == 2, "split: two inputs -> two groups");
+    test::check(result3[0].data()[0] == "a" && result3[1].data()[0] == "c", "split: per-element grouping");
   }
 
-  // Test splitlines
+  // Test splitlines – grouped
   {
     auto a = array(std::vector<std::string>{"a\nb\nc"});
     auto result = splitlines(a);
-    test::check(result.size() == 3, "splitlines: line count");
-    test::check(result.data()[0] == "a", "splitlines: line 1");
-    test::check(result.data()[1] == "b", "splitlines: line 2");
-    test::check(result.data()[2] == "c", "splitlines: line 3");
+    test::check(result.size() == 1, "splitlines: one group");
+    test::check(result[0].size() == 3, "splitlines: line count");
+    test::check(result[0].data()[0] == "a", "splitlines: line 1");
+    test::check(result[0].data()[1] == "b", "splitlines: line 2");
+    test::check(result[0].data()[2] == "c", "splitlines: line 3");
   }
 
   // --- Creation Functions ---
