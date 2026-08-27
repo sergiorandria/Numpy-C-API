@@ -3,7 +3,7 @@
  * @brief Logic functions (truth value testing, type checks, comparisons).
  *
  * Provides NumPy-compatible logical operations:
- *   Type checks: isfinite, isinf, isnan, isreal, iscomplex, isfortran,
+ *   Type checks: isfinite, isinf, isnan, isnat, isreal, iscomplex, isfortran,
  *                isrealobj, iscomplexobj, isscalar
  *   Logical ops: logical_and, logical_or, logical_not, logical_xor, all, any
  *   Comparisons: allclose, isclose, array_equal, array_equiv
@@ -190,6 +190,19 @@ NP_API template <typename T> constexpr bool isscalar([[maybe_unused]] const T &x
 NP_API template <typename T>
 NP_NODISCARD bool isfortran(const ndarray<T> &a) {
   return a.is_f_contiguous();
+}
+
+/** @brief Test element-wise for NaT (Not a Time).
+ *
+ * This implementation has no datetime type, so it always returns False,
+ * mirroring NumPy's behaviour for non-datetime dtypes.
+ * Reference: numpy.isnat
+ */
+NP_API template <typename T>
+NP_NODISCARD auto isnat(const ndarray<T> &x) -> ndarray<bool> {
+  ndarray<bool> result(x.shape, dtype::bool_);
+  result.fill(false);
+  return result;
 }
 
 // =================================================================

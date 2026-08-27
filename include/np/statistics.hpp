@@ -1709,6 +1709,154 @@ NP_NODISCARD auto correlate(const ndarray<T> &a, const ndarray<U> &v,
   return out;
 }
 
+// =================================================================
+// Histogram 2D / DD (np.histogram2d, histogramdd)
+// =================================================================
+
+struct Histogram2D {
+  ndarray<std::size_t> counts; // bins x bins
+  ndarray<double> xedges;
+  ndarray<double> yedges;
+};
+
+struct HistogramDD {
+  ndarray<std::size_t> counts; // N-D counts
+  std::vector<ndarray<double>> edges; // one per dimension
+};
+
+/** @brief 2-D histogram (np.histogram2d). */
+NP_API template <typename Tx, typename Ty>
+NP_NODISCARD auto histogram2d(const ndarray<Tx> &x, const ndarray<Ty> &y,
+                              int bins = 10,
+                              std::optional<std::pair<std::pair<double,double>,
+                                                      std::pair<double,double>>> range = std::nullopt)
+    -> Histogram2D {
+  if (x.size() != y.size()) throw std::invalid_argument("histogram2d: x and y must have same size");
+  if (bins <= 0) throw std::invalid_argument("histogram2d: bins must be >0");
+  double x_min, x_max, y_min, y_max;
+  if (range) {
+    x_min = range->first.first; x_max = range->first.second;
+    y_min = range->second.first; y_max = range->second.second;
+  } else {
+    x_min = static_cast<double>(*std::min_element(x.begin(), x.end()));
+    x_max = static_cast<double>(*std::max_element(x.begin(), x.end()));
+    y_min = static_cast<double>(*std::min_element(y.begin(), y.end()));
+    y_max = static_cast<double>(*std::max_element(y.begin(), y.end()));
+    if (x_max == x_min) { x_min -= 0.5; x_max += 0.5; }
+    if (y_max == y_min) { y_min -= 0.5; y_max += 0.5; }
+  }
+  if (!(x_max > x_min) || !(y_max > y_min)) throw std::invalid_argument("histogram2d: invalid range");
+  double x_step = (x_max - x_min) / bins;
+  double y_step = (y_max - y_min) / bins;
+  ndarray<std::size_t> counts(std::vector<int>{bins, bins});
+  std::fill(counts.data().begin(), counts.data().end(), 0);
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    double xv = static_cast<double>(x.data()[x._flat_logical(i)]);
+    double yv = static_cast<double>(y.data()[y._flat_logical(i)]);
+    if (xv < x_min || xv > x_max || yv < y_min || yv > y_max) continue;
+    int xi = static_cast<int>((xv - x_min) / x_step);
+    int yi = static_cast<int>((yv - y_min) / y_step);
+    if (xv == x_max) xi = bins - 1;
+    if (yv == y_max) yi = bins - 1;
+    if (xi >=0 && xi < bins && yi >=0 && yi < bins) counts.at(static_cast<std::size_t>(xi), static_cast<std::size_t>(yi))++;
+  }
+  ndarray<double> xedges(std::vector<int>{bins+1}), yedges(std::vector<int>{bins+1});
+  for (int i=0;i<=bins;++i){ xedges.data()[i]= x_min + i*x_step; yedges.data()[i]= y_min + i*y_step; }
+  return {counts, xedges, yedges};
+}
+
+/** @brief N-D histogram (np.histogramdd). Simplified: equal bins per dimension. */
+NP_API template <typename T>
+NP_NODISCARD auto histogramdd(const std::vector<ndarray<T>> &samples, int bins = 10)
+    -> HistogramDD {
+  if (samples.empty()) throw std::invalid_argument("histogramdd: need at least one sample array");
+  std::size_t n = samples[0].size();
+  std::size_t dim = samples.size();
+  for (auto &s : samples) if (s.size()!=n) throw std::invalid_argument("histogramdd: sample size mismatch");
+  std::vector<double> mins(dim), maxs(dim);
+  for (std::size_t d=0; d<dim; ++d){
+    mins[d]= static_cast<double>(*std::min_element(samples[d].begin(), samples[d].end()));
+    maxs[d]= static_cast<double>(*std::max_element(samples[d].begin(), samples[d].end()));
+    if (maxs[d]==mins[d]){ mins[d]-=0.5; maxs[d]+=0.5; }
+  }
+  std::vector<int> shape(dim, bins);
+  ndarray<std::size_t> counts(shape);
+  std::fill(counts.data().begin(), counts.data().end(), 0);
+  std::vector<double> steps(dim);
+  for (std::size_t d=0; d<dim; ++d) steps[d]=(maxs[d]-mins[d])/bins;
+  std::vector<ndarray<double>> edges;
+  edges.reserve(dim);
+  for (std::size_t d=0; d<dim; ++d){
+    ndarray<double> e(std::vector<int>{bins+1});
+    for(int i=0;i<=bins;++i) e.data()[i]= mins[d]+ i*steps[d];
+    edges.push_back(std::move(e));
+  }
+  for(std::size_t i=0;i<n;++i){
+    std::vector<std::size_t> idx(dim);
+    bool out=false;
+    for(std::size_t d=0; d<dim; ++d){
+      double v= static_cast<double>(samples[d].data()[samples[d]._flat_logical(i)]);
+      if(v < mins[d] || v > maxs[d]){ out=true; break; }
+      int b= static_cast<int>((v - mins[d])/steps[d]);
+      if(v==maxs[d]) b=bins-1;
+      if(b<0||b>=bins){ out=true; break; }
+      idx[d]= static_cast<std::size_t>(b);
+    }
+    if(out) continue;
+    counts.set(idx, counts.get(idx)+1);
+  }
+  return {counts, edges};
+}
+
+// =================================================================
+// Var / Std with ddof (numpy keeps population default ddof=0)
+// =================================================================
+
+NP_API template <typename T>
+NP_NODISCARD auto var_ddof(const ndarray<T> &a, int ddof) -> typename _mean_type<T>::type {
+  if (a.size()==0) throw std::invalid_argument("var: empty array");
+  if (ddof <0) throw std::invalid_argument("var: ddof must be >=0");
+  auto m = mean(a);
+  long double acc=0;
+  for(auto it=a.begin(); it!=a.end(); ++it){ long double d= static_cast<long double>(*it)- static_cast<long double>(m); acc+= d*d; }
+  long double denom = static_cast<long double>(a.size() - ddof);
+  if (denom <=0) throw std::invalid_argument("var: ddof too large");
+  return static_cast<typename _mean_type<T>::type>(acc/denom);
+}
+
+NP_API template <typename T>
+NP_NODISCARD auto var(const ndarray<T> &a, int axis, int ddof, bool keepdims=false)
+    -> ndarray<typename _mean_type<T>::type> {
+  using R = typename _mean_type<T>::type;
+  auto m = mean(a, axis, keepdims);
+  // Compute per-slice variance with ddof
+  // Use stat_axis_map manual
+  int ax = detail::stat_normalize_axis(axis, a.ndim(), "var");
+  std::vector<int> out_shape = a.shape;
+  out_shape.erase(out_shape.begin()+ax);
+  if(keepdims) out_shape.insert(out_shape.begin()+ax,1);
+  ndarray<R> out(out_shape);
+  // Need to iterate slices
+  // Reuse gather logic via stat_axis_map with custom ddof scaling
+  auto base = detail::stat_axis_map<R>(a, axis, [&](const std::vector<T>& slice)->R{
+    if(slice.empty()) throw std::invalid_argument("var: empty slice");
+    if((int)slice.size() <= ddof) throw std::invalid_argument("var: ddof too large");
+    long double sum=0; for(auto &v: slice) sum+= static_cast<long double>(v);
+    long double mean = sum / slice.size();
+    long double acc=0; for(auto &v: slice){ long double d= static_cast<long double>(v)-mean; acc+= d*d; }
+    return static_cast<R>(acc / static_cast<long double>(slice.size()-ddof));
+  });
+  return base;
+}
+
+NP_API template <typename T>
+NP_NODISCARD auto std(const ndarray<T> &a, int axis, int ddof, bool keepdims=false)
+    -> ndarray<typename _mean_type<T>::type> {
+  auto v = var(a, axis, ddof, keepdims);
+  for(auto &x: v.data()) x = static_cast<typename _mean_type<T>::type>(std::sqrt(static_cast<long double>(x)));
+  return v;
+}
+
 } // namespace np
 
 #endif // NP_STATISTICS_HPP
