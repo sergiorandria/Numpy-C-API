@@ -18,7 +18,11 @@
 
 #include <array>
 #include <cmath>
+#include <concepts>
 #include <cstddef>
+#include <initializer_list>
+#include <ranges>
+#include <span>
 #include <stdexcept>
 #include <vector>
 
@@ -28,19 +32,78 @@
 namespace np
 {
 
-  /** @brief Array of zeros with the given shape.
-   *
-   * @tparam T  Element type (default: double).
-   * @param shape  Shape vector; must have at least one element.
-   * @return       ndarray<T> of the given shape, filled with T{0}.
-   * @throws       std::invalid_argument if shape is empty.
-   *
-   * Reference: numpy-reference/reference/generated/numpy.zeros.html
-   */
-  NP_API template <typename T = double>
+/** @brief Array of zeros with the given shape.
+ *
+ * @tparam T  Element type (default: double).
+ * @param shape  Shape vector; must have at least one element.
+ * @return       ndarray<T> of the given shape, filled with T{0}.
+ * @throws       std::invalid_argument if shape is empty.
+ *
+ * Reference: numpy-reference/reference/generated/numpy.zeros.html
+ */
+#ifdef __NUMPY_RANGES_CONTAINER_CONCEPT
+  template <typename R>
+  concept _RangeStructure = std::ranges::input_range<R>
+      && std::convertible_to<std::ranges::range_value_t<R>, int>
+      && std::is_integral_v<std::ranges::range_value_t<R>>;
+#define RangeStructure _RangeStructure
+#endif
+
+  template <typename T>
+  concept Fillable = std::is_copy_constructible_v<T> && std::is_default_constructible_v<T>;
+
+  // Standard zeros method
+  NP_API template <Fillable T = double>
   NP_NODISCARD auto zeros(const std::vector<int>& shape) -> ndarray<T>
   {
-    return ndarray<T>(shape, dtype_of<T>, T{0});
+    constexpr bool is_void = (dtype_of<T> == dtype::void_);
+    static_assert(!is_void || std::is_class_v<T>,
+                  "zeros: T has no dtype mapping – will be stored as object_/void_ with sizeof(T) storage. "
+                  "Define cxx_to_np_type specialization or use dtype::object_ explicitly");
+    dtype d = (dtype_of<T> == dtype::void_ ? dtype::object_ : dtype_of<T>);
+    return ndarray<T>(shape, d, T{0});
+  }
+
+#ifdef __NUMPY_RANGES_CONTAINER_CONCEPT
+  template <typename T = double, _RangeStructure R>
+#else
+  template <typename T = double, std::ranges::input_range R>
+    requires(!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
+      && std::convertible_to<std::ranges::range_value_t<R>, int>
+#endif
+  NP_NODISCARD NP_SYMBOL_VISIBILITY(hidden) auto __np_builtin_zeros(const R& shape)
+      -> ndarray<T>
+  {
+    std::vector<int> s{std::ranges::begin(shape), std::ranges::end(shape)};
+    if (s.empty())
+      throw std::invalid_argument("zeros: empty shape");
+    return ndarray<T>(s, dtype_of<T>, T{0});
+  }
+
+  template <typename T = double>
+  NP_NODISCARD auto zeros(std::initializer_list<int> shape) -> ndarray<T>
+  {
+    std::vector<int> s(shape);
+    if (s.empty())
+      throw std::invalid_argument("zeros: empty shape");
+    return ndarray<T>(s, dtype_of<T>, T{0});
+  }
+
+  template <typename T = double, std::size_t N>
+  NP_NODISCARD auto zeros(const int (&shape)[N]) -> ndarray<T>
+  {
+    return __np_builtin_zeros<T>(std::span<const int, N>(shape));
+  }
+
+  // Generic range overload for any array-like structure (std::array, std::deque, etc.)
+  // Compatible with every C++ array like structure
+  template <typename T = double, std::ranges::input_range R>
+    requires(!std::is_same_v<std::decay_t<R>, std::vector<int>>)
+          && (!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
+          && std::convertible_to<std::ranges::range_value_t<R>, int>
+  NP_NODISCARD auto zeros(const R& shape) -> ndarray<T>
+  {
+    return __np_builtin_zeros<T>(shape);
   }
 
   /** @brief Array of ones with the given shape.
@@ -52,10 +115,54 @@ namespace np
    *
    * Reference: numpy-reference/reference/generated/numpy.ones.html
    */
-  NP_API template <typename T = double>
+  NP_API template <Fillable T = double>
   NP_NODISCARD auto ones(const std::vector<int>& shape) -> ndarray<T>
   {
-    return ndarray<T>(shape, dtype_of<T>, T{1});
+    constexpr bool is_void = (dtype_of<T> == dtype::void_);
+    static_assert(!is_void || std::is_class_v<T>,
+                  "ones: T has no dtype mapping – will be stored as object_/void_");
+    dtype d = (dtype_of<T> == dtype::void_ ? dtype::object_ : dtype_of<T>);
+    return ndarray<T>(shape, d, T{1});
+  }
+
+#ifdef __NUMPY_RANGES_CONTAINER_CONCEPT
+  template <typename T = double, _RangeStructure R>
+#else
+  template <typename T = double, std::ranges::input_range R>
+    requires(!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
+      && std::convertible_to<std::ranges::range_value_t<R>, int>
+#endif
+  NP_NODISCARD NP_SYMBOL_VISIBILITY(hidden) auto __np_builtin_ones(const R& shape)
+      -> ndarray<T>
+  {
+    std::vector<int> s{std::ranges::begin(shape), std::ranges::end(shape)};
+    if (s.empty())
+      throw std::invalid_argument("ones: empty shape");
+    return ndarray<T>(s, dtype_of<T>, T{1});
+  }
+
+  template <typename T = double>
+  NP_NODISCARD auto ones(std::initializer_list<int> shape) -> ndarray<T>
+  {
+    std::vector<int> s(shape);
+    if (s.empty())
+      throw std::invalid_argument("ones: empty shape");
+    return ndarray<T>(s, dtype_of<T>, T{1});
+  }
+
+  template <typename T = double, std::size_t N>
+  NP_NODISCARD auto ones(const int (&shape)[N]) -> ndarray<T>
+  {
+    return __np_builtin_ones<T>(std::span<const int, N>(shape));
+  }
+
+  template <typename T = double, std::ranges::input_range R>
+    requires(!std::is_same_v<std::decay_t<R>, std::vector<int>>)
+          && (!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
+          && std::convertible_to<std::ranges::range_value_t<R>, int>
+  NP_NODISCARD auto ones(const R& shape) -> ndarray<T>
+  {
+    return __np_builtin_ones<T>(shape);
   }
 
   /** @brief Array filled with a constant value.
@@ -68,10 +175,56 @@ namespace np
    *
    * Reference: numpy-reference/reference/generated/numpy.full.html
    */
-  NP_API template <typename T>
+  NP_API template <Fillable T>
   NP_NODISCARD auto full(const std::vector<int>& shape, const T& fill_value) -> ndarray<T>
   {
-    return ndarray<T>(shape, dtype_of<T>, fill_value);
+    constexpr bool is_void = (dtype_of<T> == dtype::void_);
+    static_assert(!is_void || std::is_class_v<T>,
+                  "full: T has no dtype mapping – will be stored as object_/void_");
+    dtype d = (dtype_of<T> == dtype::void_ ? dtype::object_ : dtype_of<T>);
+    return ndarray<T>(shape, d, fill_value);
+  }
+
+#ifdef __NUMPY_RANGES_CONTAINER_CONCEPT
+  template <typename T, _RangeStructure R>
+#else
+  template <typename T, std::ranges::input_range R>
+    requires(!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
+      && std::convertible_to<std::ranges::range_value_t<R>, int>
+#endif
+  NP_NODISCARD
+  NP_SYMBOL_VISIBILITY(hidden) auto __np_builtin_full(const R& shape, const T& fill_value)
+      -> ndarray<T>
+  {
+    std::vector<int> s{std::ranges::begin(shape), std::ranges::end(shape)};
+    if (s.empty())
+      throw std::invalid_argument("full: empty shape");
+    return ndarray<T>(s, dtype_of<T>, fill_value);
+  }
+
+  template <typename T>
+  NP_NODISCARD auto full(std::initializer_list<int> shape, const T& fill_value)
+      -> ndarray<T>
+  {
+    std::vector<int> s(shape);
+    if (s.empty())
+      throw std::invalid_argument("full: empty shape");
+    return ndarray<T>(s, dtype_of<T>, fill_value);
+  }
+
+  template <typename T, std::size_t N>
+  NP_NODISCARD auto full(const int (&shape)[N], const T& fill_value) -> ndarray<T>
+  {
+    return __np_builtin_full(std::span<const int, N>(shape), fill_value);
+  }
+
+  template <typename T, std::ranges::input_range R>
+    requires(!std::is_same_v<std::decay_t<R>, std::vector<int>>)
+          && (!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
+          && std::convertible_to<std::ranges::range_value_t<R>, int>
+  NP_NODISCARD auto full(const R& shape, const T& fill_value) -> ndarray<T>
+  {
+    return __np_builtin_full(shape, fill_value);
   }
 
   /** @brief Uninitialized array (values are default-constructed in C++).
@@ -88,10 +241,54 @@ namespace np
    *
    * Reference: numpy-reference/reference/generated/numpy.empty.html
    */
-  NP_API template <typename T = double>
+  NP_API template <Fillable T = double>
   NP_NODISCARD auto empty(const std::vector<int>& shape) -> ndarray<T>
   {
-    return ndarray<T>(shape, dtype_of<T>, T{});
+    constexpr bool is_void = (dtype_of<T> == dtype::void_);
+    static_assert(!is_void || std::is_class_v<T>,
+                  "empty: T has no dtype mapping – will be stored as object_/void_");
+    dtype d = (dtype_of<T> == dtype::void_ ? dtype::object_ : dtype_of<T>);
+    return ndarray<T>(shape, d, T{});
+  }
+
+#ifdef __NUMPY_RANGES_CONTAINER_CONCEPT
+  template <typename T = double, _RangeStructure R>
+#else
+  template <typename T = double, std::ranges::input_range R>
+    requires(!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
+      && std::convertible_to<std::ranges::range_value_t<R>, int>
+#endif
+  NP_NODISCARD NP_SYMBOL_VISIBILITY(hidden) auto __np_builtin_empty(const R& shape)
+      -> ndarray<T>
+  {
+    std::vector<int> s{std::ranges::begin(shape), std::ranges::end(shape)};
+    if (s.empty())
+      throw std::invalid_argument("empty: empty shape");
+    return ndarray<T>(s, dtype_of<T>, T{});
+  }
+
+  template <typename T = double>
+  NP_NODISCARD auto empty(std::initializer_list<int> shape) -> ndarray<T>
+  {
+    std::vector<int> s(shape);
+    if (s.empty())
+      throw std::invalid_argument("empty: empty shape");
+    return ndarray<T>(s, dtype_of<T>, T{});
+  }
+
+  template <typename T = double, std::size_t N>
+  NP_NODISCARD auto empty(const int (&shape)[N]) -> ndarray<T>
+  {
+    return __np_builtin_empty<T>(std::span<const int, N>(shape));
+  }
+
+  template <typename T = double, std::ranges::input_range R>
+    requires(!std::is_same_v<std::decay_t<R>, std::vector<int>>)
+          && (!std::is_same_v<std::decay_t<R>, std::initializer_list<int>>)
+          && std::convertible_to<std::ranges::range_value_t<R>, int>
+  NP_NODISCARD auto empty(const R& shape) -> ndarray<T>
+  {
+    return __np_builtin_empty<T>(shape);
   }
 
   /** @brief New array with the same shape as `a` (uninitialized).
