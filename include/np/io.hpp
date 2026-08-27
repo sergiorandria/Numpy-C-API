@@ -24,6 +24,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -155,6 +156,53 @@ inline std::string read_npy_header(std::istream &is, std::vector<int> &shape_out
     shape_out.push_back(std::stoi(t));
   }
   return hdr;
+}
+
+inline uint32_t crc32_update(uint32_t crc, const char *buf, size_t len) {
+  static uint32_t table[256];
+  static bool init = false;
+  if (!init) {
+    for (uint32_t i = 0; i < 256; ++i) {
+      uint32_t c = i;
+      for (int j = 0; j < 8; ++j) c = (c >> 1) ^ (0xEDB88320u & -(c & 1u));
+      table[i] = c;
+    }
+    init = true;
+  }
+  crc ^= 0xFFFFFFFFu;
+  for (size_t i = 0; i < len; ++i) crc = table[(crc ^ static_cast<uint8_t>(buf[i])) & 0xFF] ^ (crc >> 8);
+  return crc ^ 0xFFFFFFFFu;
+}
+
+inline void write_le16(std::ostream &os, uint16_t v) {
+  char b[2] = {char(v & 0xFF), char((v >> 8) & 0xFF)};
+  os.write(b, 2);
+}
+inline void write_le32(std::ostream &os, uint32_t v) {
+  char b[4] = {char(v & 0xFF), char((v >> 8) & 0xFF), char((v >> 16) & 0xFF), char((v >> 24) & 0xFF)};
+  os.write(b, 4);
+}
+inline uint16_t read_le16(const char *p) {
+  return uint16_t(uint8_t(p[0])) | (uint16_t(uint8_t(p[1])) << 8);
+}
+inline uint32_t read_le32(const char *p) {
+  return uint32_t(uint8_t(p[0])) | (uint32_t(uint8_t(p[1])) << 8) |
+         (uint32_t(uint8_t(p[2])) << 16) | (uint32_t(uint8_t(p[3])) << 24);
+}
+
+inline std::string build_npy_bytes(const std::string &descr,
+                                   const std::vector<int> &shape,
+                                   const char *data, size_t bytes) {
+  std::string hdr = build_npy_header(descr, shape);
+  std::string out;
+  out.reserve(10 + hdr.size() + bytes);
+  out.append("\x93NUMPY", 6);
+  out.push_back(char(1)); out.push_back(char(0));
+  uint16_t hlen = static_cast<uint16_t>(hdr.size());
+  out.push_back(char(hlen & 0xFF)); out.push_back(char((hlen >> 8) & 0xFF));
+  out.append(hdr);
+  out.append(data, bytes);
+  return out;
 }
 
 } // namespace detail
@@ -318,6 +366,213 @@ inline auto loadtxt(const std::string &filename, const std::string &delimiter = 
       for (std::size_t j = 0; j < cols; ++j) out.at(i, j) = rows[i][j];
     return out;
   }
+}
+
+/** @brief Load with genfromtxt semantics – handles missing values as NaN.
+ *
+ * Extends loadtxt with `filling` for empty fields and `skip_header`.
+ * Reference: numpy.genfromtxt
+ */
+inline auto genfromtxt(const std::string &filename,
+                       const std::string &delimiter = " ",
+                       int skip_header = 0,
+                       double filling = std::numeric_limits<double>::quiet_NaN())
+    -> ndarray<double> {
+  std::ifstream is(filename);
+  if (!is) throw std::runtime_error("genfromtxt: cannot open file " + filename);
+  std::vector<std::vector<double>> rows;
+  std::string line;
+  int skipped = 0;
+  while (std::getline(is, line)) {
+    if (skipped < skip_header) { ++skipped; continue; }
+    size_t p = line.find_first_not_of(" \t\r\n");
+    if (p == std::string::npos) continue;
+    if (line[p] == '#') continue;
+    std::vector<std::string> toks;
+    if (delimiter == " " || delimiter == "\t") {
+      std::istringstream ss(line);
+      std::string t; while (ss >> t) toks.push_back(t);
+    } else {
+      std::istringstream ss(line);
+      std::string t; while (std::getline(ss, t, delimiter[0])) toks.push_back(t);
+    }
+    std::vector<double> vals;
+    vals.reserve(toks.size());
+    for (auto &tok : toks) {
+      if (tok.empty()) vals.push_back(filling);
+      else {
+        try { vals.push_back(std::stod(tok)); } catch (...) { vals.push_back(filling); }
+      }
+    }
+    if (!vals.empty()) rows.push_back(std::move(vals));
+  }
+  if (rows.empty()) return ndarray<double>(std::vector<int>{0});
+  std::size_t cols = rows[0].size();
+  for (auto &r : rows) if (r.size() != cols) throw std::runtime_error("genfromtxt: inconsistent columns");
+  if (cols == 1) {
+    ndarray<double> out(std::vector<int>{static_cast<int>(rows.size())});
+    for (std::size_t i=0;i<rows.size();++i) out.data()[i]= rows[i][0];
+    return out;
+  } else {
+    ndarray<double> out(std::vector<int>{static_cast<int>(rows.size()), static_cast<int>(cols)});
+    for (std::size_t i=0;i<rows.size();++i) for (std::size_t j=0;j<cols;++j) out.at(i,j)= rows[i][j];
+    return out;
+  }
+}
+
+// ---------------------------------------------------------------------
+// NPZ (zip of .npy) – savez / savez_compressed / load_npz
+// ---------------------------------------------------------------------
+
+template <typename T>
+std::string npy_bytes_for_array(const ndarray<T> &arr) {
+  std::string descr = detail::dtype_descr<T>();
+  if (descr.empty()) throw std::runtime_error("npz: unsupported dtype");
+  std::string hdr = detail::build_npy_header(descr, arr.shape);
+  std::string out;
+  out.reserve(10 + hdr.size() + arr._numel()*sizeof(T));
+  out.append("\x93NUMPY", 6);
+  out.push_back(char(1)); out.push_back(char(0));
+  uint16_t hlen = static_cast<uint16_t>(hdr.size());
+  out.push_back(char(hlen & 0xFF)); out.push_back(char((hlen>>8)&0xFF));
+  out.append(hdr);
+  for (size_t i=0;i<arr._numel();++i){
+    T v = arr.data()[arr._flat_logical(i)];
+    out.append(reinterpret_cast<const char*>(&v), sizeof(T));
+  }
+  return out;
+}
+
+/** @brief Save multiple arrays into .npz (zip, STORE method).
+ *
+ * `arrays` maps name → ndarray (name without .npy suffix, added automatically).
+ * This is NPZ-compatible (numpy.load can read it). Compression is ignored
+ * (STORE) for simplicity; savez_compressed is alias.
+ */
+template <typename T>
+void savez(const std::string &filename,
+           const std::map<std::string, ndarray<T>> &arrays) {
+  std::ofstream os(filename, std::ios::binary);
+  if (!os) throw std::runtime_error("savez: cannot open " + filename);
+  struct Entry { std::string name; std::string data; uint32_t crc; uint32_t offset; };
+  std::vector<Entry> entries;
+  entries.reserve(arrays.size());
+  for (auto &kv : arrays) {
+    std::string npy = npy_bytes_for_array(kv.second);
+    uint32_t crc = detail::crc32_update(0, npy.data(), npy.size());
+    uint32_t offset = static_cast<uint32_t>(os.tellp());
+    // local header
+    detail::write_le32(os, 0x04034b50u);
+    detail::write_le16(os, 20); detail::write_le16(os, 0); detail::write_le16(os, 0); // STORE
+    detail::write_le16(os, 0); detail::write_le16(os, 0);
+    detail::write_le32(os, crc);
+    detail::write_le32(os, static_cast<uint32_t>(npy.size()));
+    detail::write_le32(os, static_cast<uint32_t>(npy.size()));
+    std::string fname = kv.first + ".npy";
+    detail::write_le16(os, static_cast<uint16_t>(fname.size()));
+    detail::write_le16(os, 0);
+    os.write(fname.data(), fname.size());
+    os.write(npy.data(), npy.size());
+    entries.push_back({fname, npy, crc, offset});
+  }
+  uint32_t cd_offset = static_cast<uint32_t>(os.tellp());
+  uint32_t cd_size = 0;
+  for (auto &e : entries) {
+    uint32_t hdr_start = static_cast<uint32_t>(os.tellp());
+    (void)hdr_start;
+    detail::write_le32(os, 0x02014b50u);
+    detail::write_le16(os, 20); detail::write_le16(os, 20);
+    detail::write_le16(os, 0); detail::write_le16(os, 0);
+    detail::write_le16(os, 0); detail::write_le16(os, 0);
+    detail::write_le32(os, e.crc);
+    detail::write_le32(os, static_cast<uint32_t>(e.data.size()));
+    detail::write_le32(os, static_cast<uint32_t>(e.data.size()));
+    detail::write_le16(os, static_cast<uint16_t>(e.name.size()));
+    detail::write_le16(os, 0); detail::write_le16(os, 0);
+    detail::write_le16(os, 0); detail::write_le16(os, 0);
+    detail::write_le32(os, 0);
+    detail::write_le32(os, e.offset);
+    os.write(e.name.data(), e.name.size());
+  }
+  cd_size = static_cast<uint32_t>(os.tellp()) - cd_offset;
+  // EOCD
+  detail::write_le32(os, 0x06054b50u);
+  detail::write_le16(os, 0); detail::write_le16(os, 0);
+  detail::write_le16(os, static_cast<uint16_t>(entries.size()));
+  detail::write_le16(os, static_cast<uint16_t>(entries.size()));
+  detail::write_le32(os, cd_size);
+  detail::write_le32(os, cd_offset);
+  detail::write_le16(os, 0);
+}
+
+template <typename T>
+void savez_compressed(const std::string &filename,
+                      const std::map<std::string, ndarray<T>> &arrays) {
+  // For now identical to savez (STORE) – numpy will still read it.
+  savez(filename, arrays);
+}
+
+/** @brief Load .npz file (expects dtype T for all entries).
+ *
+ * Returns map name (without .npy) → ndarray<T>.
+ */
+template <typename T>
+auto load_npz(const std::string &filename) -> std::map<std::string, ndarray<T>> {
+  std::ifstream is(filename, std::ios::binary | std::ios::ate);
+  if (!is) throw std::runtime_error("load_npz: cannot open " + filename);
+  size_t fsize = static_cast<size_t>(is.tellg());
+  is.seekg(0);
+  std::string buf(fsize, '\0');
+  is.read(buf.data(), fsize);
+  if (buf.size() != fsize) throw std::runtime_error("load_npz: read error");
+  // Find EOCD
+  size_t eocd = std::string::npos;
+  for (size_t i = fsize >= 22 ? fsize - 22 : 0; i != size_t(-1); --i) {
+    if (detail::read_le32(buf.data()+i) == 0x06054b50u) { eocd = i; break; }
+    if (i==0) break;
+  }
+  if (eocd == std::string::npos) throw std::runtime_error("load_npz: EOCD not found");
+  uint16_t total = detail::read_le16(buf.data()+eocd+10);
+  uint32_t cd_size = detail::read_le32(buf.data()+eocd+12);
+  uint32_t cd_offset = detail::read_le32(buf.data()+eocd+16);
+  (void)cd_size;
+  std::map<std::string, ndarray<T>> out;
+  size_t cd_pos = cd_offset;
+  for (int i=0;i<total;++i){
+    if (detail::read_le32(buf.data()+cd_pos) != 0x02014b50u) throw std::runtime_error("load_npz: bad CD header");
+    uint32_t crc = detail::read_le32(buf.data()+cd_pos+16);
+    (void)crc;
+    uint32_t comp_size = detail::read_le32(buf.data()+cd_pos+20);
+    uint32_t uncomp_size = detail::read_le32(buf.data()+cd_pos+24);
+    (void)comp_size; (void)uncomp_size;
+    uint16_t name_len = detail::read_le16(buf.data()+cd_pos+28);
+    uint16_t extra_len = detail::read_le16(buf.data()+cd_pos+30);
+    uint16_t comment_len = detail::read_le16(buf.data()+cd_pos+32);
+    uint32_t lh_offset = detail::read_le32(buf.data()+cd_pos+42);
+    std::string fname(buf.data()+cd_pos+46, name_len);
+    cd_pos += 46 + name_len + extra_len + comment_len;
+    // Local header
+    if (detail::read_le32(buf.data()+lh_offset) != 0x04034b50u) throw std::runtime_error("load_npz: bad local header");
+    uint16_t lh_name = detail::read_le16(buf.data()+lh_offset+26);
+    uint16_t lh_extra = detail::read_le16(buf.data()+lh_offset+28);
+    size_t data_off = lh_offset + 30 + lh_name + lh_extra;
+    // npy data is stored as file data
+    std::string npy(buf.data()+data_off, comp_size);
+    // Parse npy from memory
+    // Reuse read_npy_header logic on stringstream
+    std::istringstream npy_is(npy, std::ios::binary);
+    std::vector<int> shape; std::string descr;
+    detail::read_npy_header(npy_is, shape, descr);
+    std::string expected = detail::dtype_descr<T>();
+    if (descr != expected) throw std::runtime_error("load_npz: dtype mismatch for "+fname+": "+descr+" vs "+expected);
+    size_t n = 1; for(int d: shape) n*= static_cast<size_t>(d); if(shape.empty()) n=1;
+    std::vector<T> data(n);
+    npy_is.read(reinterpret_cast<char*>(data.data()), n*sizeof(T));
+    std::string key = fname;
+    if (key.size()>4 && key.substr(key.size()-4)==".npy") key = key.substr(0,key.size()-4);
+    out.emplace(key, ndarray<T>::from_data(shape, std::move(data)));
+  }
+  return out;
 }
 
 } // namespace np
