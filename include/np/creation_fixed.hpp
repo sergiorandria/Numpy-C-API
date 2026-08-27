@@ -26,7 +26,11 @@
 #define NP_CREATION_FIXED_HPP
 
 #include <cstddef>
+#include <cstring>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
+#include <vector>
 
 #include "api_macros.hpp"
 #include "ndarray_fixed.hpp"
@@ -257,6 +261,44 @@ namespace np
       }
     }
     return out;
+  }
+
+  // Normal comment: fixed variants for asanyarray / ascontiguousarray / frombuffer
+
+  NP_API template <typename T, int... E>
+  NP_NODISCARD constexpr auto asanyarray(const ndarrayf<T, E...>& a) -> ndarrayf<T, E...>
+  {
+    return a;
+  }
+
+  NP_API template <typename T, int... E>
+  NP_NODISCARD constexpr auto ascontiguousarray(const ndarrayf<T, E...>& a)
+      -> ndarrayf<T, E...>
+  {
+    // Fixed storage is always C-contiguous
+    return a;
+  }
+
+  NP_API template <typename T, int... E>
+  NP_NODISCARD auto frombuffer(const std::vector<char>& buffer, std::size_t offset = 0)
+      -> ndarrayf<T, E...>
+  {
+    constexpr std::size_t need = (static_cast<std::size_t>(E) * ... * 1);
+    if (offset + need * sizeof(T) > buffer.size())
+      throw std::invalid_argument(
+          "frombuffer (fixed): buffer too small for requested shape");
+    ndarrayf<T, E...> out{};
+    std::memcpy(out.m_data.data(), buffer.data() + offset, need * sizeof(T));
+    return out;
+  }
+
+  NP_API template <typename T, int... E>
+  NP_NODISCARD constexpr auto
+  require(const ndarrayf<T, E...>& a, const std::string& requirements = "C")
+      -> ndarrayf<T, E...>
+  {
+    (void)requirements;
+    return a;
   }
 
 } // namespace np

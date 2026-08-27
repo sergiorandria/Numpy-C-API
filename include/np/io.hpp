@@ -606,8 +606,8 @@ namespace np
     }
   }
 
-    // NPZ (zip of .npy) – savez / savez_compressed / load_npz
-    template <typename T>
+  // NPZ (zip of .npy) – savez / savez_compressed / load_npz
+  template <typename T>
   std::string npy_bytes_for_array(const ndarray<T>& arr)
   {
     std::string descr = detail::dtype_descr<T>();
@@ -711,6 +711,13 @@ namespace np
     detail::write_le16(os, 0);
   }
 
+  /** @brief Compressed npz – uses zlib deflate when available, else STORE fallback.
+   *
+   * If `<zlib.h>` is found at compile time (`NP_HAS_ZLIB`), entries are
+   * compressed with `compress2` (method 8, `Z_DEFAULT_COMPRESSION`);
+   * otherwise this is an alias to `savez` (method 0, STORE) and remains
+   * fully compatible with `numpy.load` (which handles both).
+   */
   template <typename T>
   void savez_compressed(
       const std::string& filename, const std::map<std::string, ndarray<T>>& arrays)
