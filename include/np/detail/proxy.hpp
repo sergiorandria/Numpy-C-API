@@ -146,7 +146,7 @@ public:
     constexpr ProxyBase(Array& arr, Stack idx) noexcept : m_array(arr), m_indices(idx) {
     }
 
-    // --- assignment (write) -------------------------------------------
+    // Assignment (write)
 
     template <bool C = IsConst>
     constexpr auto operator=(const T& v) noexcept -> Self&
@@ -172,7 +172,7 @@ public:
         return *this;
     }
 
-    // --- reading ------------------------------------------------------
+    // Reading
 
     [[nodiscard]] constexpr operator T() const noexcept {
         return m_array.get(m_indices);

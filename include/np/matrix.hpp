@@ -214,7 +214,7 @@ namespace np
       return out;
     }
 
-    // Factories ------------------------------------------------------
+    // Factories
 
     /** @brief r x c matrix of zeros.
      *

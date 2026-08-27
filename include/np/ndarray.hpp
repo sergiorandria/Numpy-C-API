@@ -357,7 +357,7 @@ namespace np
     using reference =
         std::conditional_t<std::is_same_v<T, bool>, std::vector<bool>::reference, T&>;
 
-    // --- attributes (mirror ndarray.shape / strides / dtype / order) ---
+    // Attributes (mirror ndarray.shape / strides / dtype / order)
     std::vector<int> shape;                 ///< Dimensions of the array
     std::vector<std::size_t> strides;       ///< Strides in elements
     np::dtype type = dtype::void_;          ///< Data type
