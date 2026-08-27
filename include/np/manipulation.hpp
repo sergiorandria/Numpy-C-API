@@ -1508,7 +1508,8 @@ namespace np
 
   /** @brief Move axis to new position (np.moveaxis). */
   NP_API template <typename T>
-  NP_NODISCARD auto moveaxis(const ndarray<T>& a, int source, int destination) -> ndarray<T>
+  NP_NODISCARD auto moveaxis(const ndarray<T>& a, int source, int destination)
+      -> ndarray<T>
   {
     int nd = static_cast<int>(a.ndim());
     if (source < 0)
@@ -1574,7 +1575,8 @@ namespace np
     int rows = tup[0].shape[0];
     for (auto& arr : tup)
       if (arr.shape[0] != rows)
-        throw std::invalid_argument("column_stack: arrays must have same first dimension");
+        throw std::invalid_argument(
+            "column_stack: arrays must have same first dimension");
     // Concatenate along last axis (1 for 2-D)
     int total_cols = 0;
     for (auto& arr : tup)

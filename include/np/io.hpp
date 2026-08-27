@@ -177,11 +177,14 @@ namespace np
         throw std::runtime_error("load: only npy version 1.0/2.0 supported");
       }
       uint32_t hlen32 = 0;
-      if (ver[0] == 1) {
+      if (ver[0] == 1)
+      {
         uint16_t hlen = 0;
         is.read(reinterpret_cast<char*>(&hlen), 2);
         hlen32 = hlen;
-      } else {
+      }
+      else
+      {
         is.read(reinterpret_cast<char*>(&hlen32), 4);
       }
       uint32_t hlen = hlen32;
@@ -313,11 +316,14 @@ namespace np
     std::ofstream os(filename, std::ios::binary);
     if (!os)
       throw std::runtime_error("save: cannot open file " + filename);
-    if (hdr.size() > 65535) {
+    if (hdr.size() > 65535)
+    {
       detail::write_npy_magic(os, 2, 0);
       uint32_t hlen = static_cast<uint32_t>(hdr.size());
       os.write(reinterpret_cast<char*>(&hlen), 4);
-    } else {
+    }
+    else
+    {
       detail::write_npy_magic(os, 1, 0);
       uint16_t hlen = static_cast<uint16_t>(hdr.size());
       os.write(reinterpret_cast<char*>(&hlen), 2);
@@ -802,11 +808,13 @@ namespace np
 
   /** @brief Write array to raw binary file (np.ndarray.tofile wrapper). */
   template <typename T>
-  void tofile(const ndarray<T>& arr, const std::string& filename) {
+  void tofile(const ndarray<T>& arr, const std::string& filename)
+  {
     arr.tofile(filename);
   }
   template <typename T>
-  void tofile(const ndarray<T>& arr, std::ostream& os) {
+  void tofile(const ndarray<T>& arr, std::ostream& os)
+  {
     arr.tofile(os);
   }
 
@@ -817,21 +825,33 @@ namespace np
    * @param shape optional shape; if empty, 1-D of count
    */
   template <typename T>
-  auto fromfile(const std::string& filename, int count = -1, std::size_t offset = 0,
-                const std::vector<int>& shape = {}) -> ndarray<T> {
+  auto fromfile(
+      const std::string& filename,
+      int count = -1,
+      std::size_t offset = 0,
+      const std::vector<int>& shape = {}) -> ndarray<T>
+  {
     std::ifstream is(filename, std::ios::binary);
-    if (!is) throw std::runtime_error("fromfile: cannot open " + filename);
+    if (!is)
+      throw std::runtime_error("fromfile: cannot open " + filename);
     is.seekg(0, std::ios::end);
     std::size_t fsize = static_cast<std::size_t>(is.tellg());
-    if (offset > fsize) throw std::invalid_argument("fromfile: offset beyond file");
+    if (offset > fsize)
+      throw std::invalid_argument("fromfile: offset beyond file");
     std::size_t avail = (fsize - offset) / sizeof(T);
     std::size_t n = count < 0 ? avail : static_cast<std::size_t>(count);
-    if (n > avail) throw std::invalid_argument("fromfile: count exceeds file");
+    if (n > avail)
+      throw std::invalid_argument("fromfile: count exceeds file");
     std::vector<int> out_shape = shape;
-    if (out_shape.empty()) out_shape = {static_cast<int>(n)};
-    else {
-      std::size_t prod = 1; for(int d: out_shape) prod*= static_cast<std::size_t>(d);
-      if (prod != n) throw std::invalid_argument("fromfile: shape size mismatch count");
+    if (out_shape.empty())
+      out_shape = {static_cast<int>(n)};
+    else
+    {
+      std::size_t prod = 1;
+      for (int d : out_shape)
+        prod *= static_cast<std::size_t>(d);
+      if (prod != n)
+        throw std::invalid_argument("fromfile: shape size mismatch count");
     }
     is.seekg(static_cast<std::streamoff>(offset));
     ndarray<T> out(out_shape);

@@ -668,8 +668,9 @@ namespace np
    * @param offset bytes to skip
    */
   NP_API template <typename T>
-  NP_NODISCARD auto frombuffer(const std::vector<char>& buffer, int count = -1,
-                              std::size_t offset = 0) -> ndarray<T>
+  NP_NODISCARD auto
+  frombuffer(const std::vector<char>& buffer, int count = -1, std::size_t offset = 0)
+      -> ndarray<T>
   {
     if (offset > buffer.size())
       throw std::invalid_argument("frombuffer: offset out of range");
@@ -687,8 +688,8 @@ namespace np
   NP_NODISCARD auto require(const ndarray<T>& a, const std::string& requirements = "C")
       -> ndarray<T>
   {
-    if (requirements.find('C') != std::string::npos ||
-        requirements.find('A') != std::string::npos)
+    if (requirements.find('C') != std::string::npos
+        || requirements.find('A') != std::string::npos)
     {
       if (a.is_contiguous())
         return a;
