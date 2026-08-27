@@ -425,10 +425,10 @@ namespace np::random
      */
     template <typename T = double>
     auto poisson(T lam = T{1}, const std::vector<int>& size = {})
-        -> ndarray<_Np_dtype::_Np_int64>
+        -> ndarray<std::int64_t>
     {
       std::poisson_distribution<std::int64_t> dist(lam);
-      return _fill_distribution<_Np_dtype::_Np_int64>(engine_, dist, size);
+      return _fill_distribution<std::int64_t>(engine_, dist, size);
     }
 
     /**
@@ -437,10 +437,10 @@ namespace np::random
      * numpy-reference/reference/random/generated/numpy.random.Generator.binomial.html
      */
     auto binomial(std::int64_t n, double p, const std::vector<int>& size = {})
-        -> ndarray<_Np_dtype::_Np_int64>
+        -> ndarray<std::int64_t>
     {
       std::binomial_distribution<std::int64_t> dist(n, p);
-      return _fill_distribution<_Np_dtype::_Np_int64>(engine_, dist, size);
+      return _fill_distribution<std::int64_t>(engine_, dist, size);
     }
 
     /**
@@ -449,10 +449,10 @@ namespace np::random
      * numpy-reference/reference/random/generated/numpy.random.Generator.negative_binomial.html
      */
     auto negative_binomial(std::int64_t n, double p, const std::vector<int>& size = {})
-        -> ndarray<_Np_dtype::_Np_int64>
+        -> ndarray<std::int64_t>
     {
       std::negative_binomial_distribution<std::int64_t> dist(n, p);
-      return _fill_distribution<_Np_dtype::_Np_int64>(engine_, dist, size);
+      return _fill_distribution<std::int64_t>(engine_, dist, size);
     }
 
     /**
@@ -461,10 +461,10 @@ namespace np::random
      * numpy-reference/reference/random/generated/numpy.random.Generator.geometric.html
      */
     auto geometric(double p, const std::vector<int>& size = {})
-        -> ndarray<_Np_dtype::_Np_int64>
+        -> ndarray<std::int64_t>
     {
       std::geometric_distribution<std::int64_t> dist(p);
-      return _fill_distribution<_Np_dtype::_Np_int64>(engine_, dist, size);
+      return _fill_distribution<std::int64_t>(engine_, dist, size);
     }
 
     /**
