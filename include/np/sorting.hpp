@@ -1,7 +1,8 @@
 /**
  * @file sorting.hpp
- * @brief Sorting and searching free functions: lexsort, msort, sort_complex,
- *        argwhere, flatnonzero, count_nonzero.
+ * @brief Sorting and searching: sort, argsort, lexsort, msort,
+ *        sort_complex, partition, argpartition, argmin/max,
+ *        searchsorted, extract, argwhere, flatnonzero, count_nonzero.
  *
  * Reference: numpy-reference/reference/routines.sort.html
  *
@@ -215,6 +216,112 @@ NP_NODISCARD auto count_nonzero(const ndarray<T> &arr, int axis)
     od.advance();
   }
   return out;
+}
+
+// ---------------------------------------------------------------------
+// Free wrappers mirroring NumPy API
+// ---------------------------------------------------------------------
+
+/** @brief Sorted copy (np.sort). */
+NP_API template <typename T>
+NP_NODISCARD auto sort(const ndarray<T> &a, int axis = -1) -> ndarray<T> {
+  return a.sorted(axis);
+}
+
+/** @brief Argsort (np.argsort). */
+NP_API template <typename T>
+NP_NODISCARD auto argsort(const ndarray<T> &a, int axis = -1)
+    -> ndarray<std::size_t> {
+  return a.argsort(axis);
+}
+
+/** @brief Partition – kth element in sorted position (np.partition). */
+NP_API template <typename T>
+NP_NODISCARD auto partition(const ndarray<T> &a, std::size_t kth,
+                            int axis = -1) -> ndarray<T> {
+  auto out = a.copy();
+  out.partition(kth, axis);
+  return out;
+}
+
+/** @brief Argpartition (np.argpartition). */
+NP_API template <typename T>
+NP_NODISCARD auto argpartition(const ndarray<T> &a, std::size_t kth,
+                               int axis = -1) -> ndarray<std::size_t> {
+  return a.argpartition(kth, axis);
+}
+
+/** @brief Searchsorted scalar (np.searchsorted). */
+NP_API template <typename T>
+NP_NODISCARD std::size_t searchsorted(const ndarray<T> &a, const T &value,
+                                      bool side_right = false) {
+  return a.searchsorted(value, side_right);
+}
+
+/** @brief Searchsorted array (np.searchsorted). */
+NP_API template <typename T>
+NP_NODISCARD auto searchsorted(const ndarray<T> &a,
+                               const ndarray<int> &values)
+    -> ndarray<std::size_t> {
+  return a.searchsorted(values);
+}
+
+/** @brief Searchsorted with sorter index array (np.searchsorted with sorter).
+ *
+ * `sorter` is permutation that sorts `a`. This overload validates sizes.
+ */
+NP_API template <typename T>
+NP_NODISCARD std::size_t searchsorted(const ndarray<T> &a, const T &value,
+                                      const ndarray<std::size_t> &sorter,
+                                      bool side_right = false) {
+  if (sorter.size() != a.size())
+    throw std::invalid_argument("searchsorted: sorter size mismatch");
+  // Build sorted view according to sorter
+  std::vector<T> sorted(a.size());
+  for (std::size_t i = 0; i < a.size(); ++i)
+    sorted[i] = a.data()[a._flat_logical(sorter.data()[sorter._flat_logical(i)])];
+  // Binary search on sorted
+  if (!side_right) {
+    return static_cast<std::size_t>(std::lower_bound(sorted.begin(),
+                                                     sorted.end(), value) -
+                                    sorted.begin());
+  } else {
+    return static_cast<std::size_t>(std::upper_bound(sorted.begin(),
+                                                     sorted.end(), value) -
+                                    sorted.begin());
+  }
+}
+
+/** @brief Extract elements where condition is true (np.extract).
+ *
+ * @param condition Bool array, broadcastable to `arr` shape; for simplicity
+ *                  requires identical shape (NumPy broadcasts, we enforce exact).
+ * @param arr Source array.
+ * @return 1-D array of selected elements in C order.
+ */
+NP_API template <typename T>
+NP_NODISCARD auto extract(const ndarray<bool> &condition,
+                          const ndarray<T> &arr) -> ndarray<T> {
+  if (condition.shape != arr.shape)
+    throw std::invalid_argument("extract: condition and arr must have same shape");
+  std::vector<T> out;
+  out.reserve(arr.size());
+  detail::Odometer od(condition.shape);
+  while (!od.done()) {
+    const auto &idx = od.idx();
+    if (condition.get(idx)) out.push_back(arr.get(idx));
+    od.advance();
+  }
+  ndarray<T> res(std::vector<int>{static_cast<int>(out.size())});
+  for (std::size_t i = 0; i < out.size(); ++i) res.data()[i] = out[i];
+  return res;
+}
+
+/** @brief Extract with scalar condition broadcast (convenience). */
+NP_API template <typename T>
+NP_NODISCARD auto extract(bool condition, const ndarray<T> &arr) -> ndarray<T> {
+  if (!condition) return ndarray<T>(std::vector<int>{0});
+  return arr.flatten();
 }
 
 } // namespace np
