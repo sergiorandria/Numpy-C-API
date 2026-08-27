@@ -795,6 +795,188 @@ namespace np
     return a.template astype<double>();
   }
 
+  // Normal comment: index creation helpers
+
+  NP_API inline auto diag_indices(int n, int ndim = 2) -> std::vector<ndarray<int>>
+  {
+    if (n < 0 || ndim <= 0)
+      throw std::invalid_argument("diag_indices: invalid n/ndim");
+    std::vector<ndarray<int>> out;
+    out.reserve(ndim);
+    for (int d = 0; d < ndim; ++d)
+    {
+      ndarray<int> idx(std::vector<int>{n});
+      for (int i = 0; i < n; ++i)
+        idx.data()[i] = i;
+      out.push_back(std::move(idx));
+    }
+    return out;
+  }
+
+  NP_API inline auto tril_indices(int n, int k = 0, int m = -1)
+      -> std::pair<ndarray<int>, ndarray<int>>
+  {
+    if (m == -1)
+      m = n;
+    if (n < 0 || m < 0)
+      throw std::invalid_argument("tril_indices: negative dimension");
+    std::vector<int> rows, cols;
+    for (int i = 0; i < n; ++i)
+      for (int j = 0; j < m; ++j)
+        if (j <= i + k)
+        {
+          rows.push_back(i);
+          cols.push_back(j);
+        }
+    ndarray<int> r(std::vector<int>{static_cast<int>(rows.size())});
+    ndarray<int> c(std::vector<int>{static_cast<int>(cols.size())});
+    for (std::size_t i = 0; i < rows.size(); ++i)
+    {
+      r.data()[i] = rows[i];
+      c.data()[i] = cols[i];
+    }
+    return {r, c};
+  }
+
+  NP_API inline auto triu_indices(int n, int k = 0, int m = -1)
+      -> std::pair<ndarray<int>, ndarray<int>>
+  {
+    if (m == -1)
+      m = n;
+    auto p = tril_indices(n, k - 1, m);
+    // complement of tril(k-1) is triu(k)
+    // Instead of set difference, generate directly
+    std::vector<int> rows, cols;
+    for (int i = 0; i < n; ++i)
+      for (int j = 0; j < m; ++j)
+        if (j >= i + k)
+        {
+          rows.push_back(i);
+          cols.push_back(j);
+        }
+    ndarray<int> r(std::vector<int>{static_cast<int>(rows.size())});
+    ndarray<int> c(std::vector<int>{static_cast<int>(cols.size())});
+    for (std::size_t i = 0; i < rows.size(); ++i)
+    {
+      r.data()[i] = rows[i];
+      c.data()[i] = cols[i];
+    }
+    return {r, c};
+  }
+
+  NP_API inline auto mask_indices(int n, bool (*mask_func)(int, int), int k = 0)
+      -> std::pair<ndarray<int>, ndarray<int>>
+  {
+    std::vector<int> rows, cols;
+    for (int i = 0; i < n; ++i)
+      for (int j = 0; j < n; ++j)
+        if (mask_func(i, j))
+        {
+          rows.push_back(i);
+          cols.push_back(j);
+        }
+    (void)k;
+    ndarray<int> r(std::vector<int>{static_cast<int>(rows.size())});
+    ndarray<int> c(std::vector<int>{static_cast<int>(cols.size())});
+    for (std::size_t i = 0; i < rows.size(); ++i)
+    {
+      r.data()[i] = rows[i];
+      c.data()[i] = cols[i];
+    }
+    return {r, c};
+  }
+
+  NP_API inline auto
+  unravel_index(const ndarray<int>& indices, const std::vector<int>& dims)
+      -> std::vector<ndarray<int>>
+  {
+    if (dims.empty())
+      throw std::invalid_argument("unravel_index: dims empty");
+    std::size_t total = 1;
+    for (int d : dims)
+      total *= static_cast<std::size_t>(d);
+    std::vector<ndarray<int>> out(
+        dims.size(), ndarray<int>(std::vector<int>{static_cast<int>(indices.size())}));
+    for (std::size_t idx = 0; idx < indices.size(); ++idx)
+    {
+      int flat = indices.data()[indices._flat_logical(idx)];
+      if (flat < 0)
+        flat += static_cast<int>(total);
+      if (flat < 0 || static_cast<std::size_t>(flat) >= total)
+        throw std::invalid_argument("unravel_index: flat out of bounds");
+      int rem = flat;
+      for (int d = static_cast<int>(dims.size()) - 1; d >= 0; --d)
+      {
+        int dim = dims[d];
+        out[d].data()[idx] = rem % dim;
+        rem /= dim;
+      }
+    }
+    return out;
+  }
+
+  NP_API inline auto unravel_index(int flat, const std::vector<int>& dims)
+      -> std::vector<int>
+  {
+    ndarray<int> idx(std::vector<int>{1});
+    idx.data()[0] = flat;
+    auto res = unravel_index(idx, dims);
+    std::vector<int> out;
+    out.reserve(res.size());
+    for (auto& arr : res)
+      out.push_back(arr.data()[0]);
+    return out;
+  }
+
+  NP_API inline auto ravel_multi_index(
+      const std::vector<ndarray<int>>& indices,
+      const std::vector<int>& dims,
+      const std::string& mode = "raise",
+      const std::string& order = "C") -> ndarray<int>
+  {
+    if (indices.empty())
+      throw std::invalid_argument("ravel_multi_index: empty indices");
+    std::size_t n = indices[0].size();
+    for (auto& arr : indices)
+      if (arr.size() != n)
+        throw std::invalid_argument("ravel_multi_index: indices size mismatch");
+    if (indices.size() != dims.size())
+      throw std::invalid_argument("ravel_multi_index: dims size mismatch");
+    ndarray<int> out(std::vector<int>{static_cast<int>(n)});
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      int flat = 0;
+      if (order == "C" || order == "c")
+      {
+        for (std::size_t d = 0; d < dims.size(); ++d)
+        {
+          int idx = indices[d].data()[indices[d]._flat_logical(i)];
+          if (idx < 0)
+            idx += dims[d];
+          if (mode == "clip")
+            idx = std::clamp(idx, 0, dims[d] - 1);
+          else if (idx < 0 || idx >= dims[d])
+            throw std::invalid_argument("ravel_multi_index: out of bounds");
+          flat = flat * dims[d] + idx;
+        }
+      }
+      else // Fortran
+      {
+        int stride = 1;
+        for (int d = static_cast<int>(dims.size()) - 1; d >= 0; --d)
+        {
+          int idx = indices[d].data()[indices[d]._flat_logical(i)];
+          if (idx < 0)
+            idx += dims[d];
+          flat += idx * stride;
+          stride *= dims[d];
+        }
+      }
+      out.data()[i] = flat;
+    }
+    return out;
+  }
+
 } // namespace np
 
 #endif // NP_CREATION_HPP

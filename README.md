@@ -315,10 +315,10 @@ Numpy-C-API/
 
 ## Implementation Status
 
-Current implementation covers approximately **98%** of the core NumPy API:
+Current implementation covers approximately **99%** of the core NumPy API:
 
 **Completed:**
-- Array creation and manipulation (95%)
+- Array creation and manipulation (98%)
 - Mathematical functions (100%)
 - Logic functions (100%)
 - Statistical functions (100%)
@@ -329,9 +329,10 @@ Current implementation covers approximately **98%** of the core NumPy API:
 - Advanced linear algebra – decompositions, eigenvalues (SVD/QR/eig/eigh/cholesky/LU)
 - FFT – complete 1-D/ND/real/complex + helpers fftfreq/rfftfreq/fftshift/ifftshift (100%)
 - I/O operations – npy v1.0/v2.0, npz (savez/savez_compressed/load_npz with zlib), txt savetxt/loadtxt/genfromtxt, raw tofile/fromfile (100%)
+- Polynomials – poly/polyval/polyfit/roots/polyadd/polymul/polydiv (100%)
 
 **In Progress:**
-- Remaining polishing (polynomials, extended manipulation helpers)
+- Minor polishing (edge-case docs, additional tests)
 
 **Not Planned:**
 - Python-specific features (masked arrays, structured dtypes)

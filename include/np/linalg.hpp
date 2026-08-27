@@ -21,8 +21,11 @@
 #include <cstddef>
 #include <functional>
 #include <limits>
+#include <map>
 #include <optional>
+#include <set>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
