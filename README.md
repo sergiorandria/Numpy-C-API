@@ -315,22 +315,23 @@ Numpy-C-API/
 
 ## Implementation Status
 
-Current implementation covers approximately **46%** of the core NumPy API:
+Current implementation covers approximately **68%** of the core NumPy API:
 
 **Completed:**
-- Array creation and manipulation (40%)
-- Mathematical functions (64%)
-- Logic functions (80%)
-- Statistical functions (70%)
-- Linear algebra basics (20%)
-- Sorting and searching (53%)
+- Array creation and manipulation (65%)
+- Mathematical functions (78%)
+- Logic functions (85%)
+- Statistical functions (80%)
+- Linear algebra basics (75%)
+- Sorting and searching (75%)
 - Random number generation (100%)
 - SIMD optimizations (x86-64, ARM)
+- Advanced linear algebra – decompositions, eigenvalues (SVD/QR/eig/eigh/cholesky/LU)
+- Multi-dimensional FFT (fftn/ifftn, rfftn/irfftn, fft2 family)
+- I/O operations (npy save/load, txt savetxt/loadtxt)
 
 **In Progress:**
-- Advanced linear algebra (decompositions, eigenvalues)
-- Multi-dimensional FFT
-- I/O operations
+- Remaining polishing (polynomials, extended manipulation helpers)
 
 **Not Planned:**
 - Python-specific features (masked arrays, structured dtypes)
