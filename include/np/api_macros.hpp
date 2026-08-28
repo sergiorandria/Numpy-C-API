@@ -127,11 +127,22 @@
 #define NP_INLINE __forceinline
 #else
 #define NP_INLINE inline
-#endif // __GNUC__ 
-
-#if defined(__GNUC__) | defined(__clang__) 
-#define NP_SYMBOL_VISIBILITY(V) __attribute__ ((__visibility__ (#V)))
-#else 
-#define NP_SMNP_SYMBOL_VISIBILITY(V)
 #endif // __GNUC__
+
+#if defined(__GNUC__) || defined(__clang__)
+#define NP_SYMBOL_VISIBILITY(V) __attribute__((__visibility__(#V)))
+#else
+#define NP_SYMBOL_VISIBILITY(V)
+#endif // __GNUC__ or __clang__
+
+#if defined(__GNUC__) || defined(__clang__)
+#define NP_HIDDEN NP_SYMBOL_VISIBILITY(hidden)
+#define NP_VISIBLE NP_SYMBOL_VISIBILITY(default)
+#else
+#define NP_HIDDEN
+#define NP_VISIBLE
+#endif
+
+// Convenience alias requested by task
+#define NP_VISIBILITY(V) NP_SYMBOL_VISIBILITY(V)
 #endif // NP_API_MACROS_HPP
