@@ -67,30 +67,6 @@ namespace np
     object_
   };
 
-  // Convenience constants (same spelling as NumPy scalars).
-  inline constexpr dtype int8 = dtype::int8;
-  inline constexpr dtype int16 = dtype::int16;
-  inline constexpr dtype int32 = dtype::int32;
-  inline constexpr dtype int64 = dtype::int64;
-  inline constexpr dtype uint8 = dtype::uint8;
-  inline constexpr dtype uint16 = dtype::uint16;
-  inline constexpr dtype uint32 = dtype::uint32;
-  inline constexpr dtype uint64 = dtype::uint64;
-  inline constexpr dtype float16 = dtype::float16;
-  inline constexpr dtype float32 = dtype::float32;
-  inline constexpr dtype float64 = dtype::float64;
-  inline constexpr dtype longdouble = dtype::longdouble;
-  inline constexpr dtype complex64 = dtype::complex64;
-  inline constexpr dtype complex128 = dtype::complex128;
-  inline constexpr dtype clongdouble = dtype::clongdouble;
-  inline constexpr dtype bool_ = dtype::bool_;
-  inline constexpr dtype string_ = dtype::string_;
-  inline constexpr dtype unicode_ = dtype::unicode_;
-  inline constexpr dtype datetime64 = dtype::datetime64;
-  inline constexpr dtype timedelta64 = dtype::timedelta64;
-  inline constexpr dtype void_ = dtype::void_;
-  inline constexpr dtype object_ = dtype::object_;
-
   namespace detail
   {
 
@@ -553,6 +529,74 @@ namespace np
    */
   template <dtype D>
   using dtype_t = typename detail::_Np_type_to_cxx<D>::type;
+
+  // Compile-time dtype tags: usable as `ndarray<np::complex128>` etc.
+  // Each tag carries `value` (the dtype enum) and `type` (the C++ type).
+  template <dtype D>
+  struct dtype_tag
+  {
+    static constexpr dtype value = D;
+    using type = dtype_t<D>;
+    constexpr operator dtype() const noexcept
+    {
+      return D;
+    }
+  };
+
+  template <typename T>
+  struct is_dtype_tag : std::false_type
+  {
+  };
+  template <dtype D>
+  struct is_dtype_tag<dtype_tag<D>> : std::true_type
+  {
+  };
+  template <typename T>
+  inline constexpr bool is_dtype_tag_v = is_dtype_tag<T>::value;
+
+  template <typename T>
+  struct dtype_tag_to_type
+  {
+    using type = T;
+  };
+  template <dtype D>
+  struct dtype_tag_to_type<dtype_tag<D>>
+  {
+    using type = dtype_t<D>;
+  };
+
+  // Type aliases usable as `ndarray<np::complex128>` – compile-time dtype → C++ type
+  using int8 = std::int8_t;
+  using int16 = std::int16_t;
+  using int32 = std::int32_t;
+  using int64 = std::int64_t;
+  using uint8 = std::uint8_t;
+  using uint16 = std::uint16_t;
+  using uint32 = std::uint32_t;
+  using uint64 = std::uint64_t;
+  using float16 = std::uint16_t;
+  using float32 = float;
+  using float64 = double;
+  using longdouble = long double;
+  using complex64 = std::complex<float>;
+  using complex128 = std::complex<double>;
+  using clongdouble = std::complex<long double>;
+  using bool_ = bool;
+  using string_ = std::string;
+  using unicode_ = std::u32string;
+  using datetime64 = std::int64_t;
+  using timedelta64 = std::int64_t;
+  using void_ = void;
+  using object_ = void*;
+
+  namespace detail
+  {
+    template <dtype D>
+    struct cxx_to_np_type_impl<::np::dtype_tag<D>>
+    {
+      static constexpr dtype value = D;
+    };
+  } // namespace detail
 
   /**
    * @brief np::dtype value corresponding to a native C++ type.

@@ -74,19 +74,20 @@ namespace np
         "np: ndarrayf extents must be positive");
 
   public:
-    using value_type = T;
+    using _RawT = T;
+    using value_type = typename dtype_tag_to_type<T>::type;
     static constexpr std::size_t rank = sizeof...(Extents);
     static constexpr std::size_t size_v =
         (static_cast<std::size_t>(Extents) * ... * 1ull);
     static constexpr std::array<int, rank> static_shape{Extents...};
 
     /** @brief Row-major flat storage (public, std::array-style). */
-    std::array<T, size_v> m_data{};
+    std::array<value_type, size_v> m_data{};
 
     constexpr ndarrayf() = default;
 
     /** @brief From a flat buffer (numpy.asarray semantics). */
-    constexpr explicit ndarrayf(const std::array<T, size_v>& flat) : m_data(flat)
+    constexpr explicit ndarrayf(const std::array<value_type, size_v>& flat) : m_data(flat)
     {
     }
 
@@ -151,7 +152,7 @@ namespace np
      * @brief Array from a flat std::array (C++ analog of numpy.asarray).
      * Reference: numpy-reference/reference/generated/numpy.asarray.html
      */
-    static constexpr ndarrayf from_data(const std::array<T, size_v>& flat)
+    static constexpr ndarrayf from_data(const std::array<value_type, size_v>& flat)
     {
       return ndarrayf{flat};
     }
@@ -162,11 +163,11 @@ namespace np
       return size_v;
     }
 
-    constexpr T* data()
+    constexpr value_type* data()
     {
       return m_data.data();
     }
-    constexpr const T* data() const
+    constexpr const value_type* data() const
     {
       return m_data.data();
     }
@@ -189,11 +190,11 @@ namespace np
     }
 
     /** @brief Flat (row-major) element access. */
-    constexpr T& operator[](std::size_t i)
+    constexpr value_type& operator[](std::size_t i)
     {
       return m_data[i];
     }
-    constexpr const T& operator[](std::size_t i) const
+    constexpr const value_type& operator[](std::size_t i) const
     {
       return m_data[i];
     }
@@ -206,7 +207,7 @@ namespace np
      */
     template <typename... Idx>
       requires(sizeof...(Idx) == rank && rank >= 2)
-    constexpr T& operator()(Idx... idx)
+    constexpr value_type& operator()(Idx... idx)
     {
       const std::array<std::size_t, rank> coords{static_cast<std::size_t>(idx)...};
       return m_data[detail::expr::flatten(static_shape, coords)];
@@ -214,14 +215,14 @@ namespace np
 
     template <typename... Idx>
       requires(sizeof...(Idx) == rank && rank >= 2)
-    constexpr const T& operator()(Idx... idx) const
+    constexpr const value_type& operator()(Idx... idx) const
     {
       const std::array<std::size_t, rank> coords{static_cast<std::size_t>(idx)...};
       return m_data[detail::expr::flatten(static_shape, coords)];
     }
 
     /** @brief Fill every element. */
-    constexpr void fill(const T& v)
+    constexpr void fill(const value_type& v)
     {
       m_data.fill(v);
     }
@@ -643,7 +644,7 @@ namespace np
 
         // Internal constexpr helpers
       private:
-    constexpr const T&
+    constexpr const value_type&
     axis_elem(int axis, const std::array<std::size_t, rank - 1>& cr, std::size_t a) const
     {
       std::array<std::size_t, rank> full{};

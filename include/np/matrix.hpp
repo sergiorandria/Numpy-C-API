@@ -42,6 +42,7 @@ namespace np
   {
   public:
     using Base = ndarray<T>;
+    using value_type = typename Base::value_type;
 
     /** @brief r x c matrix filled with `fill`.
      *
@@ -49,7 +50,7 @@ namespace np
      * @param cols  Number of columns.
      * @param fill  Initial value for every element (default: T{}).
      */
-    Matrix(std::size_t rows, std::size_t cols, T fill = T{})
+    Matrix(std::size_t rows, std::size_t cols, value_type fill = value_type{})
         : Base(
               std::vector<int>{static_cast<int>(rows), static_cast<int>(cols)},
               dtype_of<T>,
@@ -98,7 +99,7 @@ namespace np
      * @return  Reference to element at (i, j).
      * @pre     i < rows() && j < cols().
      */
-    auto operator()(std::size_t i, std::size_t j) -> T&
+    auto operator()(std::size_t i, std::size_t j) -> value_type&
     {
       return this->data()[i * this->cols() + j];
     }
@@ -109,7 +110,7 @@ namespace np
      * @param j Column index.
      * @return  Const reference to element at (i, j).
      */
-    auto operator()(std::size_t i, std::size_t j) const -> const T&
+    auto operator()(std::size_t i, std::size_t j) const -> const value_type&
     {
       return this->data()[i * this->cols() + j];
     }

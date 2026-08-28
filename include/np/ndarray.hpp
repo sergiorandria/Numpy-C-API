@@ -381,7 +381,7 @@ namespace np
     explicit ndarray(
         const std::vector<int>& shape,
         np::dtype type = dtype::void_,
-        const T& fill = T{});
+        const value_type& fill = T{});
 
     /**
      * @brief Builds an array from an owned data buffer.
@@ -2846,7 +2846,7 @@ namespace np
 
   // Implementation
   template <typename T>
-  ndarray<T>::ndarray(const std::vector<int>& shape, np::dtype type, const T& fill)
+  ndarray<T>::ndarray(const std::vector<int>& shape, np::dtype type, const value_type& fill)
       : shape(shape), type(type),
         data_(std::make_shared<std::vector<T>>(_checked_numel(shape), fill))
   {
