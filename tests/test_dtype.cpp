@@ -20,14 +20,17 @@ int main()
   test::check(dtype_of<np::float64::type> == dtype::float64, "float64 dtype_of");
   test::check(dtype_of<np::bool_::type> == dtype::bool_, "bool_ dtype_of");
 
-  // dtype_t mapping
-  static_assert(std::is_same_v<dtype_t<dtype::int8>, std::int8_t>);
-  static_assert(std::is_same_v<dtype_t<dtype::uint8>, std::uint8_t>);
-  static_assert(std::is_same_v<dtype_t<dtype::int32>, std::int32_t>);
-  static_assert(std::is_same_v<dtype_t<dtype::float32>, float>);
-  static_assert(std::is_same_v<dtype_t<dtype::float64>, double>);
-  static_assert(std::is_same_v<dtype_t<dtype::complex128>, std::complex<double>>);
-  static_assert(std::is_same_v<dtype_t<dtype::bool_>, bool>);
+  // dtype_t mapping (type-based: dtype_t<np::tag> -> C++ type)
+  static_assert(std::is_same_v<dtype_t<np::int8>, std::int8_t>);
+  static_assert(std::is_same_v<dtype_t<np::uint8>, std::uint8_t>);
+  static_assert(std::is_same_v<dtype_t<np::int32>, std::int32_t>);
+  static_assert(std::is_same_v<dtype_t<np::float32>, float>);
+  static_assert(std::is_same_v<dtype_t<np::float64>, double>);
+  static_assert(std::is_same_v<dtype_t<np::complex128>, std::complex<double>>);
+  static_assert(std::is_same_v<dtype_t<np::bool_>, bool>);
+  // enum-based mapping kept as dtype_t_enum
+  static_assert(std::is_same_v<dtype_t_enum<dtype::int8>, std::int8_t>);
+  static_assert(std::is_same_v<dtype_t_enum<dtype::complex128>, std::complex<double>>);
 
   // dtype_of mapping
   static_assert(dtype_of<int> == dtype::int32);

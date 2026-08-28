@@ -522,13 +522,46 @@ namespace np
 #endif
   } // namespace _Np_dtype
 
-  /**
-   * @brief Native C++ type corresponding to a np::dtype value.
-   *
-   * @tparam D  A np::dtype enumeration value.
-   */
+  // Forward declaration for use in _dtype_t_from_type
   template <dtype D>
-  using dtype_t = typename detail::_Np_type_to_cxx<D>::type;
+  struct dtype_tag;
+
+  /**
+   * @brief Native C++ type corresponding to a np::dtype tag or plain type.
+   *
+   * `dtype_t<np::complex128>` -> `std::complex<double>` (via dtype_tag),
+   * `dtype_t<double>` -> `double` (identity).
+   * For enum values use `dtype_t_enum` or `dtype_t<dtype::...>` via overload
+   * kept for backward compatibility (see below).
+   * @tparam T  A type (either a dtype_tag or a plain C++ type).
+   */
+  template <typename T>
+  struct _dtype_t_from_type
+  {
+    using type = T;
+  };
+  template <dtype D>
+  struct _dtype_t_from_type<dtype_tag<D>>
+  {
+    using type = typename detail::_Np_type_to_cxx<D>::type;
+  };
+  template <typename T>
+  using dtype_t = typename _dtype_t_from_type<T>::type;
+
+  /** @brief Enum-based mapping (kept for backward compatibility). */
+  template <dtype D>
+  using dtype_t_enum = typename detail::_Np_type_to_cxx<D>::type;
+
+  // Keep `dtype_t<dtype::...>` working for code that passes enum values
+  // (e.g. tests). Provide a variable-template-like overload via
+  // struct wrapper: `dtype_t_c<D>` is enum-based, but we also support
+  // `dtype_t` with dtype values via a helper alias `dtype_t_v`.
+  // For true backward compat, define `dtype_t` for dtype values as well
+  // via a dedicated alias when the argument is a dtype enum.
+  // Note: `dtype_t<dtype::X>` syntax (value as type param) is not valid
+  // C++ for `template<typename T>`, so we expose `dtype_t_enum` for that
+  // use-case. Tests using `dtype_t<dtype::X>` should migrate to
+  // `dtype_t<np::X>` or `dtype_t_enum<dtype::X>`.
 
   // Compile-time dtype tags: usable as `ndarray<np::complex128>` etc.
   // Each tag carries `value` (the dtype enum) and `type` (the C++ type).
@@ -536,7 +569,7 @@ namespace np
   struct dtype_tag
   {
     static constexpr dtype value = D;
-    using type = dtype_t<D>;
+    using type = typename detail::_Np_type_to_cxx<D>::type;
     constexpr operator dtype() const noexcept
     {
       return D;
@@ -562,7 +595,7 @@ namespace np
   template <dtype D>
   struct dtype_tag_to_type<dtype_tag<D>>
   {
-    using type = dtype_t<D>;
+    using type = typename detail::_Np_type_to_cxx<D>::type;
   };
 
   // Type aliases usable as `ndarray<np::complex128>` – compile-time dtype → C++ type
