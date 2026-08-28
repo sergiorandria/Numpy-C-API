@@ -34,6 +34,10 @@
 #include "exceptions.hpp"
 #include "ndarray.hpp"
 
+#ifdef NP_USE_THREADING
+#include "threadpool.hpp"
+#endif
+
 namespace np::linalg
 {
 
@@ -2549,6 +2553,37 @@ namespace np::linalg
       const std::size_t rows = static_cast<std::size_t>(ashape[0]);
       const std::size_t k = static_cast<std::size_t>(ashape[1]);
       ndarray<R> out(std::vector<int>{static_cast<int>(rows)});
+#ifdef NP_USE_THREADING
+      if (rows > 64)
+      {
+        ::np::ThreadPool::global().parallel_for(
+            0,
+            rows,
+            [&](std::size_t i)
+            {
+              R acc{};
+              for (std::size_t j = 0; j < k; ++j)
+              {
+                acc += static_cast<R>(a.get(std::array<std::size_t, 2>{i, j}))
+                    * static_cast<R>(b.at(j));
+              }
+              out.data()[i] = acc;
+            });
+      }
+      else
+      {
+        for (std::size_t i = 0; i < rows; ++i)
+        {
+          R acc{};
+          for (std::size_t j = 0; j < k; ++j)
+          {
+            acc += static_cast<R>(a.get(std::array<std::size_t, 2>{i, j}))
+                * static_cast<R>(b.at(j));
+          }
+          out.data()[i] = acc;
+        }
+      }
+#else
       for (std::size_t i = 0; i < rows; ++i)
       {
         R acc{};
@@ -2559,6 +2594,7 @@ namespace np::linalg
         }
         out.data()[i] = acc;
       }
+#endif
       return out;
     }
 
@@ -2572,6 +2608,37 @@ namespace np::linalg
       const std::size_t k = static_cast<std::size_t>(ashape[0]);
       const std::size_t cols = static_cast<std::size_t>(bshape[1]);
       ndarray<R> out(std::vector<int>{static_cast<int>(cols)});
+#ifdef NP_USE_THREADING
+      if (cols > 64)
+      {
+        ::np::ThreadPool::global().parallel_for(
+            0,
+            cols,
+            [&](std::size_t j)
+            {
+              R acc{};
+              for (std::size_t i = 0; i < k; ++i)
+              {
+                acc += static_cast<R>(a.at(i))
+                    * static_cast<R>(b.get(std::array<std::size_t, 2>{i, j}));
+              }
+              out.data()[j] = acc;
+            });
+      }
+      else
+      {
+        for (std::size_t j = 0; j < cols; ++j)
+        {
+          R acc{};
+          for (std::size_t i = 0; i < k; ++i)
+          {
+            acc += static_cast<R>(a.at(i))
+                * static_cast<R>(b.get(std::array<std::size_t, 2>{i, j}));
+          }
+          out.data()[j] = acc;
+        }
+      }
+#else
       for (std::size_t j = 0; j < cols; ++j)
       {
         R acc{};
@@ -2582,6 +2649,7 @@ namespace np::linalg
         }
         out.data()[j] = acc;
       }
+#endif
       return out;
     }
 
@@ -2594,6 +2662,43 @@ namespace np::linalg
     const std::size_t k = static_cast<std::size_t>(ashape[1]);
     const std::size_t cols = static_cast<std::size_t>(bshape[1]);
     ndarray<R> out(std::vector<int>{static_cast<int>(rows), static_cast<int>(cols)});
+#ifdef NP_USE_THREADING
+    if (rows * cols > 4096)
+    {
+      ::np::ThreadPool::global().parallel_for(
+          0,
+          rows,
+          [&](std::size_t i)
+          {
+            for (std::size_t j = 0; j < cols; ++j)
+            {
+              R acc{};
+              for (std::size_t p = 0; p < k; ++p)
+              {
+                acc += static_cast<R>(a.get(std::array<std::size_t, 2>{i, p}))
+                    * static_cast<R>(b.get(std::array<std::size_t, 2>{p, j}));
+              }
+              out.data()[i * cols + j] = acc;
+            }
+          });
+    }
+    else
+    {
+      for (std::size_t i = 0; i < rows; ++i)
+      {
+        for (std::size_t j = 0; j < cols; ++j)
+        {
+          R acc{};
+          for (std::size_t p = 0; p < k; ++p)
+          {
+            acc += static_cast<R>(a.get(std::array<std::size_t, 2>{i, p}))
+                * static_cast<R>(b.get(std::array<std::size_t, 2>{p, j}));
+          }
+          out.data()[i * cols + j] = acc;
+        }
+      }
+    }
+#else
     for (std::size_t i = 0; i < rows; ++i)
     {
       for (std::size_t j = 0; j < cols; ++j)
@@ -2607,6 +2712,7 @@ namespace np::linalg
         out.data()[i * cols + j] = acc;
       }
     }
+#endif
     return out;
   }
 

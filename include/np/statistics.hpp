@@ -42,6 +42,10 @@
 #include "dtype.hpp"
 #include "ndarray.hpp"
 
+#ifdef NP_USE_THREADING
+#include "threadpool.hpp"
+#endif
+
 namespace np
 {
 
@@ -121,6 +125,45 @@ namespace np
       const std::size_t nd = static_cast<std::size_t>(arr.ndim());
 
       ndarray<R> out(out_shape);
+#ifdef NP_USE_THREADING
+      // Collect outer indices for parallel dispatch
+      std::vector<std::vector<std::size_t>> all_red;
+      {
+        detail::Odometer od(out_shape);
+        while (!od.done())
+        {
+          all_red.push_back(od.idx());
+          od.advance();
+        }
+        if (all_red.empty())
+        {
+          all_red.push_back({});
+        }
+      }
+      if (all_red.size() > 32)
+      {
+        ::np::ThreadPool::global().parallel_for(
+            0,
+            all_red.size(),
+            [&](std::size_t idx)
+            {
+              const auto& red = all_red[idx];
+              std::vector<std::size_t> full(nd, 0);
+              for (std::size_t d = 0, r = 0; d < nd; ++d)
+              {
+                if (static_cast<int>(d) == axis)
+                {
+                  full[d] = 0;
+                  continue;
+                }
+                full[d] = red[r++];
+              }
+              const std::size_t flat = detail::row_major_offset(red, out_shape);
+              out.data()[flat] = fn(detail::gather_slice(arr, axis, full));
+            });
+        return out;
+      }
+#endif
       detail::Odometer od(out_shape);
       std::vector<std::size_t> full(nd, 0);
       while (!od.done())
@@ -194,6 +237,49 @@ namespace np
       red_shape.erase(red_shape.begin() + axis);
 
       ndarray<R> out(arr.shape);
+#ifdef NP_USE_THREADING
+      std::vector<std::vector<std::size_t>> all_red;
+      {
+        Odometer od(red_shape);
+        while (!od.done())
+        {
+          all_red.push_back(od.idx());
+          od.advance();
+        }
+        if (all_red.empty())
+        {
+          all_red.push_back({});
+        }
+      }
+      if (all_red.size() > 16)
+      {
+        ::np::ThreadPool::global().parallel_for(
+            0,
+            all_red.size(),
+            [&](std::size_t idx)
+            {
+              const auto& red = all_red[idx];
+              std::vector<std::size_t> full(nd, 0);
+              for (std::size_t d = 0, r = 0; d < nd; ++d)
+              {
+                full[d] = (static_cast<int>(d) == axis) ? 0 : red[r++];
+              }
+              R running = init;
+              for (std::size_t a = 0; a < alen; ++a)
+              {
+                full[static_cast<std::size_t>(axis)] = a;
+                const T v = arr.get(full);
+                if (!is_nan_elem(v))
+                {
+                  step(running, v);
+                }
+                const std::size_t flat = row_major_offset(full, out.shape);
+                out.data()[flat] = running;
+              }
+            });
+        return out;
+      }
+#endif
       Odometer od(red_shape);
       std::vector<std::size_t> full(nd, 0);
       while (!od.done())

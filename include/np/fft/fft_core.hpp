@@ -30,6 +30,10 @@
 #include "../exceptions.hpp"
 #include "../ndarray.hpp"
 
+#ifdef NP_USE_THREADING
+#include "../threadpool.hpp"
+#endif
+
 namespace np::fft
 {
 
@@ -474,6 +478,61 @@ namespace np::fft
 
       std::vector<Cplx> slice(n, Cplx{0.0, 0.0});
       std::vector<std::size_t> full(nd, 0);
+#ifdef NP_USE_THREADING
+      // Collect outer indices for parallel dispatch
+      std::vector<std::vector<std::size_t>> all_oi;
+      {
+        np::detail::Odometer od_tmp(od_dims);
+        while (!od_tmp.done())
+        {
+          all_oi.push_back(od_tmp.idx());
+          od_tmp.advance();
+        }
+        if (all_oi.empty())
+        {
+          all_oi.push_back({});
+        }
+      }
+      const std::size_t n_outer = all_oi.size();
+      if (n_outer > 4)
+      {
+        ::np::ThreadPool::global().parallel_for(
+            0,
+            n_outer,
+            [&](std::size_t oi_idx)
+            {
+              const auto& oi = all_oi[oi_idx];
+              std::vector<Cplx> slice_local(n, Cplx{0.0, 0.0});
+              std::vector<std::size_t> full_local(nd, 0);
+              std::size_t p = 0;
+              for (std::size_t d = 0; d < nd; ++d)
+              {
+                if (d != ax)
+                {
+                  full_local[d] = oi[p++];
+                }
+              }
+              const std::size_t base =
+                  np::detail::flat_index(full_local, src.strides, src.offset);
+              for (std::size_t k = 0; k < read; ++k)
+              {
+                slice_local[k] = static_cast<Cplx>(src.data()[base + k * src_stride]);
+              }
+              for (std::size_t k = read; k < n; ++k)
+              {
+                slice_local[k] = Cplx{0.0, 0.0};
+              }
+              transform(slice_local, inverse, scale, cache);
+              const std::size_t db =
+                  np::detail::flat_index(full_local, dst.strides, dst.offset);
+              for (std::size_t k = 0; k < n; ++k)
+              {
+                dst.data()[db + k * dst_stride] = slice_local[k];
+              }
+            });
+        return;
+      }
+      // Fallback to serial for small n_outer
       np::detail::Odometer od(od_dims);
       while (!od.done())
       {
@@ -504,6 +563,38 @@ namespace np::fft
         }
         od.advance();
       }
+#else
+      np::detail::Odometer od(od_dims);
+      while (!od.done())
+      {
+        const auto& oi = od.idx();
+        std::size_t p = 0;
+        for (std::size_t d = 0; d < nd; ++d)
+        {
+          if (d != ax)
+          {
+            full[d] = oi[p++];
+          }
+        }
+        const std::size_t base = np::detail::flat_index(full, src.strides, src.offset);
+        for (std::size_t k = 0; k < read; ++k)
+        {
+          slice[k] = static_cast<Cplx>(src.data()[base + k * src_stride]);
+        }
+        for (std::size_t k = read; k < n; ++k)
+        {
+          slice[k] = Cplx{0.0, 0.0};
+        }
+        transform(slice, inverse, scale, cache);
+
+        const std::size_t db = np::detail::flat_index(full, dst.strides, dst.offset);
+        for (std::size_t k = 0; k < n; ++k)
+        {
+          dst.data()[db + k * dst_stride] = slice[k];
+        }
+        od.advance();
+      }
+#endif
     }
 
     /**
@@ -545,6 +636,60 @@ namespace np::fft
 
       std::vector<Cplx> slice(n, Cplx{0.0, 0.0});
       std::vector<std::size_t> full(nd, 0);
+#ifdef NP_USE_THREADING
+      std::vector<std::vector<std::size_t>> all_oi_r;
+      {
+        np::detail::Odometer od_tmp(od_dims);
+        while (!od_tmp.done())
+        {
+          all_oi_r.push_back(od_tmp.idx());
+          od_tmp.advance();
+        }
+        if (all_oi_r.empty())
+        {
+          all_oi_r.push_back({});
+        }
+      }
+      const std::size_t n_outer_r = all_oi_r.size();
+      if (n_outer_r > 4)
+      {
+        ::np::ThreadPool::global().parallel_for(
+            0,
+            n_outer_r,
+            [&](std::size_t oi_idx)
+            {
+              const auto& oi = all_oi_r[oi_idx];
+              std::vector<Cplx> slice_local(n, Cplx{0.0, 0.0});
+              std::vector<std::size_t> full_local(nd, 0);
+              std::size_t p = 0;
+              for (std::size_t d = 0; d < nd; ++d)
+              {
+                if (d != ax)
+                {
+                  full_local[d] = oi[p++];
+                }
+              }
+              const std::size_t base =
+                  np::detail::flat_index(full_local, src.strides, src.offset);
+              for (std::size_t k = 0; k < read; ++k)
+              {
+                const Cplx v = static_cast<Cplx>(src.data()[base + k * src_stride]);
+                slice_local[k] = Cplx{v.real(), 0.0};
+              }
+              for (std::size_t k = read; k < n; ++k)
+              {
+                slice_local[k] = Cplx{0.0, 0.0};
+              }
+              transform(slice_local, false, scale, cache);
+              const std::size_t db =
+                  np::detail::flat_index(full_local, dst.strides, dst.offset);
+              for (std::size_t k = 0; k < half; ++k)
+              {
+                dst.data()[db + k * dst_stride] = slice_local[k];
+              }
+            });
+        return;
+      }
       np::detail::Odometer od(od_dims);
       while (!od.done())
       {
@@ -577,6 +722,40 @@ namespace np::fft
         }
         od.advance();
       }
+#else
+      np::detail::Odometer od(od_dims);
+      while (!od.done())
+      {
+        const auto& oi = od.idx();
+        std::size_t p = 0;
+        for (std::size_t d = 0; d < nd; ++d)
+        {
+          if (d != ax)
+          {
+            full[d] = oi[p++];
+          }
+        }
+        const std::size_t base = np::detail::flat_index(full, src.strides, src.offset);
+        for (std::size_t k = 0; k < read; ++k)
+        {
+          // Discard any imaginary part, matching numpy.rfft.
+          const Cplx v = static_cast<Cplx>(src.data()[base + k * src_stride]);
+          slice[k] = Cplx{v.real(), 0.0};
+        }
+        for (std::size_t k = read; k < n; ++k)
+        {
+          slice[k] = Cplx{0.0, 0.0};
+        }
+        transform(slice, false, scale, cache);
+
+        const std::size_t db = np::detail::flat_index(full, dst.strides, dst.offset);
+        for (std::size_t k = 0; k < half; ++k)
+        {
+          dst.data()[db + k * dst_stride] = slice[k];
+        }
+        od.advance();
+      }
+#endif
     }
 
     /**
@@ -617,6 +796,75 @@ namespace np::fft
       std::vector<Cplx> spec(hp, Cplx{0.0, 0.0});
       std::vector<Cplx> full(n, Cplx{0.0, 0.0});
       std::vector<std::size_t> full_idx(nd, 0);
+#ifdef NP_USE_THREADING
+      std::vector<std::vector<std::size_t>> all_oi_i;
+      {
+        np::detail::Odometer od_tmp(od_dims);
+        while (!od_tmp.done())
+        {
+          all_oi_i.push_back(od_tmp.idx());
+          od_tmp.advance();
+        }
+        if (all_oi_i.empty())
+        {
+          all_oi_i.push_back({});
+        }
+      }
+      const std::size_t n_outer_i = all_oi_i.size();
+      if (n_outer_i > 4)
+      {
+        ::np::ThreadPool::global().parallel_for(
+            0,
+            n_outer_i,
+            [&](std::size_t oi_idx)
+            {
+              const auto& oi = all_oi_i[oi_idx];
+              std::vector<std::size_t> full_idx_local(nd, 0);
+              std::vector<Cplx> spec_local(hp, Cplx{0.0, 0.0});
+              std::vector<Cplx> full_local(n, Cplx{0.0, 0.0});
+              std::size_t p = 0;
+              for (std::size_t d = 0; d < nd; ++d)
+              {
+                if (d != ax)
+                {
+                  full_idx_local[d] = oi[p++];
+                }
+              }
+              const std::size_t base = np::detail::flat_index(
+                  full_idx_local, src.strides, src.offset);
+              for (std::size_t k = 0; k < read; ++k)
+              {
+                spec_local[k] = src.data()[base + k * src_stride];
+              }
+              for (std::size_t k = read; k < hp; ++k)
+              {
+                spec_local[k] = Cplx{0.0, 0.0};
+              }
+              const std::size_t mid = n / 2;
+              std::fill(full_local.begin(), full_local.end(), Cplx{0.0, 0.0});
+              full_local[0] = spec_local[0];
+              for (std::size_t k = 1; k <= mid; ++k)
+              {
+                full_local[k] = spec_local[k];
+                if (n - k != k)
+                {
+                  full_local[n - k] = std::conj(spec_local[k]);
+                }
+                else
+                {
+                  full_local[k] = std::conj(spec_local[k]);
+                }
+              }
+              transform(full_local, true, scale, cache);
+              const std::size_t db = np::detail::flat_index(
+                  full_idx_local, dst.strides, dst.offset);
+              for (std::size_t k = 0; k < n; ++k)
+              {
+                dst.data()[db + k * dst_stride] = full_local[k].real();
+              }
+            });
+        return;
+      }
       np::detail::Odometer od(od_dims);
       while (!od.done())
       {
@@ -665,6 +913,56 @@ namespace np::fft
         }
         od.advance();
       }
+#else
+      np::detail::Odometer od(od_dims);
+      while (!od.done())
+      {
+        const auto& oi = od.idx();
+        std::size_t p = 0;
+        for (std::size_t d = 0; d < nd; ++d)
+        {
+          if (d != ax)
+          {
+            full_idx[d] = oi[p++];
+          }
+        }
+        const std::size_t base =
+            np::detail::flat_index(full_idx, src.strides, src.offset);
+        for (std::size_t k = 0; k < read; ++k)
+        {
+          spec[k] = src.data()[base + k * src_stride];
+        }
+        for (std::size_t k = read; k < hp; ++k)
+        {
+          spec[k] = Cplx{0.0, 0.0};
+        }
+
+        // Reconstruct the full Hermitian spectrum of length n.
+        const std::size_t mid = n / 2;
+        std::fill(full.begin(), full.end(), Cplx{0.0, 0.0});
+        full[0] = spec[0];
+        for (std::size_t k = 1; k <= mid; ++k)
+        {
+          full[k] = spec[k];
+          if (n - k != k)
+          {
+            full[n - k] = std::conj(spec[k]);
+          }
+          else
+          {
+            full[k] = std::conj(spec[k]); // Nyquist bin, real by symmetry
+          }
+        }
+        transform(full, true, scale, cache);
+
+        const std::size_t db = np::detail::flat_index(full_idx, dst.strides, dst.offset);
+        for (std::size_t k = 0; k < n; ++k)
+        {
+          dst.data()[db + k * dst_stride] = full[k].real();
+        }
+        od.advance();
+      }
+#endif
     }
 
     /** @brief Conjugate every element of a complex array in place. */
