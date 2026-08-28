@@ -12,13 +12,13 @@ using namespace np;
 int main()
 {
   // Type aliases: np::complex128 etc. are now直接 C++ types usable as ndarray<np::complex128>
-  static_assert(std::is_same_v<np::int32, std::int32_t>);
-  static_assert(std::is_same_v<np::float64, double>);
-  static_assert(std::is_same_v<np::complex128, std::complex<double>>);
-  static_assert(std::is_same_v<np::bool_, bool>);
-  test::check(dtype_of<np::int32> == dtype::int32, "int32 dtype_of");
-  test::check(dtype_of<np::float64> == dtype::float64, "float64 dtype_of");
-  test::check(dtype_of<np::bool_> == dtype::bool_, "bool_ dtype_of");
+  static_assert(std::is_same_v<np::int32::type, std::int32_t>);
+  static_assert(std::is_same_v<np::float64::type, double>);
+  static_assert(std::is_same_v<np::complex128::type, std::complex<double>>);
+  static_assert(std::is_same_v<np::bool_::type, bool>);
+  test::check(dtype_of<np::int32::type> == dtype::int32, "int32 dtype_of");
+  test::check(dtype_of<np::float64::type> == dtype::float64, "float64 dtype_of");
+  test::check(dtype_of<np::bool_::type> == dtype::bool_, "bool_ dtype_of");
 
   // dtype_t mapping
   static_assert(std::is_same_v<dtype_t<dtype::int8>, std::int8_t>);

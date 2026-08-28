@@ -566,28 +566,28 @@ namespace np
   };
 
   // Type aliases usable as `ndarray<np::complex128>` – compile-time dtype → C++ type
-  using int8 = std::int8_t;
-  using int16 = std::int16_t;
-  using int32 = std::int32_t;
-  using int64 = std::int64_t;
-  using uint8 = std::uint8_t;
-  using uint16 = std::uint16_t;
-  using uint32 = std::uint32_t;
-  using uint64 = std::uint64_t;
-  using float16 = std::uint16_t;
-  using float32 = float;
-  using float64 = double;
-  using longdouble = long double;
-  using complex64 = std::complex<float>;
-  using complex128 = std::complex<double>;
-  using clongdouble = std::complex<long double>;
-  using bool_ = bool;
-  using string_ = std::string;
-  using unicode_ = std::u32string;
-  using datetime64 = std::int64_t;
-  using timedelta64 = std::int64_t;
-  using void_ = void;
-  using object_ = void*;
+  using int8 = dtype_tag<dtype::int8>;
+  using int16 = dtype_tag<dtype::int16>;
+  using int32 = dtype_tag<dtype::int32>;
+  using int64 = dtype_tag<dtype::int64>;
+  using uint8 = dtype_tag<dtype::uint8>;
+  using uint16 = dtype_tag<dtype::uint16>;
+  using uint32 = dtype_tag<dtype::uint32>;
+  using uint64 = dtype_tag<dtype::uint64>;
+  using float16 = dtype_tag<dtype::float16>;
+  using float32 = dtype_tag<dtype::float32>;
+  using float64 = dtype_tag<dtype::float64>;
+  using longdouble = dtype_tag<dtype::longdouble>;
+  using complex64 = dtype_tag<dtype::complex64>;
+  using complex128 = dtype_tag<dtype::complex128>;
+  using clongdouble = dtype_tag<dtype::clongdouble>;
+  using bool_ = dtype_tag<dtype::bool_>;
+  using string_ = dtype_tag<dtype::string_>;
+  using unicode_ = dtype_tag<dtype::unicode_>;
+  using datetime64 = dtype_tag<dtype::datetime64>;
+  using timedelta64 = dtype_tag<dtype::timedelta64>;
+  using void_ = dtype_tag<dtype::void_>;
+  using object_ = dtype_tag<dtype::object_>;
 
   namespace detail
   {

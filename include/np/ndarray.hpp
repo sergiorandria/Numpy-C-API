@@ -343,7 +343,7 @@ namespace np
   class ndarray
   {
   public:
-    using value_type = T;
+    using value_type = typename dtype_tag_to_type<T>::type;
     using size_type = std::size_t;
     using iterator = ndarray_iterator<T>;
     using const_iterator = ndarray_iterator<const T>;
@@ -355,7 +355,7 @@ namespace np
      * uniform for `bool` arrays.
      */
     using reference =
-        std::conditional_t<std::is_same_v<T, bool>, std::vector<bool>::reference, T&>;
+        std::conditional_t<std::is_same_v<value_type, bool>, std::vector<bool>::reference, T&>;
 
     // Attributes (mirror ndarray.shape / strides / dtype / order)
     std::vector<int> shape;                 ///< Dimensions of the array
@@ -381,7 +381,7 @@ namespace np
     explicit ndarray(
         const std::vector<int>& shape,
         np::dtype type = dtype::void_,
-        const value_type& fill = T{});
+        const value_type& fill = typename ndarray<T>::value_type{});
 
     /**
      * @brief Builds an array from an owned data buffer.
@@ -395,7 +395,7 @@ namespace np
      * @return New `ndarray` with the given shape and data.
      * @throws std::invalid_argument if `data.size() != product(shape)`.
      */
-    static ndarray from_data(const std::vector<int>& shape, std::vector<T> data);
+    static ndarray from_data(const std::vector<int>& shape, std::vector<value_type> data);
 
     /**
      * @brief 1D construction from a flat initializer list.
@@ -405,7 +405,7 @@ namespace np
     template <
         typename U,
         typename = std::enable_if_t<
-            std::is_convertible_v<U, T>
+            std::is_convertible_v<U, value_type>
             || std::is_same_v<U, std::initializer_list<double>>
             || std::is_same_v<U, std::initializer_list<int>>>>
     ndarray(std::initializer_list<U> list);
@@ -624,7 +624,7 @@ namespace np
      * @throws std::out_of_range if any index is out of bounds.
      */
     template <typename Container>
-    auto get(const Container& idx) const -> T;
+    auto get(const Container& idx) const -> value_type;
 
     /**
      * @brief Write a value at runtime index container position.
@@ -635,7 +635,7 @@ namespace np
      * @throws std::out_of_range if any index is out of bounds.
      */
     template <typename Container>
-    void set(const Container& idx, const T& value);
+    void set(const Container& idx, const value_type& value);
 
     /**
      * @brief 1D bounds-checked access.
@@ -714,7 +714,7 @@ namespace np
      * @return The single element value.
      * @throws std::invalid_argument if `size() != 1`.
      */
-    T item() const;
+    value_type item() const;
 
     /**
      * @brief Scalar conversion for single-element arrays (numpy `bool()`).
@@ -751,7 +751,7 @@ namespace np
      *         is `std::int64_t` (NumPy semantics).
      * @complexity O(n), where n = size().
      */
-    auto sum() const -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+    auto sum() const -> std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>;
 
     /**
      * @brief Sum along an axis.
@@ -765,10 +765,10 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n), where n = size().
      */
-    template <typename Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+    template <typename Acc = std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>
     auto sum(std::optional<int> axis, bool keepdims = false) const -> ndarray<Acc>;
 
-    template <typename Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+    template <typename Acc = std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>
     auto sum(int axis, bool keepdims = false) const -> ndarray<Acc>;
 
     /**
@@ -777,7 +777,7 @@ namespace np
      *         type is `std::int64_t`.
      * @complexity O(n), where n = size().
      */
-    auto prod() const -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+    auto prod() const -> std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>;
 
     /**
      * @brief Product along an axis.
@@ -789,10 +789,10 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n).
      */
-    template <typename Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+    template <typename Acc = std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>
     auto prod(std::optional<int> axis, bool keepdims = false) const -> ndarray<Acc>;
 
-    template <typename Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+    template <typename Acc = std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>
     auto prod(int axis, bool keepdims = false) const -> ndarray<Acc>;
 
     /**
@@ -801,7 +801,7 @@ namespace np
      * @throws std::runtime_error if the array is empty.
      * @complexity O(n).
      */
-    T min() const;
+    value_type min() const;
 
     /**
      * @brief Minimum along an axis.
@@ -822,7 +822,7 @@ namespace np
      * @throws std::runtime_error if the array is empty.
      * @complexity O(n).
      */
-    T max() const;
+    value_type max() const;
 
     /**
      * @brief Maximum along an axis.
@@ -845,7 +845,7 @@ namespace np
      * @throws std::runtime_error if the array is empty.
      * @complexity O(n).
      */
-    T ptp() const;
+    value_type ptp() const;
 
     /**
      * @brief Peak-to-peak (max - min) along an axis.
@@ -868,7 +868,7 @@ namespace np
      * @throws std::runtime_error if the array is empty.
      * @complexity O(n).
      */
-    auto mean() const -> typename _mean_type<T>::type;
+    auto mean() const -> typename _mean_type<value_type>::type;
 
     /**
      * @brief Arithmetic mean along an axis.
@@ -892,7 +892,7 @@ namespace np
      * @throws std::runtime_error if the array is empty.
      * @complexity O(n).
      */
-    auto var() const -> typename _mean_type<T>::type;
+    auto var() const -> typename _mean_type<value_type>::type;
 
     /**
      * @brief Population variance along an axis.
@@ -914,7 +914,7 @@ namespace np
      * @return Standard deviation (`sqrt(var())`).
      * @complexity O(n).
      */
-    auto std() const -> typename _mean_type<T>::type;
+    auto std() const -> typename _mean_type<value_type>::type;
 
     /**
      * @brief Population standard deviation along an axis.
@@ -1021,7 +1021,7 @@ namespace np
      * @complexity O(n).
      */
     auto cumsum() const
-        -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
+        -> ndarray<std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>;
 
     /**
      * @brief Cumulative sum along an axis.
@@ -1031,7 +1031,7 @@ namespace np
      * @complexity O(n).
      */
     auto cumsum(int axis) const
-        -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
+        -> ndarray<std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>;
 
     /**
      * @brief Cumulative sum with optional axis (flattened when std::nullopt).
@@ -1041,7 +1041,7 @@ namespace np
      * @complexity O(n).
      */
     auto cumsum(std::optional<int> axis) const
-        -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
+        -> ndarray<std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>;
 
     /**
      * @brief Cumulative product (flattened when no axis is given).
@@ -1049,7 +1049,7 @@ namespace np
      * @complexity O(n).
      */
     auto cumprod() const
-        -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
+        -> ndarray<std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>;
 
     /**
      * @brief Cumulative product along an axis.
@@ -1059,7 +1059,7 @@ namespace np
      * @complexity O(n).
      */
     auto cumprod(int axis) const
-        -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
+        -> ndarray<std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>;
 
     /**
      * @brief Cumulative product with optional axis (flattened when std::nullopt).
@@ -1069,7 +1069,7 @@ namespace np
      * @complexity O(n).
      */
     auto cumprod(std::optional<int> axis) const
-        -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
+        -> ndarray<std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>;
 
     // Sorting / searching
     /**
@@ -1161,9 +1161,9 @@ namespace np
      * @throws std::invalid_argument if the array is not 1-D.
      * @complexity O(log n).
      */
-     std::size_t searchsorted(const T& value, bool side_right = false) const;
+     std::size_t searchsorted(const value_type& value, bool side_right = false) const;
 
-     std::size_t searchsorted(const T& value, std::optional<bool> side_right) const;
+     std::size_t searchsorted(const value_type& value, std::optional<bool> side_right) const;
 
     /**
      * @brief Searchsorted applied to every element of `values`.
@@ -1264,7 +1264,7 @@ namespace np
      * @param value Value to fill with.
      * @complexity O(n).
      */
-    void fill(const T& value);
+    void fill(const value_type& value);
 
     /**
      * @brief Deep copy of the array.
@@ -1316,12 +1316,12 @@ namespace np
      */
     void
     put(const std::vector<std::size_t>& indices,
-        const std::vector<T>& values,
+        const std::vector<typename ndarray<T>::value_type>& values,
         char mode = 'r');
 
     void put(
         const std::vector<std::size_t>& indices,
-        const std::vector<T>& values,
+        const std::vector<typename ndarray<T>::value_type>& values,
         std::optional<char> mode);
 
     /**
@@ -1359,7 +1359,7 @@ namespace np
      * @return New array with clipped values.
      * @complexity O(n).
      */
-    auto clip(const T& min_value, const T& max_value) const -> ndarray;
+    auto clip(const value_type& min_value, const value_type& max_value) const -> ndarray;
 
     /**
      * @brief Round to `decimals` places.
@@ -1392,9 +1392,9 @@ namespace np
      * @throws np::AxisError if `ndim() < 2`.
      * @complexity O(min(shape[0], shape[1])).
      */
-    T trace(int offset = 0) const;
+    value_type trace(int offset = 0) const;
 
-    T trace(std::optional<int> offset) const;
+    value_type trace(std::optional<int> offset) const;
 
     /**
      * @brief Indices of non-zero elements (one array per dimension).
@@ -1593,7 +1593,7 @@ namespace np
      * @return true if `value` is found.
      * @complexity O(n).
      */
-    NP_NODISCARD bool contains(const T& value) const;
+    NP_NODISCARD bool contains(const value_type& value) const;
 
     /**
      * @brief Element-wise floor division (numpy `//`).
@@ -1663,7 +1663,7 @@ namespace np
      * @return Vector of all logical elements in C order.
      * @complexity O(n).
      */
-    auto tolist() const -> std::vector<T>;
+    auto tolist() const -> std::vector<value_type>;
 
     /**
      * @brief Native-endian byte dump of the logical elements.
@@ -2069,7 +2069,7 @@ namespace np
      * @return true if every element equals `value`.
      * @complexity O(n).
      */
-    bool all_equal(const T& value) const noexcept;
+    bool all_equal(const typename ndarray<T>::value_type& value) const noexcept;
 
     // In-place arithmetic (same shape, or broadcast for += etc.)
 
@@ -2351,7 +2351,7 @@ namespace np
     template <typename U>
     friend class ndarray;
 
-    std::shared_ptr<std::vector<T>> data_; ///< Shared storage (enables views)
+    std::shared_ptr<std::vector<value_type>> data_; ///< Shared storage (enables views)
 
     /** WRITEABLE flag (numpy.ndarray.setflags). */
     bool writeable_ = true;
@@ -2854,7 +2854,7 @@ namespace np
   }
 
   template <typename T>
-  auto ndarray<T>::from_data(const std::vector<int>& shape, std::vector<T> data)
+  auto ndarray<T>::from_data(const std::vector<int>& shape, std::vector<typename ndarray<T>::value_type> data)
       -> ndarray
   {
     _validate_shape(shape);
@@ -2872,7 +2872,7 @@ namespace np
   template <typename T>
   template <typename U, typename>
   ndarray<T>::ndarray(std::initializer_list<U> list)
-      : data_(std::make_shared<std::vector<T>>())
+      : data_(std::make_shared<std::vector<typename ndarray<T>::value_type>>())
   {
     // Flatten and convert
     _flatten_initializer(list);
@@ -2887,7 +2887,7 @@ namespace np
     const int n_rows = static_cast<int>(rows.size());
     const int n_cols = n_rows > 0 ? static_cast<int>(rows.begin()->size()) : 0;
     shape = {n_rows, n_cols};
-    data_ = std::make_shared<std::vector<T>>(_numel(), T{});
+    data_ = std::make_shared<std::vector<T>>(_numel(), typename ndarray<T>::value_type{});
     std::size_t k = 0;
     for (const auto& row : rows)
     {
@@ -2905,7 +2905,7 @@ namespace np
 
   template <typename T>
   ndarray<T>::ndarray(std::initializer_list<std::initializer_list<double>> rows)
-      : data_(std::make_shared<std::vector<T>>())
+      : data_(std::make_shared<std::vector<typename ndarray<T>::value_type>>())
   {
     // Store the shape
     shape = {static_cast<int>(rows.size()), 0};
@@ -2927,7 +2927,7 @@ namespace np
       }
       for (const auto& val : row)
       {
-        data_->push_back(static_cast<T>(val));
+        data_->push_back(static_cast<typename ndarray<T>::value_type>(val));
       }
     }
     _finalize();
@@ -3035,7 +3035,7 @@ namespace np
   {
     if (!data_)
     {
-      data_ = std::make_shared<std::vector<T>>(_numel(), T{});
+      data_ = std::make_shared<std::vector<typename ndarray<T>::value_type>>(_numel(), typename ndarray<T>::value_type{});
     }
     return *data_;
   }
@@ -3146,7 +3146,7 @@ namespace np
 
   template <typename T>
   template <typename Container>
-  auto ndarray<T>::get(const Container& idx) const -> T
+  auto ndarray<T>::get(const Container& idx) const -> typename ndarray<T>::value_type
   {
     if (idx.size() != shape.size())
     {
@@ -3166,7 +3166,7 @@ namespace np
 
   template <typename T>
   template <typename Container>
-  void ndarray<T>::set(const Container& idx, const T& value)
+  void ndarray<T>::set(const Container& idx, const typename ndarray<T>::value_type& value)
   {
     if (idx.size() != shape.size())
     {
@@ -3213,7 +3213,7 @@ namespace np
   }
 
   template <typename T>
-  T ndarray<T>::item() const
+  typename ndarray<T>::value_type ndarray<T>::item() const
   {
     if (_numel() != 1)
     {
@@ -3221,7 +3221,7 @@ namespace np
     }
     if (!data_)
     {
-      return T{};
+      return typename ndarray<T>::value_type{};
     }
     return (*data_)[offset];
   }
@@ -3448,7 +3448,7 @@ namespace np
     strides = _c_strides(shape);
     if (!data_)
     {
-      data_ = std::make_shared<std::vector<T>>(_numel(), T{});
+      data_ = std::make_shared<std::vector<typename ndarray<T>::value_type>>(_numel(), typename ndarray<T>::value_type{});
     }
     if (type == dtype::void_)
     {
@@ -3463,9 +3463,9 @@ namespace np
   {
     for (const auto& val : list)
     {
-      if constexpr (std::is_convertible_v<U, T>)
+      if constexpr (std::is_convertible_v<U, value_type>)
       {
-        data_->push_back(static_cast<T>(val));
+        data_->push_back(static_cast<typename ndarray<T>::value_type>(val));
       }
       else if constexpr (
           std::is_same_v<U, std::initializer_list<double>>
@@ -3477,7 +3477,7 @@ namespace np
       else
       {
         static_assert(
-            std::is_convertible_v<U, T>, "Element type must be convertible to T");
+            std::is_convertible_v<U, value_type>, "Element type must be convertible to T");
       }
     }
   }
@@ -3542,11 +3542,11 @@ namespace np
 
   template <typename T>
   auto ndarray<T>::sum() const
-      -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>
+      -> std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>
   {
-    using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+    using Acc = std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>;
     Acc total{};
-    _for_each_logical([&](const T& v) { total += v; });
+    _for_each_logical([&](const typename ndarray<T>::value_type& v) { total += v; });
     return total;
   }
 
@@ -3555,7 +3555,7 @@ namespace np
   auto ndarray<T>::sum(int axis, bool keepdims) const -> ndarray<Acc>
   {
     return _reduce_axis<Acc>(
-        axis, keepdims, Acc(0), [](Acc& acc, const T& v) { acc += v; });
+        axis, keepdims, Acc(0), [](Acc& acc, const typename ndarray<T>::value_type& v) { acc += v; });
   }
 
   template <typename T>
@@ -3573,11 +3573,11 @@ namespace np
 
   template <typename T>
   auto ndarray<T>::prod() const
-      -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>
+      -> std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>
   {
-    using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+    using Acc = std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>;
     Acc total{1};
-    _for_each_logical([&](const T& v) { total *= v; });
+    _for_each_logical([&](const typename ndarray<T>::value_type& v) { total *= v; });
     return total;
   }
 
@@ -3586,7 +3586,7 @@ namespace np
   auto ndarray<T>::prod(int axis, bool keepdims) const -> ndarray<Acc>
   {
     return _reduce_axis<Acc>(
-        axis, keepdims, Acc(1), [](Acc& acc, const T& v) { acc *= v; });
+        axis, keepdims, Acc(1), [](Acc& acc, const typename ndarray<T>::value_type& v) { acc *= v; });
   }
 
   template <typename T>
@@ -3603,7 +3603,7 @@ namespace np
   }
 
   template <typename T>
-  T ndarray<T>::min() const
+  typename ndarray<T>::value_type ndarray<T>::min() const
   {
     if (_numel() == 0)
     {
@@ -3611,7 +3611,7 @@ namespace np
     }
     std::optional<T> best;
     _for_each_logical(
-        [&](const T& v)
+        [&](const typename ndarray<T>::value_type& v)
         {
           if (!best.has_value() || v < *best)
           {
@@ -3625,7 +3625,7 @@ namespace np
   auto ndarray<T>::min(int axis, bool keepdims) const -> ndarray<T>
   {
     return _reduce_axis<T>(
-        axis, keepdims, std::nullopt, [](T& acc, const T& v) { acc = std::min(acc, v); });
+        axis, keepdims, std::nullopt, [](T& acc, const typename ndarray<T>::value_type& v) { acc = std::min(acc, v); });
   }
 
   template <typename T>
@@ -3641,7 +3641,7 @@ namespace np
   }
 
   template <typename T>
-  T ndarray<T>::max() const
+  typename ndarray<T>::value_type ndarray<T>::max() const
   {
     if (_numel() == 0)
     {
@@ -3649,7 +3649,7 @@ namespace np
     }
     std::optional<T> best;
     _for_each_logical(
-        [&](const T& v)
+        [&](const typename ndarray<T>::value_type& v)
         {
           if (!best.has_value() || v > *best)
           {
@@ -3663,7 +3663,7 @@ namespace np
   auto ndarray<T>::max(int axis, bool keepdims) const -> ndarray<T>
   {
     return _reduce_axis<T>(
-        axis, keepdims, std::nullopt, [](T& acc, const T& v) { acc = std::max(acc, v); });
+        axis, keepdims, std::nullopt, [](T& acc, const typename ndarray<T>::value_type& v) { acc = std::max(acc, v); });
   }
 
   template <typename T>
@@ -3679,7 +3679,7 @@ namespace np
   }
 
   template <typename T>
-  T ndarray<T>::ptp() const
+  typename ndarray<T>::value_type ndarray<T>::ptp() const
   {
     return max() - min();
   }
@@ -3710,7 +3710,7 @@ namespace np
   }
 
   template <typename T>
-  auto ndarray<T>::mean() const -> typename _mean_type<T>::type
+  auto ndarray<T>::mean() const -> typename _mean_type<typename ndarray<T>::value_type>::type
   {
     using MeanT = typename _mean_type<T>::type;
     if (_numel() == 0)
@@ -3718,7 +3718,7 @@ namespace np
       throw std::runtime_error("mean() on empty array");
     }
     long double total = 0;
-    _for_each_logical([&](const T& v) { total += static_cast<long double>(v); });
+    _for_each_logical([&](const typename ndarray<T>::value_type& v) { total += static_cast<long double>(v); });
     return static_cast<MeanT>(total / static_cast<long double>(_numel()));
   }
 
@@ -3730,7 +3730,7 @@ namespace np
     axis = _normalize_axis(axis);
     const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
     auto s = _reduce_axis<MeanT>(
-        axis, keepdims, MeanT(0), [](MeanT& acc, const T& v) { acc += v; });
+        axis, keepdims, MeanT(0), [](MeanT& acc, const typename ndarray<T>::value_type& v) { acc += v; });
     for (auto& v : s.data())
     {
       v /= static_cast<MeanT>(axis_len);
@@ -3804,7 +3804,7 @@ namespace np
   }
 
   template <typename T>
-  auto ndarray<T>::var() const -> typename _mean_type<T>::type
+  auto ndarray<T>::var() const -> typename _mean_type<typename ndarray<T>::value_type>::type
   {
     using MeanT = typename _mean_type<T>::type;
     if (_numel() == 0)
@@ -3814,7 +3814,7 @@ namespace np
     long double m = 0.0L, m2 = 0.0L;
     std::size_t count = 0;
     _for_each_logical(
-        [&](const T& v)
+        [&](const typename ndarray<T>::value_type& v)
         {
           ++count;
           const long double x = static_cast<long double>(v);
@@ -3846,7 +3846,7 @@ namespace np
   }
 
   template <typename T>
-  auto ndarray<T>::std() const -> typename _mean_type<T>::type
+  auto ndarray<T>::std() const -> typename _mean_type<typename ndarray<T>::value_type>::type
   {
     return static_cast<typename _mean_type<T>::type>(std::sqrt(var()));
   }
@@ -3880,7 +3880,7 @@ namespace np
   bool ndarray<T>::all() const
   {
     bool result = true;
-    _for_each_logical([&](const T& v) { result = result && (v != T{}); });
+    _for_each_logical([&](const typename ndarray<T>::value_type& v) { result = result && (v != typename ndarray<T>::value_type{}); });
     return result;
   }
 
@@ -3891,7 +3891,7 @@ namespace np
         axis,
         keepdims,
         std::optional<bool>(true),
-        [](bool& acc, const T& v) { acc = acc && (v != T{}); });
+        [](bool& acc, const typename ndarray<T>::value_type& v) { acc = acc && (v != typename ndarray<T>::value_type{}); });
   }
 
   template <typename T>
@@ -3910,7 +3910,7 @@ namespace np
   bool ndarray<T>::any() const
   {
     bool result = false;
-    _for_each_logical([&](const T& v) { result = result || (v != T{}); });
+    _for_each_logical([&](const typename ndarray<T>::value_type& v) { result = result || (v != typename ndarray<T>::value_type{}); });
     return result;
   }
 
@@ -3921,7 +3921,7 @@ namespace np
         axis,
         keepdims,
         std::optional<bool>(false),
-        [](bool& acc, const T& v) { acc = acc || (v != T{}); });
+        [](bool& acc, const typename ndarray<T>::value_type& v) { acc = acc || (v != typename ndarray<T>::value_type{}); });
   }
 
   template <typename T>
@@ -3952,7 +3952,7 @@ namespace np
     }
     ndarray<std::size_t> out(out_shape);
     std::vector<std::uint8_t> first(out.size(), 1u);
-    std::vector<T> best_val(out.size(), T{});
+    std::vector<T> best_val(out.size(), typename ndarray<T>::value_type{});
     std::vector<std::size_t> best_pos(out.size(), 0);
 
     std::vector<std::size_t> out_idx;
@@ -4018,7 +4018,7 @@ namespace np
   template <typename T>
   auto ndarray<T>::argmax(int axis, bool keepdims) const -> ndarray<std::size_t>
   {
-    return _arg_reduce_axis(axis, keepdims, [](const T& v, const T& b) { return v > b; });
+    return _arg_reduce_axis(axis, keepdims, [](const typename ndarray<T>::value_type& v, const T& b) { return v > b; });
   }
 
   template <typename T>
@@ -4062,7 +4062,7 @@ namespace np
   template <typename T>
   auto ndarray<T>::argmin(int axis, bool keepdims) const -> ndarray<std::size_t>
   {
-    return _arg_reduce_axis(axis, keepdims, [](const T& v, const T& b) { return v < b; });
+    return _arg_reduce_axis(axis, keepdims, [](const typename ndarray<T>::value_type& v, const T& b) { return v < b; });
   }
 
   template <typename T>
@@ -4120,14 +4120,14 @@ namespace np
 
   template <typename T>
   auto ndarray<T>::cumsum() const
-      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+      -> ndarray<std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>
   {
-    using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+    using Acc = std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>;
     ndarray<Acc> out(std::vector<int>{static_cast<int>(_numel())});
     Acc running{};
     std::size_t i = 0;
     _for_each_logical(
-        [&](const T& v)
+        [&](const typename ndarray<T>::value_type& v)
         {
           running += v;
           out.data()[i++] = running;
@@ -4137,15 +4137,15 @@ namespace np
 
   template <typename T>
   auto ndarray<T>::cumsum(int axis) const
-      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+      -> ndarray<std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>
   {
-    using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
-    return _cum_axis<Acc>(axis, [](Acc& acc, const T& v) { return acc + v; });
+    using Acc = std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>;
+    return _cum_axis<Acc>(axis, [](Acc& acc, const typename ndarray<T>::value_type& v) { return acc + v; });
   }
 
   template <typename T>
   auto ndarray<T>::cumsum(std::optional<int> axis) const
-      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+      -> ndarray<std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>
   {
     if (!axis.has_value())
     {
@@ -4156,14 +4156,14 @@ namespace np
 
   template <typename T>
   auto ndarray<T>::cumprod() const
-      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+      -> ndarray<std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>
   {
-    using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
+    using Acc = std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>;
     ndarray<Acc> out(std::vector<int>{static_cast<int>(_numel())});
     Acc running{1};
     std::size_t i = 0;
     _for_each_logical(
-        [&](const T& v)
+        [&](const typename ndarray<T>::value_type& v)
         {
           running *= v;
           out.data()[i++] = running;
@@ -4173,15 +4173,15 @@ namespace np
 
   template <typename T>
   auto ndarray<T>::cumprod(int axis) const
-      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+      -> ndarray<std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>
   {
-    using Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>;
-    return _cum_axis<Acc>(axis, [](Acc& acc, const T& v) { return acc * v; });
+    using Acc = std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>;
+    return _cum_axis<Acc>(axis, [](Acc& acc, const typename ndarray<T>::value_type& v) { return acc * v; });
   }
 
   template <typename T>
   auto ndarray<T>::cumprod(std::optional<int> axis) const
-      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+      -> ndarray<std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>>
   {
     if (!axis.has_value())
     {
@@ -4212,7 +4212,7 @@ namespace np
     while (!od.done())
     {
       const auto& s = od.idx();
-      std::vector<T> work(axis_len);
+      std::vector<typename ndarray<T>::value_type> work(axis_len);
       for (std::size_t p = 0; p < axis_len; ++p)
       {
         std::size_t f = 0;
@@ -4384,7 +4384,7 @@ namespace np
   }
 
   template <typename T>
-  std::size_t ndarray<T>::searchsorted(const T& value, bool side_right) const
+  std::size_t ndarray<T>::searchsorted(const typename ndarray<T>::value_type& value, bool side_right) const
   {
     if (shape.size() != 1)
     {
@@ -4420,7 +4420,7 @@ namespace np
   }
 
   template <typename T>
-  std::size_t ndarray<T>::searchsorted(const T& value, std::optional<bool> side_right) const
+  std::size_t ndarray<T>::searchsorted(const typename ndarray<T>::value_type& value, std::optional<bool> side_right) const
   {
     return searchsorted(value, side_right.value_or(false));
   }
@@ -4632,14 +4632,14 @@ namespace np
     std::vector<T> flat;
     flat.reserve(total);
     _for_each_logical(
-        [&](const T& v)
+        [&](const typename ndarray<T>::value_type& v)
         {
           if (flat.size() < total)
           {
             flat.push_back(v);
           }
         });
-    flat.resize(total, T{});
+    flat.resize(total, typename ndarray<T>::value_type{});
     shape = new_shape;
     strides = _c_strides(new_shape);
     offset = 0;
@@ -4649,7 +4649,7 @@ namespace np
 
   // Manipulation
   template <typename T>
-  void ndarray<T>::fill(const T& value)
+  void ndarray<T>::fill(const typename ndarray<T>::value_type& value)
   {
     if (!data_)
     {
@@ -4685,7 +4685,7 @@ namespace np
   {
     ndarray<U> out(shape);
     std::size_t i = 0;
-    _for_each_logical([&](const T& v) { out.data()[i++] = static_cast<U>(v); });
+    _for_each_logical([&](const typename ndarray<T>::value_type& v) { out.data()[i++] = static_cast<U>(v); });
     return out;
   }
 
@@ -4743,7 +4743,7 @@ namespace np
   template <typename T>
   void ndarray<T>::put(
       const std::vector<std::size_t>& indices,
-      const std::vector<T>& values,
+      const std::vector<typename ndarray<T>::value_type>& values,
       std::optional<char> mode)
   {
     put(indices, values, mode.value_or('r'));
@@ -4751,7 +4751,7 @@ namespace np
 
   template <typename T>
   void ndarray<T>::put(
-      const std::vector<std::size_t>& indices, const std::vector<T>& values, char mode)
+      const std::vector<std::size_t>& indices, const std::vector<typename ndarray<T>::value_type>& values, char mode)
   {
     const std::size_t n = _numel();
     for (std::size_t k = 0; k < indices.size(); ++k)
@@ -4769,7 +4769,7 @@ namespace np
       {
         throw std::out_of_range("put index out of bounds");
       }
-      const T& v = values.empty() ? T{} : values[k % values.size()];
+      const typename ndarray<T>::value_type& v = values.empty() ? typename ndarray<T>::value_type{} : values[k % values.size()];
       // logical flat index -> multi-index -> flat storage offset
       std::vector<std::size_t> idx = _shape_u();
       std::size_t rem = p;
@@ -4788,7 +4788,7 @@ namespace np
     ndarray out({static_cast<int>(_numel() * repeats)}, type);
     std::size_t o = 0;
     _for_each_logical(
-        [&](const T& v)
+        [&](const typename ndarray<T>::value_type& v)
         {
           for (std::size_t r = 0; r < repeats; ++r)
           {
@@ -4838,11 +4838,11 @@ namespace np
   }
 
   template <typename T>
-  auto ndarray<T>::clip(const T& min_value, const T& max_value) const -> ndarray
+  auto ndarray<T>::clip(const typename ndarray<T>::value_type& min_value, const typename ndarray<T>::value_type& max_value) const -> ndarray
   {
     ndarray out(shape, type);
     std::size_t i = 0;
-    _for_each_logical([&](const T& v)
+    _for_each_logical([&](const typename ndarray<T>::value_type& v)
                       { out.data()[i++] = std::clamp(v, min_value, max_value); });
     return out;
   }
@@ -4853,7 +4853,7 @@ namespace np
     ndarray out(shape, type);
     std::size_t i = 0;
     _for_each_logical(
-        [&](const T& v)
+        [&](const typename ndarray<T>::value_type& v)
         {
           if constexpr (std::is_floating_point_v<T>)
           {
@@ -4926,13 +4926,13 @@ namespace np
   }
 
   template <typename T>
-  T ndarray<T>::trace(std::optional<int> offset) const
+  typename ndarray<T>::value_type ndarray<T>::trace(std::optional<int> offset) const
   {
     return trace(offset.value_or(0));
   }
 
   template <typename T>
-  T ndarray<T>::trace(int offset) const
+  typename ndarray<T>::value_type ndarray<T>::trace(int offset) const
   {
     if (shape.size() < 2)
     {
@@ -4953,9 +4953,9 @@ namespace np
     std::vector<ndarray<std::size_t>> result(shape.size());
     std::vector<std::vector<std::size_t>> per_dim(shape.size());
     _for_each_indexed(
-        [&](const std::vector<std::size_t>& idx, const T& v)
+        [&](const std::vector<std::size_t>& idx, const typename ndarray<T>::value_type& v)
         {
-          if (v != T{})
+          if (v != typename ndarray<T>::value_type{})
           {
             for (std::size_t d = 0; d < idx.size(); ++d)
             {
@@ -4978,7 +4978,7 @@ namespace np
     ndarray out(shape, type);
     std::size_t i = 0;
     _for_each_logical(
-        [&](const T& v)
+        [&](const typename ndarray<T>::value_type& v)
         {
           if constexpr (detail::is_complex_v<T>)
           {
@@ -5023,7 +5023,7 @@ namespace np
   {
     ndarray out(shape, type);
     std::size_t i = 0;
-    _for_each_logical([&](const T& v) { out.data()[i++] = std::abs(v); });
+    _for_each_logical([&](const typename ndarray<T>::value_type& v) { out.data()[i++] = std::abs(v); });
     return out;
   }
 
@@ -5187,7 +5187,7 @@ namespace np
     std::vector<int> rest = shape;
     rest.erase(rest.begin() + axis);
     detail::Odometer od(rest);
-    std::vector<T> work(axis_len);
+    std::vector<typename ndarray<T>::value_type> work(axis_len);
     std::vector<std::size_t> full(nd);
     while (!od.done())
     {
@@ -5225,7 +5225,7 @@ namespace np
     {
       ndarray<R> out(shape);
       std::size_t i = 0;
-      _for_each_logical([&](const T& v) { out.data()[i++] = v.real(); });
+      _for_each_logical([&](const typename ndarray<T>::value_type& v) { out.data()[i++] = v.real(); });
       return out;
     }
     else
@@ -5242,7 +5242,7 @@ namespace np
     {
       ndarray<R> out(shape);
       std::size_t i = 0;
-      _for_each_logical([&](const T& v) { out.data()[i++] = v.imag(); });
+      _for_each_logical([&](const typename ndarray<T>::value_type& v) { out.data()[i++] = v.imag(); });
       return out;
     }
     else
@@ -5313,11 +5313,11 @@ namespace np
   }
 
   template <typename T>
-  bool ndarray<T>::contains(const T& value) const
+  bool ndarray<T>::contains(const typename ndarray<T>::value_type& value) const
   {
     bool found = false;
     _for_each_logical(
-        [&](const T& v)
+        [&](const typename ndarray<T>::value_type& v)
         {
           if (v == value)
           {
@@ -5513,7 +5513,7 @@ namespace np
     static_assert(std::is_integral_v<T>, "bitwise NOT requires an integral element type");
     ndarray out(shape, type);
     std::size_t i = 0;
-    _for_each_logical([&](const T& v) { out.data()[i++] = ~v; });
+    _for_each_logical([&](const typename ndarray<T>::value_type& v) { out.data()[i++] = ~v; });
     return out;
   }
 
@@ -5675,7 +5675,7 @@ namespace np
 
   // Conversions / IO
   template <typename T>
-  auto ndarray<T>::tolist() const -> std::vector<T>
+  auto ndarray<T>::tolist() const -> std::vector<typename ndarray<T>::value_type>
   {
     return std::vector<T>(begin(), end());
   }
@@ -5686,7 +5686,7 @@ namespace np
     std::vector<std::uint8_t> bytes;
     bytes.reserve(_numel() * sizeof(T));
     _for_each_logical(
-        [&](const T& v)
+        [&](const typename ndarray<T>::value_type& v)
         {
           const std::uint8_t* p = reinterpret_cast<const std::uint8_t*>(&v);
           bytes.insert(bytes.end(), p, p + sizeof(T));
@@ -5813,7 +5813,7 @@ namespace np
     using R = std::common_type_t<T, U>;
     ndarray<R> out(shape);
     std::size_t i = 0;
-    _for_each_logical([&](const T& v) { out.data()[i++] = fn(v, scalar); });
+    _for_each_logical([&](const typename ndarray<T>::value_type& v) { out.data()[i++] = fn(v, scalar); });
     return out;
   }
 
@@ -5825,7 +5825,7 @@ namespace np
     using R = std::common_type_t<U, T>;
     ndarray<R> out(shape);
     std::size_t i = 0;
-    _for_each_logical([&](const T& v) { out.data()[i++] = fn(scalar, v); });
+    _for_each_logical([&](const typename ndarray<T>::value_type& v) { out.data()[i++] = fn(scalar, v); });
     return out;
   }
 
@@ -5835,7 +5835,7 @@ namespace np
   {
     ndarray<bool> out(shape, dtype::bool_);
     std::size_t i = 0;
-    _for_each_logical([&](const T& v) { out.data()[i++] = fn(v, scalar); });
+    _for_each_logical([&](const typename ndarray<T>::value_type& v) { out.data()[i++] = fn(v, scalar); });
     return out;
   }
 
@@ -5876,7 +5876,7 @@ namespace np
   {
     ndarray out(shape, type);
     std::size_t i = 0;
-    _for_each_logical([&](const T& v) { out.data()[i++] = -v; });
+    _for_each_logical([&](const typename ndarray<T>::value_type& v) { out.data()[i++] = -v; });
     return out;
   }
 
@@ -5998,7 +5998,7 @@ namespace np
   }
 
   template <typename T>
-  bool ndarray<T>::all_equal(const T& value) const noexcept
+  bool ndarray<T>::all_equal(const typename ndarray<T>::value_type& value) const noexcept
   {
     try
     {
