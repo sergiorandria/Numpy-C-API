@@ -79,7 +79,7 @@ namespace detail {
 
 /** @brief Roll every listed axis of `arr` by the given raw shift. */
 template <typename T>
-[[nodiscard]] ndarray<T> shift_roll(const ndarray<T>& arr,
+NP_NODISCARD ndarray<T> shift_roll(const ndarray<T>& arr,
                                     const std::optional<std::vector<int>>& axes, int sign) {
     ndarray<T> out = arr;
     if (axes) {

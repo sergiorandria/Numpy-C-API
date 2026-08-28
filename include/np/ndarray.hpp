@@ -2331,9 +2331,9 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n).
      */
-    template <typename Acc, typename StepFn>
+    template <typename Acc, typename Fn>
     auto
-    _reduce_axis(int axis, bool keepdims, std::optional<Acc> seed, StepFn&& step) const
+    _reduce_axis(int axis, bool keepdims, std::optional<Acc> seed, Fn&& step) const
         -> ndarray<Acc>;
 
     /**
@@ -2673,29 +2673,33 @@ namespace np
   }
 
   template <typename T>
-  ndarray<T>::ndarray(std::initializer_list<std::initializer_list<double>> rows) 
+  ndarray<T>::ndarray(std::initializer_list<std::initializer_list<double>> rows)
       : data_(std::make_shared<std::vector<T>>())
   {
-      // Store the shape
-      shape = {static_cast<int>(rows.size()), 0};
-      
-      // Reserve space
-      size_t total_elements = 0;
-      for (const auto& row : rows) {
-          total_elements += row.size();
+    // Store the shape
+    shape = {static_cast<int>(rows.size()), 0};
+
+    // Reserve space
+    size_t total_elements = 0;
+    for (const auto& row : rows)
+    {
+      total_elements += row.size();
+    }
+    data_->reserve(total_elements);
+
+    // Fill with converted values
+    for (const auto& row : rows)
+    {
+      if (shape.size() > 1 && shape[1] == 0)
+      {
+        shape[1] = static_cast<int>(row.size());
       }
-      data_->reserve(total_elements);
-      
-      // Fill with converted values
-      for (const auto& row : rows) {
-          if (shape.size() > 1 && shape[1] == 0) {
-              shape[1] = static_cast<int>(row.size());
-          }
-          for (const auto& val : row) {
-              data_->push_back(static_cast<T>(val));
-          }
+      for (const auto& val : row)
+      {
+        data_->push_back(static_cast<T>(val));
       }
-      _finalize();
+    }
+    _finalize();
   }
 
   template <typename T>

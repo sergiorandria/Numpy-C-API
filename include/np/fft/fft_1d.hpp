@@ -36,13 +36,13 @@ inline constexpr bool is_transform_element_v =
 namespace detail {
 
 /** @brief Resolve the transform length, rejecting 0 (NumPy ValueError). */
-[[nodiscard]] inline std::size_t deduced_len(bool has_n, std::size_t n, std::size_t axis_len) {
+NP_NODISCARD inline std::size_t deduced_len(bool has_n, std::size_t n, std::size_t axis_len) {
     return has_n ? check_len(n) : check_len(axis_len);
 }
 
 /** @brief Default output length for the inverse real transforms
  *         (2*(m-1), throwing when m < 2). */
-[[nodiscard]] inline std::size_t inverse_real_len(std::size_t axis_len) {
+NP_NODISCARD inline std::size_t inverse_real_len(std::size_t axis_len) {
     if (axis_len < 2) {
         throw std::invalid_argument("Invalid number of FFT data points (0).");
     }

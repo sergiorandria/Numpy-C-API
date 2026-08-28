@@ -23,7 +23,7 @@ namespace np::exceptions
   namespace detail
   {
     // Format a message with its throw site as "file:line: function: msg".
-    [[nodiscard]] inline std::string
+    NP_NODISCARD inline std::string
     format_message(const std::string& msg, const std::source_location& loc)
     {
       return std::format(
@@ -49,7 +49,7 @@ namespace np::exceptions
     {
     }
 
-    [[nodiscard]] auto what() const noexcept -> const char* override
+    NP_NODISCARD auto what() const noexcept -> const char* override
     {
       return what_msg_.c_str();
     }

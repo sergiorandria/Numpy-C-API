@@ -46,7 +46,7 @@ struct NdPlan {
  *          omitted the final axis default length becomes 2*(m-1).
  */
 template <typename T>
-[[nodiscard]] NdPlan cook_nd(const ndarray<T>& x, const std::optional<std::vector<int>>& s,
+NP_NODISCARD NdPlan cook_nd(const ndarray<T>& x, const std::optional<std::vector<int>>& s,
                              const std::optional<std::vector<int>>& axes, bool invreal_last) {
     const std::size_t nd = x.ndim();
     std::vector<int> ax;

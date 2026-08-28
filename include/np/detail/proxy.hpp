@@ -55,22 +55,22 @@ namespace np
         m_data[m_count++] = v;
       }
 
-      [[nodiscard]] constexpr std::size_t size() const noexcept
+      NP_NODISCARD constexpr std::size_t size() const noexcept
       {
         return m_count;
       }
 
-      [[nodiscard]] constexpr auto operator[](std::size_t i) const noexcept -> std::size_t
+      NP_NODISCARD constexpr auto operator[](std::size_t i) const noexcept -> std::size_t
       {
         return m_data[i];
       }
 
-      [[nodiscard]] constexpr const std::size_t* begin() const noexcept
+      NP_NODISCARD constexpr const std::size_t* begin() const noexcept
       {
         return m_data.data();
       }
 
-      [[nodiscard]] constexpr const std::size_t* end() const noexcept
+      NP_NODISCARD constexpr const std::size_t* end() const noexcept
       {
         return m_data.data() + m_count;
       }
@@ -97,18 +97,18 @@ namespace np
                 dims_.begin(), dims_.end(), [](std::size_t d) { return d == 0; });
       }
 
-      [[nodiscard]] bool done() const noexcept
+      NP_NODISCARD bool done() const noexcept
       {
         return done_;
       }
 
-      [[nodiscard]] const std::vector<std::size_t>& idx() const noexcept
+      NP_NODISCARD const std::vector<std::size_t>& idx() const noexcept
       {
         return idx_;
       }
 
       /** @brief Number of dimensions being iterated. */
-      [[nodiscard]] std::size_t ndim() const noexcept
+      NP_NODISCARD std::size_t ndim() const noexcept
       {
         return dims_.size();
       }
@@ -140,7 +140,7 @@ namespace np
     /**
      * @brief Flat offset of a multi-index given strides (in elements).
      */
-    [[nodiscard]] inline std::size_t flat_index(
+    NP_NODISCARD inline std::size_t flat_index(
         const std::vector<std::size_t>& idx,
         const std::vector<std::size_t>& strides,
         std::size_t offset = 0) noexcept
@@ -206,44 +206,44 @@ namespace np
 
     // Reading
 
-    [[nodiscard]] constexpr operator T() const noexcept
+    NP_NODISCARD constexpr operator T() const noexcept
     {
       return m_array.get(m_indices);
     }
 
-    [[nodiscard]] constexpr auto operator==(const T& v) const noexcept -> bool
+    NP_NODISCARD constexpr auto operator==(const T& v) const noexcept -> bool
     {
       return static_cast<T>(*this) == v;
     }
 
-    [[nodiscard]] constexpr auto operator!=(const T& v) const noexcept -> bool
+    NP_NODISCARD constexpr auto operator!=(const T& v) const noexcept -> bool
     {
       return static_cast<T>(*this) != v;
     }
 
-    [[nodiscard]] constexpr auto operator==(const Self& other) const noexcept -> bool
+    NP_NODISCARD constexpr auto operator==(const Self& other) const noexcept -> bool
     {
       return static_cast<T>(*this) == static_cast<T>(other);
     }
 
-    [[nodiscard]] constexpr auto operator!=(const Self& other) const noexcept -> bool
+    NP_NODISCARD constexpr auto operator!=(const Self& other) const noexcept -> bool
     {
       return !(*this == other);
     }
 
     template <typename U>
-    [[nodiscard]] constexpr auto operator==(const U& v) const noexcept -> bool
+    NP_NODISCARD constexpr auto operator==(const U& v) const noexcept -> bool
     {
       return static_cast<T>(*this) == static_cast<T>(v);
     }
 
     template <typename U>
-    [[nodiscard]] constexpr auto operator!=(const U& v) const noexcept -> bool
+    NP_NODISCARD constexpr auto operator!=(const U& v) const noexcept -> bool
     {
       return static_cast<T>(*this) != static_cast<T>(v);
     }
 
-    [[nodiscard]] friend auto operator<<(std::ostream& os, const Self& proxy)
+    NP_NODISCARD friend auto operator<<(std::ostream& os, const Self& proxy)
         -> std::ostream&
     {
       os << static_cast<T>(proxy);
@@ -255,7 +255,7 @@ namespace np
      * @throws std::out_of_range if this would exceed `MaxDims` chained
      *         subscripts (see `IndexStack::push_back`).
      */
-    [[nodiscard]] constexpr auto operator[](std::size_t idx) const -> Self
+    NP_NODISCARD constexpr auto operator[](std::size_t idx) const -> Self
     {
       Stack next = m_indices; // trivial copy -- no heap touch
       next.push_back(idx);

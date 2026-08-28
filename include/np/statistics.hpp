@@ -49,7 +49,7 @@ namespace np
   {
 
     /** @brief Normalize an axis index, throwing np::AxisError if invalid. */
-    [[nodiscard]] inline int
+    NP_NODISCARD inline int
     stat_normalize_axis(int axis, std::size_t ndim, const char* what)
     {
       const int nd = static_cast<int>(ndim);
@@ -67,7 +67,7 @@ namespace np
     }
 
     /** @brief Row-major flat offset of `idx` within `shape`. */
-    [[nodiscard]] inline std::size_t
+    NP_NODISCARD inline std::size_t
     row_major_offset(const std::vector<std::size_t>& idx, const std::vector<int>& shape)
     {
       std::size_t flat = 0;
@@ -87,7 +87,7 @@ namespace np
      * and negative offsets of views).
      */
     template <typename T>
-    [[nodiscard]] std::vector<T>
+    NP_NODISCARD std::vector<T>
     gather_slice(const ndarray<T>& arr, int axis, std::vector<std::size_t> base)
     {
       const std::size_t alen = static_cast<std::size_t>(arr.shape[axis]);
@@ -113,7 +113,7 @@ namespace np
      * @return     Array with `axis` removed holding `fn` per slice.
      */
     template <typename R, typename T, typename Fn>
-    [[nodiscard]] ndarray<R> stat_axis_map(const ndarray<T>& arr, int axis, Fn&& fn)
+    NP_NODISCARD ndarray<R> stat_axis_map(const ndarray<T>& arr, int axis, Fn&& fn)
     {
       axis = stat_normalize_axis(axis, arr.ndim(), "np::stats");
       std::vector<int> out_shape = arr.shape;
@@ -143,7 +143,7 @@ namespace np
     }
 
     /** @brief Linear interpolation of `values` at fractional `position`. */
-    [[nodiscard]] inline double
+    NP_NODISCARD inline double
     lin_interp(const std::vector<double>& values, double position)
     {
       const auto n = values.size();
@@ -184,7 +184,7 @@ namespace np
      * Output element type is `R`.
      */
     template <typename R, typename T, typename Step>
-    [[nodiscard]] ndarray<R>
+    NP_NODISCARD ndarray<R>
     cum_axis_map(const ndarray<T>& arr, int axis, R init, Step&& step)
     {
       axis = stat_normalize_axis(axis, arr.ndim(), "np::nancum*");
@@ -794,7 +794,7 @@ namespace np
   namespace detail
   {
     template <typename T>
-    [[nodiscard]] double nan_percentile_of_slice(const std::vector<T>& slice, double p)
+    NP_NODISCARD double nan_percentile_of_slice(const std::vector<T>& slice, double p)
     {
       std::vector<double> vals;
       vals.reserve(slice.size());
@@ -1324,7 +1324,7 @@ namespace np
 
     /** @brief Rows (variables) of `m` as vectors of double. */
     template <typename T>
-    [[nodiscard]] std::vector<std::vector<double>> rows_as_variables(const ndarray<T>& m)
+    NP_NODISCARD std::vector<std::vector<double>> rows_as_variables(const ndarray<T>& m)
     {
       std::vector<std::vector<double>> rows;
       const std::size_t nrows = static_cast<std::size_t>(m.ndim() >= 2 ? m.shape[0] : 1);
@@ -1360,7 +1360,7 @@ namespace np
      * Each inner vector is one variable; the k entries are observations.
      * Returns an nvars-nvars matrix. `ddof` defaults to 1 (NumPy).
      */
-    [[nodiscard]] inline std::vector<std::vector<double>>
+    NP_NODISCARD inline std::vector<std::vector<double>>
     cov_from_rows(const std::vector<std::vector<double>>& rows, int ddof)
     {
       const std::size_t k = rows.empty() ? 0 : rows.front().size();
@@ -1396,7 +1396,7 @@ namespace np
     }
 
     /** @brief Correlation of the given rows (variables) of observations. */
-    [[nodiscard]] inline std::vector<std::vector<double>>
+    NP_NODISCARD inline std::vector<std::vector<double>>
     corr_from_rows(const std::vector<std::vector<double>>& rows)
     {
       const std::size_t n = rows.size();
@@ -1451,7 +1451,7 @@ namespace np
     }
 
     /** @brief Copy rows into a fresh square ndarray<double>. */
-    [[nodiscard]] inline ndarray<double>
+    NP_NODISCARD inline ndarray<double>
     matrix_to_ndarray(const std::vector<std::vector<double>>& mat)
     {
       ndarray<double> out(
@@ -1475,7 +1475,7 @@ namespace np
      *    per variable (rowvar=True).
      */
     template <typename T>
-    [[nodiscard]] std::vector<std::vector<double>>
+    NP_NODISCARD std::vector<std::vector<double>>
     cov_rows(const ndarray<T>& x, const ndarray<T>* y)
     {
       std::vector<std::vector<double>> rows;
