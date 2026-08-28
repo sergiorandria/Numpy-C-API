@@ -4312,6 +4312,18 @@ namespace np
   template <typename T>
   void ndarray<T>::sort(int axis)
   {
+    static_assert(
+        std::is_copy_constructible_v<value_type>,
+        "sort: value_type must be copy constructible");
+    static_assert(
+        std::is_move_constructible_v<value_type>,
+        "sort: value_type must be move constructible");
+    static_assert(
+        std::is_default_constructible_v<value_type>,
+        "sort: value_type must be default constructible");
+    static_assert(
+        std::is_copy_assignable_v<value_type>,
+        "sort: value_type must be copy assignable");
     axis = _normalize_axis(axis);
     const int nd = static_cast<int>(shape.size());
     const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
@@ -4458,6 +4470,15 @@ namespace np
   template <typename T>
   auto ndarray<T>::argsort(int axis) const -> ndarray<std::size_t>
   {
+    static_assert(
+        std::is_copy_constructible_v<value_type>,
+        "argsort: value_type must be copy constructible");
+    static_assert(
+        std::is_move_constructible_v<value_type>,
+        "argsort: value_type must be move constructible");
+    static_assert(
+        std::is_default_constructible_v<value_type>,
+        "argsort: value_type must be default constructible");
     axis = _normalize_axis(axis);
     const int nd = static_cast<int>(shape.size());
     const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
@@ -4660,6 +4681,15 @@ namespace np
   std::size_t ndarray<T>::searchsorted(
       const typename ndarray<T>::value_type& value, bool side_right) const
   {
+    static_assert(
+        std::is_copy_constructible_v<value_type>,
+        "searchsorted: value_type must be copy constructible");
+    static_assert(
+        std::is_default_constructible_v<value_type>,
+        "searchsorted: value_type must be default constructible");
+    static_assert(
+        std::is_copy_assignable_v<value_type>,
+        "searchsorted: value_type must be copy assignable");
     if (shape.size() != 1)
     {
       throw std::invalid_argument("searchsorted requires a 1D array");
@@ -4703,6 +4733,12 @@ namespace np
   template <typename T>
   auto ndarray<T>::searchsorted(const ndarray<int>& values) const -> ndarray<std::size_t>
   {
+    static_assert(
+        std::is_copy_constructible_v<value_type>,
+        "searchsorted: value_type must be copy constructible");
+    static_assert(
+        std::is_default_constructible_v<value_type>,
+        "searchsorted: value_type must be default constructible");
     if (shape.size() != 1)
     {
       throw std::invalid_argument("searchsorted requires a 1D array");
@@ -4710,9 +4746,7 @@ namespace np
     ndarray<std::size_t> out(std::vector<int>{static_cast<int>(values.size())});
 #ifdef NP_USE_THREADING
     auto do_search = [&](std::size_t i)
-    {
-      out.data()[i] = searchsorted(values.data()[values._flat_logical(i)]);
-    };
+    { out.data()[i] = searchsorted(values.data()[values._flat_logical(i)]); };
     detail::maybe_parallel_for(0, values.size(), do_search);
 #else
     for (std::size_t i = 0; i < values.size(); ++i)
@@ -4934,6 +4968,15 @@ namespace np
   template <typename T>
   void ndarray<T>::fill(const typename ndarray<T>::value_type& value)
   {
+    static_assert(
+        std::is_copy_constructible_v<value_type>,
+        "fill: value_type must be copy constructible");
+    static_assert(
+        std::is_copy_assignable_v<value_type>,
+        "fill: value_type must be copy assignable");
+    static_assert(
+        std::is_default_constructible_v<value_type>,
+        "fill: value_type must be default constructible");
     if (!data_)
     {
       data_ = std::make_shared<std::vector<value_type>>(_numel(), value);

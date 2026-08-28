@@ -147,8 +147,8 @@ namespace np
     {
     }
 
-        // Factories
-        /**
+    // Factories
+    /**
      * @brief Array from a flat std::array (C++ analog of numpy.asarray).
      * Reference: numpy-reference/reference/generated/numpy.asarray.html
      */
@@ -157,8 +157,8 @@ namespace np
       return ndarrayf{flat};
     }
 
-        // Access
-        constexpr std::size_t size() const
+    // Access
+    constexpr std::size_t size() const
     {
       return size_v;
     }
@@ -192,10 +192,14 @@ namespace np
     /** @brief Flat (row-major) element access. */
     constexpr value_type& operator[](std::size_t i)
     {
+      static_assert(size_v > 0, "ndarrayf: size must be positive");
+      static_assert(rank >= 1, "operator[] requires rank >=1");
       return m_data[i];
     }
     constexpr const value_type& operator[](std::size_t i) const
     {
+      static_assert(size_v > 0, "ndarrayf: size must be positive");
+      static_assert(rank >= 1, "operator[] requires rank >=1");
       return m_data[i];
     }
 
@@ -209,6 +213,11 @@ namespace np
       requires(sizeof...(Idx) == rank && rank >= 2)
     constexpr value_type& operator()(Idx... idx)
     {
+      static_assert(sizeof...(Idx) == rank, "ndarrayf: index count must equal rank");
+      static_assert(rank >= 2, "operator() requires rank >=2");
+      static_assert(
+          (std::is_convertible_v<Idx, std::size_t> && ...),
+          "indices must be convertible to size_t");
       const std::array<std::size_t, rank> coords{static_cast<std::size_t>(idx)...};
       return m_data[detail::expr::flatten(static_shape, coords)];
     }
@@ -217,6 +226,11 @@ namespace np
       requires(sizeof...(Idx) == rank && rank >= 2)
     constexpr const value_type& operator()(Idx... idx) const
     {
+      static_assert(sizeof...(Idx) == rank, "ndarrayf: index count must equal rank");
+      static_assert(rank >= 2, "operator() requires rank >=2");
+      static_assert(
+          (std::is_convertible_v<Idx, std::size_t> && ...),
+          "indices must be convertible to size_t");
       const std::array<std::size_t, rank> coords{static_cast<std::size_t>(idx)...};
       return m_data[detail::expr::flatten(static_shape, coords)];
     }
@@ -224,18 +238,28 @@ namespace np
     /** @brief Fill every element. */
     constexpr void fill(const value_type& v)
     {
+      static_assert(
+          std::is_copy_assignable_v<value_type>,
+          "fill: value_type must be copy assignable");
+      static_assert(size_v > 0, "fill: size must be positive");
       m_data.fill(v);
     }
 
-        // Reductions
+    // Reductions
     // (numpy-reference/reference/routines.statistics.html)
     // NumPy axis=None is represented by Axis = -1; every axis is a
     // template parameter so out-of-range axes fail to compile.
-        /** @brief Sum (numpy-reference/reference/generated/numpy.sum.html). */
+    /** @brief Sum (numpy-reference/reference/generated/numpy.sum.html). */
     template <int Axis = -1>
       requires(Axis >= -1 && Axis < static_cast<int>(rank))
     constexpr auto sum() const
     {
+      static_assert(
+          Axis >= -1 && Axis < static_cast<int>(rank), "sum: Axis out of range");
+      static_assert(size_v > 0, "sum: size must be positive");
+      static_assert(
+          std::is_copy_constructible_v<value_type>,
+          "sum: value_type must be copy constructible");
       using traits = detail::fixed::scalar_traits<T>;
       using V = typename traits::value_type;
       if constexpr (Axis == -1)
@@ -266,6 +290,12 @@ namespace np
       requires(Axis >= -1 && Axis < static_cast<int>(rank))
     constexpr auto prod() const
     {
+      static_assert(
+          Axis >= -1 && Axis < static_cast<int>(rank), "prod: Axis out of range");
+      static_assert(size_v > 0, "prod: size must be positive");
+      static_assert(
+          std::is_copy_constructible_v<value_type>,
+          "prod: value_type must be copy constructible");
       using traits = detail::fixed::scalar_traits<T>;
       using V = typename traits::value_type;
       if constexpr (Axis == -1)
@@ -299,6 +329,12 @@ namespace np
       requires(Axis >= -1 && Axis < static_cast<int>(rank))
     constexpr auto mean() const
     {
+      static_assert(
+          Axis >= -1 && Axis < static_cast<int>(rank), "mean: Axis out of range");
+      static_assert(size_v > 0, "mean: size must be positive");
+      static_assert(
+          std::is_copy_constructible_v<value_type>,
+          "mean: value_type must be copy constructible");
       using traits = detail::fixed::scalar_traits<T>;
       using R = detail::fixed::float_t<typename traits::value_type>;
       if constexpr (Axis == -1)
@@ -503,10 +539,10 @@ namespace np
       }
     }
 
-        // Manipulation
+    // Manipulation
     // (numpy-reference/reference/routines.array-manipulation.html)
     // All return fresh arrays with static result shapes.
-        /**
+    /**
      * @brief Reverse the axes (numpy.transpose.html), mirroring
      *        numpy.transpose(a) without an axis argument.
      */
@@ -642,8 +678,8 @@ namespace np
       return expand_dims_impl<Axis>(tag{});
     }
 
-        // Internal constexpr helpers
-      private:
+    // Internal constexpr helpers
+  private:
     constexpr const value_type&
     axis_elem(int axis, const std::array<std::size_t, rank - 1>& cr, std::size_t a) const
     {
@@ -893,10 +929,10 @@ namespace np
     }
   };
 
-    // Elementwise operators (lazy expressions, NumPy broadcasting)
+  // Elementwise operators (lazy expressions, NumPy broadcasting)
   // Reference: numpy-reference/user/basics.broadcasting.html and
   //            numpy-reference/reference/ufuncs.html
-    namespace detail::fixed
+  namespace detail::fixed
   {
 
     /** @brief Wrap an arithmetic scalar in a rank-0 broadcast source. */
@@ -1012,11 +1048,11 @@ namespace np
     return detail::expr::unary_expr<std::bit_not<void>, S>(s);
   }
 
-    // Elementwise math functions
+  // Elementwise math functions
   // Reference: numpy-reference/reference/routines.math.html
   // The constexpr kernels come from detail/math_constexpr.hpp so that
   // static expressions fold at compile time.
-    namespace detail::fixed
+  namespace detail::fixed
   {
 
     struct abs_fn
@@ -1203,8 +1239,8 @@ namespace np
     return detail::fixed::make_binary<detail::fixed::power_fn>(l, r);
   }
 
-    // Joining (numpy-reference/reference/routines.array-manipulation.html)
-    namespace detail::fixed
+  // Joining (numpy-reference/reference/routines.array-manipulation.html)
+  namespace detail::fixed
   {
 
     /** @brief True when all arrays share rank >= 1 and the same tail. */

@@ -2513,6 +2513,14 @@ namespace np::linalg
   NP_NODISCARD auto dot(const ndarray<T>& a, const ndarray<U>& b)
       -> ndarray<std::common_type_t<T, U>>
   {
+    static_assert(
+        std::is_arithmetic_v<T> || ::np::is_complex_v<T>,
+        "dot: T must be arithmetic/complex");
+    static_assert(
+        std::is_arithmetic_v<U> || ::np::is_complex_v<U>,
+        "dot: U must be arithmetic/complex");
+    static_assert(std::is_copy_constructible_v<T>, "dot: T must be copy constructible");
+    static_assert(std::is_copy_constructible_v<U>, "dot: U must be copy constructible");
     using R = std::common_type_t<T, U>;
     const std::size_t na = a.ndim();
     const std::size_t nb = b.ndim();

@@ -49,6 +49,10 @@ namespace np
   NP_API template <int... E>
   NP_NODISCARD constexpr ndarrayf<double, E...> zeros()
   {
+    static_assert(((E > 0) && ...), "zeros: extents must be positive");
+    static_assert(
+        std::is_default_constructible_v<double>,
+        "zeros: double must be default constructible");
     return ndarrayf<double, E...>{};
   }
 
@@ -61,6 +65,12 @@ namespace np
   NP_API template <typename T, int... E>
   NP_NODISCARD constexpr ndarrayf<T, E...> zeros()
   {
+    static_assert(((E > 0) && ...), "zeros<T>: extents must be positive");
+    static_assert(
+        std::is_default_constructible_v<T>, "zeros<T>: T must be default constructible");
+    static_assert(
+        std::is_arithmetic_v<T> || detail::is_complex_v<T> || std::is_same_v<T, bool>,
+        "zeros<T>: T must be arithmetic/complex/bool");
     return ndarrayf<T, E...>{};
   }
 
@@ -74,6 +84,7 @@ namespace np
   NP_API template <int... E>
   NP_NODISCARD constexpr ndarrayf<double, E...> ones()
   {
+    static_assert(((E > 0) && ...), "ones: extents must be positive");
     ndarrayf<double, E...> out{};
     out.fill(1.0);
     return out;
@@ -88,6 +99,8 @@ namespace np
   NP_API template <typename T, int... E>
   NP_NODISCARD constexpr ndarrayf<T, E...> ones()
   {
+    static_assert(((E > 0) && ...), "ones<T>: extents must be positive");
+    static_assert(std::is_convertible_v<int, T>, "ones<T>: int must be convertible to T");
     ndarrayf<T, E...> out{};
     out.fill(T{1});
     return out;
@@ -105,6 +118,8 @@ namespace np
   NP_API template <int... E, typename T>
   NP_NODISCARD constexpr ndarrayf<T, E...> full(const T& fill_value)
   {
+    static_assert(((E > 0) && ...), "full: extents must be positive");
+    static_assert(std::is_copy_constructible_v<T>, "full: T must be copy constructible");
     ndarrayf<T, E...> out{};
     out.fill(fill_value);
     return out;
@@ -120,6 +135,9 @@ namespace np
   NP_API template <typename T, int... E>
   NP_NODISCARD constexpr ndarrayf<T, E...> full(const T& fill_value)
   {
+    static_assert(((E > 0) && ...), "full<T>: extents must be positive");
+    static_assert(
+        std::is_copy_constructible_v<T>, "full<T>: T must be copy constructible");
     ndarrayf<T, E...> out{};
     out.fill(fill_value);
     return out;
@@ -138,6 +156,10 @@ namespace np
   NP_API template <std::size_t N, std::size_t M = N, int k = 0, typename T = double>
   NP_NODISCARD constexpr auto eye() -> ndarrayf<T, N, M>
   {
+    static_assert(N > 0 && M > 0, "eye: N,M must be positive");
+    static_assert(
+        std::is_arithmetic_v<T> || detail::is_complex_v<T>,
+        "eye: T must be arithmetic/complex");
     ndarrayf<T, N, M> out{};
     const std::ptrdiff_t kk = k;
     for (std::size_t i = 0; i < N; ++i)
@@ -162,6 +184,7 @@ namespace np
   NP_API template <std::size_t N, typename T = double>
   NP_NODISCARD constexpr ndarrayf<T, N, N> identity()
   {
+    static_assert(N > 0, "identity: N must be positive");
     return eye<N, N, 0, T>();
   }
 
@@ -176,6 +199,8 @@ namespace np
   NP_API template <std::size_t N, typename T = int>
   NP_NODISCARD constexpr ndarrayf<T, N> arange()
   {
+    static_assert(N > 0, "arange: N must be positive");
+    static_assert(std::is_arithmetic_v<T>, "arange: T must be arithmetic");
     ndarrayf<T, N> out{};
     for (std::size_t i = 0; i < N; ++i)
     {
@@ -196,6 +221,8 @@ namespace np
   NP_API template <std::size_t N, typename T>
   NP_NODISCARD constexpr auto arange(T start, T stop) -> ndarrayf<T, N>
   {
+    static_assert(N > 0, "arange: N must be positive");
+    static_assert(std::is_arithmetic_v<T>, "arange: T must be arithmetic");
     (void)stop;
     ndarrayf<T, N> out{};
     for (std::size_t i = 0; i < N; ++i)
@@ -219,6 +246,8 @@ namespace np
   NP_API template <std::size_t N, typename T>
   NP_NODISCARD constexpr auto arange(T start, T stop, T step) -> ndarrayf<T, N>
   {
+    static_assert(N > 0, "arange: N must be positive");
+    static_assert(std::is_arithmetic_v<T>, "arange: T must be arithmetic");
     (void)stop;
     ndarrayf<T, N> out{};
     for (std::size_t i = 0; i < N; ++i)
@@ -244,6 +273,8 @@ namespace np
   NP_API template <std::size_t N, bool endpoint = true, typename T>
   NP_NODISCARD constexpr auto linspace(T start, T stop)
   {
+    static_assert(N > 0, "linspace: N must be positive");
+    static_assert(std::is_arithmetic_v<T>, "linspace: T must be arithmetic");
     using R = std::conditional_t<std::is_floating_point_v<T>, T, double>;
     ndarrayf<R, N> out{};
     if constexpr (N == 1)
