@@ -163,14 +163,50 @@ namespace np::fft
           std::swap(a[i], a[j]);
         }
       }
-      
+
       for (std::size_t len = 2; len <= n; len <<= 1)
       {
         const std::size_t half = len >> 1;
         const std::size_t step = n / len;
         for (std::size_t i = 0; i < n; i += len)
         {
-          for (std::size_t k = 0; k < half; ++k)
+          // Micro-unrolled butterfly: 4-way unroll reduces loop overhead
+          // and improves ILP for the complex multiply-add. Remainder
+          // handled scalarly.
+          std::size_t k = 0;
+          const std::size_t unroll = 4;
+          const std::size_t limit = half & ~(unroll - 1);
+          for (; k < limit; k += unroll)
+          {
+            Cplx w0 = tbl[(k + 0) * step];
+            Cplx w1 = tbl[(k + 1) * step];
+            Cplx w2 = tbl[(k + 2) * step];
+            Cplx w3 = tbl[(k + 3) * step];
+            if (inverse)
+            {
+              w0 = std::conj(w0);
+              w1 = std::conj(w1);
+              w2 = std::conj(w2);
+              w3 = std::conj(w3);
+            }
+            const Cplx u0 = a[i + k + 0];
+            const Cplx u1 = a[i + k + 1];
+            const Cplx u2 = a[i + k + 2];
+            const Cplx u3 = a[i + k + 3];
+            const Cplx v0 = a[i + k + 0 + half] * w0;
+            const Cplx v1 = a[i + k + 1 + half] * w1;
+            const Cplx v2 = a[i + k + 2 + half] * w2;
+            const Cplx v3 = a[i + k + 3 + half] * w3;
+            a[i + k + 0] = u0 + v0;
+            a[i + k + 1] = u1 + v1;
+            a[i + k + 2] = u2 + v2;
+            a[i + k + 3] = u3 + v3;
+            a[i + k + 0 + half] = u0 - v0;
+            a[i + k + 1 + half] = u1 - v1;
+            a[i + k + 2 + half] = u2 - v2;
+            a[i + k + 3 + half] = u3 - v3;
+          }
+          for (; k < half; ++k)
           {
             Cplx w = tbl[k * step];
             if (inverse)
