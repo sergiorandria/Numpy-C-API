@@ -29,6 +29,7 @@
 
 #include "api_macros.hpp"
 #include "ndarray.hpp"
+#include <variant>
 
 namespace np
 {
@@ -546,6 +547,45 @@ namespace np
   NP_NODISCARD auto identity(std::size_t n) -> ndarray<T>
   {
     return eye<T>(n, n, 0);
+  }
+
+  // Runtime dtype factory: create ndarray with dtype enum at runtime
+  // Returns variant of common dtypes; for void/string etc. returns empty
+  NP_API inline auto ndarray_from_dtype(dtype type, const std::vector<int>& shape)
+      -> std::variant<ndarray<std::int8_t>, ndarray<std::int16_t>, ndarray<std::int32_t>,
+                      ndarray<std::int64_t>, ndarray<std::uint8_t>, ndarray<std::uint16_t>,
+                      ndarray<std::uint32_t>, ndarray<std::uint64_t>, ndarray<float>,
+                      ndarray<double>, ndarray<long double>, ndarray<std::complex<float>>,
+                      ndarray<std::complex<double>>, ndarray<std::complex<long double>>,
+                      ndarray<bool>>
+  {
+    switch (type)
+    {
+      case dtype::int8: return ndarray<std::int8_t>(shape);
+      case dtype::int16: return ndarray<std::int16_t>(shape);
+      case dtype::int32: return ndarray<std::int32_t>(shape);
+      case dtype::int64: return ndarray<std::int64_t>(shape);
+      case dtype::uint8: return ndarray<std::uint8_t>(shape);
+      case dtype::uint16: return ndarray<std::uint16_t>(shape);
+      case dtype::uint32: return ndarray<std::uint32_t>(shape);
+      case dtype::uint64: return ndarray<std::uint64_t>(shape);
+      case dtype::float32: return ndarray<float>(shape);
+      case dtype::float64: return ndarray<double>(shape);
+      case dtype::longdouble: return ndarray<long double>(shape);
+      case dtype::complex64: return ndarray<std::complex<float>>(shape);
+      case dtype::complex128: return ndarray<std::complex<double>>(shape);
+      case dtype::clongdouble: return ndarray<std::complex<long double>>(shape);
+      case dtype::bool_: return ndarray<bool>(shape);
+      default: return ndarray<std::int8_t>(shape);
+    }
+  }
+
+  // Overload for dtype_tag (compile-time dtype as np::complex128 etc.)
+  template <dtype D>
+  NP_API inline auto ndarray_from_dtype(dtype_tag<D>, const std::vector<int>& shape)
+      -> ndarray<typename dtype_tag<D>::type>
+  {
+    return ndarray<typename dtype_tag<D>::type>(shape);
   }
 
   /** @brief 1D array from a std::vector (copies).
