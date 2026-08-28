@@ -55,6 +55,79 @@ option(NP_COMPILED_UNITS
        "Enable the compile-time (negative-trait and constexpr-fold) test units"
        ON)
 
+# ── Compilation optimization ──────────────────────────────────────────
+# Tuned for powerful multi-core machines; all options are OFF by default
+# to keep debug builds fast, but can be enabled for Release.
+option(NP_ENABLE_LTO "Enable Link-Time Optimization (IPO/LTCG)" OFF)
+option(NP_ENABLE_NATIVE "Enable -march=native / -mtune=native (GCC/Clang) / /arch:AVX* tuning" OFF)
+option(NP_ENABLE_FAST_MATH "Enable -ffast-math / /fp:fast (may affect NaN/inf)" OFF)
+option(NP_ENABLE_O3 "Force -O3 / /O2 for Release even if not default" ON)
+
+if(NP_ENABLE_O3)
+  if(MSVC)
+    add_compile_options($<$<CONFIG:Release>:/O2> $<$<CONFIG:RelWithDebInfo>:/O2>)
+  else()
+    add_compile_options($<$<CONFIG:Release>:-O3> $<$<CONFIG:RelWithDebInfo>:-O3>)
+  endif()
+endif()
+
+if(NP_ENABLE_FAST_MATH)
+  if(MSVC)
+    add_compile_options($<$<CONFIG:Release>:/fp:fast> $<$<CONFIG:RelWithDebInfo>:/fp:fast>)
+  else()
+    add_compile_options($<$<CONFIG:Release>:-ffast-math> $<$<CONFIG:RelWithDebInfo>:-ffast-math>)
+  endif()
+endif()
+
+if(NP_ENABLE_NATIVE)
+  if(MSVC)
+    # MSVC has no direct -march=native; keep AVX tuning from SIMD block
+    # and add /Ot for speed. User can set /arch:AVX2 etc. via NP_ENABLE_AVX2.
+    add_compile_options($<$<CONFIG:Release>:/Ot>)
+  else()
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-march=native" HAS_MARCH_NATIVE)
+    if(HAS_MARCH_NATIVE)
+      add_compile_options($<$<CONFIG:Release>:-march=native> $<$<CONFIG:RelWithDebInfo>:-march=native>)
+    else()
+      add_compile_options($<$<CONFIG:Release>:-mtune=native> $<$<CONFIG:RelWithDebInfo>:-mtune=native>)
+    endif()
+  endif()
+endif()
+
+if(NP_ENABLE_LTO)
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT _np_ipo_ok OUTPUT _np_ipo_msg)
+  if(_np_ipo_ok)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
+    if(MSVC)
+      # MSVC LTCG needs /GL + /LTCG; CMake handles via IPO flag
+      add_compile_options($<$<CONFIG:Release>:/GL> $<$<CONFIG:RelWithDebInfo>:/GL>)
+    else()
+      add_compile_options($<$<CONFIG:Release>:-flto> $<$<CONFIG:RelWithDebInfo>:-flto>)
+      add_link_options($<$<CONFIG:Release>:-flto> $<$<CONFIG:RelWithDebInfo>:-flto>)
+    endif()
+  else()
+    message(WARNING "LTO requested but not supported: ${_np_ipo_msg}")
+  endif()
+endif()
+
+# Release: always define NDEBUG and enable function/data sections + GC for
+# smaller/faster binaries (GCC/Clang). Also enable -pipe for faster compilation.
+if(NOT MSVC)
+  add_compile_options($<$<CONFIG:Release>:-DNDEBUG> $<$<CONFIG:RelWithDebInfo>:-DNDEBUG>)
+  add_compile_options($<$<CONFIG:Release>:-ffunction-sections> $<$<CONFIG:Release>:-fdata-sections>)
+  add_link_options($<$<CONFIG:Release>:-Wl,--gc-sections>)
+  add_compile_options($<$<CONFIG:Release>:-pipe> $<$<CONFIG:RelWithDebInfo>:-pipe>)
+else()
+  add_compile_definitions($<$<CONFIG:Release>:NDEBUG> $<$<CONFIG:RelWithDebInfo>:NDEBUG>)
+endif()
+
+# Adaptive parallelism for compilation itself (ninja/make -j)
+# If building on powerful machine, allow more jobs via CMAKE_BUILD_PARALLEL_LEVEL
+# (no flag needed – CMake respects -j).
+
 add_library(np INTERFACE)
 add_library(np::np ALIAS np)
 target_include_directories(np INTERFACE
