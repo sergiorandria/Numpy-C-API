@@ -250,13 +250,32 @@ namespace np
     {
       values.push_back(static_cast<double>(*it));
     }
-    std::sort(values.begin(), values.end());
+    // Micro-optimized: O(n) nth_element vs O(n log n) sort
     const std::size_t n = values.size();
     if (n % 2 == 1)
     {
+      std::nth_element(values.begin(), values.begin() + n / 2, values.end());
       return values[n / 2];
     }
-    return 0.5 * (values[n / 2 - 1] + values[n / 2]);
+    // even: need two middle values
+    std::nth_element(values.begin(), values.begin() + n / 2, values.end());
+    double upper = values[n / 2];
+    // lower median is max of lower partition
+    std::nth_element(values.begin(), values.begin() + n / 2 - 1, values.begin() + n / 2);
+    double lower = values[n / 2 - 1];
+    // nth_element on prefix ensures lower is correct but we need max of [0, n/2)
+    // Actually after second nth_element, upper still at n/2? Re-find upper as min of upper part
+    // Simpler: find nth for lower, then upper is min of [n/2, end)
+    // Use linear scan for lower max to avoid second nth overhead for small n
+    if (n < 128)
+    {
+      // for tiny n, second nth_element is fine
+      return 0.5 * (lower + upper);
+    }
+    // For larger n, lower is at n/2-1, upper remains at n/2 from first partition?
+    // Need to guarantee upper still valid after second partition on prefix only (which doesn't touch suffix)
+    // So upper remains correct.
+    return 0.5 * (lower + upper);
   }
 
   /**
@@ -290,11 +309,17 @@ namespace np
           {
             vals.push_back(static_cast<double>(v));
           }
-          std::sort(vals.begin(), vals.end());
           const std::size_t n = vals.size();
           if (n % 2 == 1)
+          {
+            std::nth_element(vals.begin(), vals.begin() + n / 2, vals.end());
             return vals[n / 2];
-          return 0.5 * (vals[n / 2 - 1] + vals[n / 2]);
+          }
+          std::nth_element(vals.begin(), vals.begin() + n / 2, vals.end());
+          double upper = vals[n / 2];
+          std::nth_element(vals.begin(), vals.begin() + n / 2 - 1, vals.begin() + n / 2);
+          double lower = vals[n / 2 - 1];
+          return 0.5 * (lower + upper);
         });
   }
 
@@ -333,8 +358,20 @@ namespace np
     {
       values.push_back(static_cast<double>(*it));
     }
-    std::sort(values.begin(), values.end());
-    return detail::lin_interp(values, (values.size() - 1) * (p / 100.0));
+    // Micro-optimized: O(n) nth_element + O(n) min vs O(n log n) sort
+    const std::size_t n = values.size();
+    const double rank = (n - 1) * (p / 100.0);
+    const std::size_t k = static_cast<std::size_t>(rank);
+    const double frac = rank - static_cast<double>(k);
+    std::nth_element(values.begin(), values.begin() + k, values.end());
+    double low = values[k];
+    if (frac == 0.0 || k + 1 >= n)
+    {
+      return low;
+    }
+    // k+1 th smallest is min of suffix [k+1, end)
+    double high = *std::min_element(values.begin() + k + 1, values.end());
+    return low * (1.0 - frac) + high * frac;
   }
 
   /**
@@ -376,8 +413,16 @@ namespace np
           {
             vals.push_back(static_cast<double>(v));
           }
-          std::sort(vals.begin(), vals.end());
-          return detail::lin_interp(vals, (vals.size() - 1) * (p / 100.0));
+          const std::size_t n = vals.size();
+          const double rank = (n - 1) * (p / 100.0);
+          const std::size_t k = static_cast<std::size_t>(rank);
+          const double frac = rank - static_cast<double>(k);
+          std::nth_element(vals.begin(), vals.begin() + k, vals.end());
+          double low = vals[k];
+          if (frac == 0.0 || k + 1 >= n)
+            return low;
+          double high = *std::min_element(vals.begin() + k + 1, vals.end());
+          return low * (1.0 - frac) + high * frac;
         });
   }
 

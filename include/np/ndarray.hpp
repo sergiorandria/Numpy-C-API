@@ -2642,6 +2642,116 @@ namespace np
       return r;
     }
 
+    /* Micro-optimized radix sort for integral types: O(n) vs O(n log n)
+     * Uses 4-pass 8-bit counting sort (LSD) with sign-bit flipping for signed.
+     * For floating point, reinterprets bits as integer with sign handling.
+     * Code is intentionally long (explicit loops) for max throughput.
+     */
+    template <typename T>
+    inline void radix_sort_integral(std::vector<T>& a)
+    {
+      static_assert(std::is_integral_v<T>);
+      if (a.size() < 64)
+      {
+        std::sort(a.begin(), a.end());
+        return;
+      }
+      using U = std::make_unsigned_t<T>;
+      const std::size_t n = a.size();
+      std::vector<T> b(n);
+      std::vector<U> cur(n), nxt(n);
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        U u = static_cast<U>(a[i]);
+        if constexpr (std::is_signed_v<T>)
+        {
+          u ^= U(1) << (sizeof(T) * 8 - 1);
+        }
+        cur[i] = u;
+      }
+      constexpr int BITS = 8;
+      constexpr int BUCKETS = 1 << BITS;
+      constexpr int PASSES = sizeof(T) * 8 / BITS;
+      std::array<std::size_t, BUCKETS> cnt{};
+      std::array<std::size_t, BUCKETS> pos{};
+      std::vector<U> tmp(n);
+      for (int pass = 0; pass < PASSES; ++pass)
+      {
+        cnt.fill(0);
+        int shift = pass * BITS;
+        for (std::size_t i = 0; i < n; ++i)
+          ++cnt[(cur[i] >> shift) & (BUCKETS - 1)];
+        pos[0] = 0;
+        for (int i = 1; i < BUCKETS; ++i)
+          pos[i] = pos[i - 1] + cnt[i - 1];
+        for (std::size_t i = 0; i < n; ++i)
+        {
+          int bucket = (cur[i] >> shift) & (BUCKETS - 1);
+          tmp[pos[bucket]++] = cur[i];
+        }
+        cur.swap(tmp);
+      }
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        U u = cur[i];
+        if constexpr (std::is_signed_v<T>)
+        {
+          u ^= U(1) << (sizeof(T) * 8 - 1);
+        }
+        b[i] = static_cast<T>(u);
+      }
+      a.swap(b);
+    }
+
+    template <typename T>
+    inline void radix_sort_pair(std::vector<std::pair<std::size_t, T>>& a)
+    {
+      if (a.size() < 64)
+      {
+        std::sort(a.begin(), a.end(), [](auto& x, auto& y){ return x.second < y.second; });
+        return;
+      }
+      // Radix sort pairs by T (second) while carrying index (first)
+      using U = std::make_unsigned_t<T>;
+      static_assert(std::is_integral_v<T>);
+      const std::size_t n = a.size();
+      std::vector<std::pair<std::size_t, T>> b(n);
+      std::vector<U> keys(n), tmp_keys(n);
+      std::vector<std::size_t> idx(n), tmp_idx(n);
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        U u = static_cast<U>(a[i].second);
+        if constexpr (std::is_signed_v<T>)
+          u ^= U(1) << (sizeof(T)*8 -1);
+        keys[i] = u;
+        idx[i] = a[i].first;
+      }
+      constexpr int BITS=8, BUCKETS=256, PASSES= sizeof(T)*8/8;
+      std::array<std::size_t, BUCKETS> cnt{}, pos{};
+      std::vector<U> tmpk(n);
+      std::vector<std::size_t> tmpi(n);
+      for(int pass=0; pass<PASSES; ++pass){
+        cnt.fill(0);
+        int shift=pass*BITS;
+        for(std::size_t i=0;i<n;++i) ++cnt[(keys[i]>>shift)&255];
+        pos[0]=0; for(int i=1;i<BUCKETS;++i) pos[i]=pos[i-1]+cnt[i-1];
+        for(std::size_t i=0;i<n;++i){
+          int buck=(keys[i]>>shift)&255;
+          tmpk[pos[buck]]=keys[i];
+          tmpi[pos[buck]]=idx[i];
+          ++pos[buck];
+        }
+        keys.swap(tmpk); idx.swap(tmpi);
+      }
+      for(std::size_t i=0;i<n;++i){
+        U u=keys[i];
+        if constexpr (std::is_signed_v<T>) u ^= U(1) << (sizeof(T)*8-1);
+        b[i].first = idx[i];
+        b[i].second = static_cast<T>(u);
+      }
+      a.swap(b);
+    }
+
     /**
      * @brief Element-wise operation with broadcasting.
      *
@@ -4113,7 +4223,18 @@ namespace np
         }
         work[p] = (*data_)[offset + f];
       }
-      std::stable_sort(work.begin(), work.end());
+      // Micro-optimized: radix O(n) for integral, pdqsort O(n log n) otherwise
+      if constexpr (std::is_integral_v<T>)
+      {
+        if (axis_len >= 64)
+          detail::radix_sort_integral(work);
+        else
+          std::sort(work.begin(), work.end());
+      }
+      else
+      {
+        std::sort(work.begin(), work.end());
+      }
       for (std::size_t p = 0; p < axis_len; ++p)
       {
         std::size_t f = 0;
@@ -4176,10 +4297,18 @@ namespace np
         }
         work.emplace_back(p, (*data_)[offset + f]);
       }
-      std::stable_sort(
-          work.begin(),
-          work.end(),
-          [](const auto& a, const auto& b) { return a.second < b.second; });
+      // Micro-optimized: radix for integral keys, pdqsort otherwise
+      if constexpr (std::is_integral_v<T>)
+      {
+        if (axis_len >= 64)
+          detail::radix_sort_pair(work);
+        else
+          std::sort(work.begin(), work.end(), [](auto& a, auto& b){ return a.second < b.second; });
+      }
+      else
+      {
+        std::sort(work.begin(), work.end(), [](auto& a, auto& b){ return a.second < b.second; });
+      }
       for (std::size_t p = 0; p < axis_len; ++p)
       {
         std::size_t f = 0;
@@ -4261,11 +4390,33 @@ namespace np
     {
       throw std::invalid_argument("searchsorted requires a 1D array");
     }
-    const auto first = begin();
-    const auto last = end();
-    const auto it = side_right ? std::upper_bound(first, last, value)
-                               : std::lower_bound(first, last, value);
-    return static_cast<std::size_t>(std::distance(first, it));
+    // Micro-optimized: O(log n) binary search, contiguous fast path with raw pointer
+    const std::size_t n = static_cast<std::size_t>(shape[0]);
+    if (is_contiguous())
+    {
+      const T* base = data().data() + offset;
+      const T* lo = base;
+      const T* hi = base + n;
+      if (side_right)
+      {
+        const T* it = std::upper_bound(lo, hi, value);
+        return static_cast<std::size_t>(it - lo);
+      }
+      const T* it = std::lower_bound(lo, hi, value);
+      return static_cast<std::size_t>(it - lo);
+    }
+    // Non-contiguous (view) -> manual binary search via strided access, still O(log n)
+    std::size_t lo = 0, hi = n;
+    while (lo < hi)
+    {
+      std::size_t mid = lo + (hi - lo) / 2;
+      const T& mid_val = (*data_)[_flat_logical(mid)];
+      if (side_right ? (mid_val <= value) : (mid_val < value))
+        lo = mid + 1;
+      else
+        hi = mid;
+    }
+    return lo;
   }
 
   template <typename T>

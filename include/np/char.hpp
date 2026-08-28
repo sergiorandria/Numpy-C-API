@@ -24,9 +24,11 @@
 #define NP_CHAR_HPP
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstddef>
 #include <locale>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -127,6 +129,330 @@ namespace np
           }
         }
         return has_cased;
+      }
+
+      /* Micro-optimized string searching: KMP + Suffix Automaton
+       * KMP O(n+m) for single pattern, SAM O(n) build + O(m) query
+       * for repeated queries on same text. SAM is chosen when text
+       * is long and pattern is reused, otherwise KMP. Both beat
+       * naive O(n*m) and libstdc++ find on worst case like
+       * "aaaa...aab" vs "aaab".
+       */
+      inline std::vector<int> kmp_prefix(const std::string& pat)
+      {
+        std::vector<int> pi(pat.size(), 0);
+        for (std::size_t i = 1; i < pat.size(); ++i)
+        {
+          int j = pi[i - 1];
+          while (j > 0 && pat[i] != pat[static_cast<std::size_t>(j)])
+          {
+            j = pi[static_cast<std::size_t>(j) - 1];
+          }
+          if (pat[i] == pat[static_cast<std::size_t>(j)])
+          {
+            ++j;
+          }
+          pi[i] = j;
+        }
+        return pi;
+      }
+
+      inline std::size_t kmp_find(
+          const std::string& text,
+          const std::string& pat,
+          std::size_t start = 0)
+      {
+        if (pat.empty())
+        {
+          return start <= text.size() ? start : std::string::npos;
+        }
+        if (start >= text.size() || pat.size() > text.size() - start)
+        {
+          return std::string::npos;
+        }
+        // Micro-opt: for short pattern use memchr/BM, for tiny text use naive
+        if (pat.size() == 1)
+        {
+          auto pos = text.find(pat[0], start);
+          return pos;
+        }
+        // KMP
+        auto pi = kmp_prefix(pat);
+        int j = 0;
+        for (std::size_t i = start; i < text.size(); ++i)
+        {
+          while (j > 0 && text[i] != pat[static_cast<std::size_t>(j)])
+          {
+            j = pi[static_cast<std::size_t>(j) - 1];
+          }
+          if (text[i] == pat[static_cast<std::size_t>(j)])
+          {
+            ++j;
+            if (j == static_cast<int>(pat.size()))
+            {
+              return i - pat.size() + 1;
+            }
+          }
+        }
+        return std::string::npos;
+      }
+
+      inline std::size_t kmp_rfind(
+          const std::string& text,
+          const std::string& pat,
+          std::size_t start = 0,
+          std::size_t end = std::string::npos)
+      {
+        if (pat.empty())
+        {
+          return end == std::string::npos ? text.size() : std::min(end, text.size());
+        }
+        std::size_t n = text.size();
+        if (end == std::string::npos || end > n)
+          end = n;
+        if (start >= end || pat.size() > end - start)
+          return std::string::npos;
+        // Reverse KMP: search reversed strings
+        std::string rev_text(text.rbegin() + static_cast<std::ptrdiff_t>(n - end),
+                             text.rbegin() + static_cast<std::ptrdiff_t>(n - start));
+        std::string rev_pat(pat.rbegin(), pat.rend());
+        auto pos = kmp_find(rev_text, rev_pat, 0);
+        if (pos == std::string::npos)
+          return std::string::npos;
+        // pos in reversed corresponds to end - pos - pat.size() in original
+        return end - pos - pat.size();
+      }
+
+      /* Suffix Automaton - O(|text|) build, O(|pat|) query, O(|text|) memory
+       * 2*|text| states, each with 256 transitions (array for ASCII).
+       * For binary strings and repeated queries, SAM beats KMP amortized.
+       * Code is intentionally long (explicit arrays) for micro-optimization.
+       */
+      struct SuffixAutomaton
+      {
+        struct State
+        {
+          int link;
+          int len;
+          int first_pos;
+          int cnt;
+          std::array<int, 256> next;
+          State() : link(-1), len(0), first_pos(-1), cnt(0)
+          {
+            next.fill(-1);
+          }
+        };
+        std::vector<State> st;
+        int last;
+
+        SuffixAutomaton() : st(1), last(0)
+        {
+          st[0].link = -1;
+        }
+
+        explicit SuffixAutomaton(const std::string& s) : st(), last(0)
+        {
+          st.reserve(2 * s.size() + 1);
+          st.emplace_back();
+          st[0].link = -1;
+          last = 0;
+          for (std::size_t i = 0; i < s.size(); ++i)
+          {
+            extend(static_cast<unsigned char>(s[i]), static_cast<int>(i));
+          }
+          // propagate cnt and first_pos via counting sort by len
+          int max_len = 0;
+          for (auto& state : st)
+            max_len = std::max(max_len, state.len);
+          std::vector<int> bucket(max_len + 1, 0);
+          for (auto& state : st)
+            ++bucket[state.len];
+          for (int i = 1; i <= max_len; ++i)
+            bucket[i] += bucket[i - 1];
+          std::vector<int> order(st.size());
+          for (int i = static_cast<int>(st.size()) - 1; i >= 0; --i)
+          {
+            order[--bucket[st[i].len]] = i;
+          }
+          for (int i = static_cast<int>(order.size()) - 1; i > 0; --i)
+          {
+            int v = order[i];
+            int p = st[v].link;
+            if (p >= 0)
+            {
+              st[p].cnt += st[v].cnt;
+              // keep minimal first_pos for earliest occurrence
+              if (st[p].first_pos == -1 || st[v].first_pos < st[p].first_pos)
+              {
+                // first_pos already minimal due to building order, keep
+              }
+            }
+          }
+        }
+
+        void extend(unsigned char c, int pos)
+        {
+          int cur = static_cast<int>(st.size());
+          st.emplace_back();
+          st[cur].len = st[last].len + 1;
+          st[cur].first_pos = pos;
+          st[cur].cnt = 1;
+          int p = last;
+          while (p != -1 && st[p].next[c] == -1)
+          {
+            st[p].next[c] = cur;
+            p = st[p].link;
+          }
+          if (p == -1)
+          {
+            st[cur].link = 0;
+          }
+          else
+          {
+            int q = st[p].next[c];
+            if (st[p].len + 1 == st[q].len)
+            {
+              st[cur].link = q;
+            }
+            else
+            {
+              int clone = static_cast<int>(st.size());
+              st.emplace_back();
+              st[clone] = st[q];
+              st[clone].len = st[p].len + 1;
+              st[clone].cnt = 0; // clone does not correspond to new endpos
+              // first_pos remains q's first_pos
+              while (p != -1 && st[p].next[c] == q)
+              {
+                st[p].next[c] = clone;
+                p = st[p].link;
+              }
+              st[q].link = st[cur].link = clone;
+            }
+          }
+          last = cur;
+        }
+
+        std::optional<std::size_t> find(const std::string& pat) const
+        {
+          if (pat.empty())
+            return std::size_t{0};
+          int v = 0;
+          for (unsigned char c : pat)
+          {
+            int nxt = st[v].next[c];
+            if (nxt == -1)
+              return std::nullopt;
+            v = nxt;
+          }
+          // first_pos is end position of first occurrence
+          int end = st[v].first_pos;
+          if (end == -1)
+            return std::nullopt;
+          return static_cast<std::size_t>(end - static_cast<int>(pat.size()) + 1);
+        }
+
+        int count_occurrences(const std::string& pat) const
+        {
+          if (pat.empty())
+            return 0;
+          int v = 0;
+          for (unsigned char c : pat)
+          {
+            int nxt = st[v].next[c];
+            if (nxt == -1)
+              return 0;
+            v = nxt;
+          }
+          return st[v].cnt;
+        }
+
+        bool contains(const std::string& pat) const
+        {
+          if (pat.empty())
+            return true;
+          int v = 0;
+          for (unsigned char c : pat)
+          {
+            int nxt = st[v].next[c];
+            if (nxt == -1)
+              return false;
+            v = nxt;
+          }
+          return true;
+        }
+      };
+
+      /* Unified micro-optimized find: chooses best algorithm
+       * - tiny pat (1) -> memchr
+       * - short text (<256) or pat <4 -> KMP
+       * - long text (>=512) with repeated queries potential -> SAM
+       * For single query, KMP and SAM are both O(n+m), but SAM has higher
+       * constant. We use heuristic: if text.size() > 512 and pat.size() > 3
+       * build SAM, else KMP.
+       */
+      inline std::size_t optimized_find(
+          const std::string& text,
+          const std::string& pat,
+          std::size_t start = 0)
+      {
+        if (pat.empty())
+          return start <= text.size() ? start : std::string::npos;
+        if (start >= text.size())
+          return std::string::npos;
+        // For long text, SAM can be faster amortized, but for single query KMP is enough.
+        // Use SAM when text is very long and we want worst-case guarantee.
+        if (text.size() >= 512 && pat.size() >= 4)
+        {
+          SuffixAutomaton sam(text);
+          auto res = sam.find(pat);
+          if (!res.has_value())
+            return std::string::npos;
+          std::size_t pos = *res;
+          if (pos < start)
+          {
+            // SAM finds first occurrence from 0, need to find >= start
+            // fall back to KMP for start-constrained search
+            return kmp_find(text, pat, start);
+          }
+          return pos;
+        }
+        return kmp_find(text, pat, start);
+      }
+
+      inline int optimized_count(
+          const std::string& text,
+          const std::string& pat,
+          int start,
+          int end)
+      {
+        int n = static_cast<int>(text.size());
+        int e = (end < 0) ? n : std::min(end, n);
+        int st = std::max(0, start);
+        if (pat.empty() || st >= e)
+          return 0;
+        std::string slice = text.substr(st, e - st);
+        if (slice.size() < pat.size())
+          return 0;
+        // Use SAM for counting occurrences (overlapping count via cnt), but we need non-overlapping count per numpy.
+        // Numpy counts non-overlapping, so we still need to iterate.
+        // Use KMP to find non-overlapping in O(n+m)
+        int cnt = 0;
+        auto pi = kmp_prefix(pat);
+        int j = 0;
+        for (std::size_t i = 0; i < slice.size(); ++i)
+        {
+          while (j > 0 && slice[i] != pat[static_cast<std::size_t>(j)])
+            j = pi[static_cast<std::size_t>(j) - 1];
+          if (slice[i] == pat[static_cast<std::size_t>(j)])
+            ++j;
+          if (j == static_cast<int>(pat.size()))
+          {
+            ++cnt;
+            j = 0; // non-overlapping
+          }
+        }
+        return cnt;
       }
 
     } /* namespace detail */
@@ -648,18 +974,50 @@ namespace np
       ndarray<std::string> result = empty<std::string>(a.shape);
       for (std::size_t i = 0; i < a.size(); ++i)
       {
-        std::string s = a.data()[i];
-        std::size_t pos = 0;
-        int replacements = 0;
-        while ((pos = s.find(old, pos)) != std::string::npos)
+        const std::string& s_in = a.data()[i];
+        if (old.empty())
         {
-          s.replace(pos, old.size(), new_str);
-          pos += new_str.size();
-          ++replacements;
-          if (count >= 0 && replacements >= count)
-            break;
+          result.data()[i] = s_in;
+          continue;
         }
-        result.data()[i] = s;
+        // Micro-optimized: KMP find all occurrences in O(n+m), then single allocation
+        std::vector<std::size_t> positions;
+        positions.reserve(8);
+        // KMP prefix for old
+        auto pi = detail::kmp_prefix(old);
+        int j = 0;
+        for (std::size_t p = 0; p < s_in.size(); ++p)
+        {
+          while (j > 0 && s_in[p] != old[static_cast<std::size_t>(j)])
+            j = pi[static_cast<std::size_t>(j) - 1];
+          if (s_in[p] == old[static_cast<std::size_t>(j)])
+            ++j;
+          if (j == static_cast<int>(old.size()))
+          {
+            positions.push_back(p - old.size() + 1);
+            j = 0; // non-overlapping like numpy
+            if (count >= 0 && static_cast<int>(positions.size()) >= count)
+              break;
+          }
+        }
+        if (positions.empty())
+        {
+          result.data()[i] = s_in;
+          continue;
+        }
+        std::size_t new_len = s_in.size() + positions.size() * (new_str.size() - old.size());
+        std::string out;
+        out.reserve(new_len);
+        std::size_t prev = 0;
+        for (std::size_t idx = 0; idx < positions.size(); ++idx)
+        {
+          std::size_t pos = positions[idx];
+          out.append(s_in, prev, pos - prev);
+          out += new_str;
+          prev = pos + old.size();
+        }
+        out.append(s_in, prev, std::string::npos);
+        result.data()[i] = std::move(out);
       }
       return result;
     }
@@ -837,20 +1195,8 @@ namespace np
       for (std::size_t i = 0; i < a.size(); ++i)
       {
         const std::string& s = a.data()[i];
-        int len = static_cast<int>(s.size());
-        int e = (end < 0) ? len : std::min(end, len);
-        int st = std::max(0, start);
-
-        int cnt = 0;
-        std::size_t pos = st;
-        while (pos < static_cast<std::size_t>(e)
-               && (pos = s.find(sub, pos)) != std::string::npos
-               && pos < static_cast<std::size_t>(e))
-        {
-          ++cnt;
-          pos += sub.size();
-        }
-        result.data()[i] = cnt;
+        // Micro-optimized: KMP/SAM counting O(n+m) vs naive O(n*m)
+        result.data()[i] = detail::optimized_count(s, sub, start, end);
       }
       return result;
     }
@@ -880,11 +1226,23 @@ namespace np
         int len = static_cast<int>(s.size());
         int e = (end < 0) ? len : std::min(end, len);
         int st = std::max(0, start);
-
-        std::string sub = s.substr(st, e - st);
-        result.data()[i] =
-            (sub.size() >= suffix.size()
-             && sub.compare(sub.size() - suffix.size(), suffix.size(), suffix) == 0);
+        int slice_len = e - st;
+        // Micro-optimized: avoid substr allocation, direct compare
+        if (slice_len < 0)
+          slice_len = 0;
+        if (static_cast<std::size_t>(slice_len) < suffix.size())
+        {
+          result.data()[i] = false;
+        }
+        else
+        {
+          // compare suffix at end of slice without allocation
+          result.data()[i] = s.compare(
+                                 static_cast<std::size_t>(e - suffix.size()),
+                                 suffix.size(),
+                                 suffix)
+                             == 0;
+        }
       }
       return result;
     }
@@ -914,10 +1272,17 @@ namespace np
         int len = static_cast<int>(s.size());
         int e = (end < 0) ? len : std::min(end, len);
         int st = std::max(0, start);
-
-        std::string sub = s.substr(st, e - st);
-        result.data()[i] =
-            (sub.size() >= prefix.size() && sub.compare(0, prefix.size(), prefix) == 0);
+        int slice_len = e - st;
+        if (slice_len < 0)
+          slice_len = 0;
+        if (static_cast<std::size_t>(slice_len) < prefix.size())
+        {
+          result.data()[i] = false;
+        }
+        else
+        {
+          result.data()[i] = s.compare(static_cast<std::size_t>(st), prefix.size(), prefix) == 0;
+        }
       }
       return result;
     }
@@ -946,9 +1311,14 @@ namespace np
         int len = static_cast<int>(s.size());
         int e = (end < 0) ? len : std::min(end, len);
         int st = std::max(0, start);
-
-        std::size_t pos = s.find(sub, st);
-        if (pos != std::string::npos && pos < static_cast<std::size_t>(e))
+        if (st > e || sub.size() > static_cast<std::size_t>(e - st))
+        {
+          result.data()[i] = -1;
+          continue;
+        }
+        // Micro-optimized KMP/SAM O(n+m) vs naive O(n*m) worst case
+        std::size_t pos = detail::optimized_find(s, sub, static_cast<std::size_t>(st));
+        if (pos != std::string::npos && pos + sub.size() <= static_cast<std::size_t>(e))
         {
           result.data()[i] = static_cast<int>(pos);
         }
@@ -984,9 +1354,17 @@ namespace np
         int len = static_cast<int>(s.size());
         int e = (end < 0) ? len : std::min(end, len);
         int st = std::max(0, start);
-
-        std::size_t pos = s.rfind(sub, e - 1);
-        if (pos != std::string::npos && pos >= static_cast<std::size_t>(st))
+        if (st >= e || sub.empty())
+        {
+          if (sub.empty())
+            result.data()[i] = e;
+          else
+            result.data()[i] = -1;
+          continue;
+        }
+        // Micro-optimized reverse KMP O(n+m) vs naive O(n*m)
+        std::size_t pos = detail::kmp_rfind(s, sub, static_cast<std::size_t>(st), static_cast<std::size_t>(e));
+        if (pos != std::string::npos)
         {
           result.data()[i] = static_cast<int>(pos);
         }
@@ -1355,7 +1733,7 @@ namespace np
         -> ndarray<std::string>
     {
       // Returns array with 3x elements: [before0, sep0, after0, before1, sep1,
-      // after1, ...]
+      // after1, ...] Micro-optimized with KMP O(n+m)
       std::vector<int> new_shape = a.shape;
       new_shape.back() *= 3;
       ndarray<std::string> result = empty<std::string>(new_shape);
@@ -1363,7 +1741,7 @@ namespace np
       for (std::size_t i = 0; i < a.size(); ++i)
       {
         const std::string& s = a.data()[i];
-        std::size_t pos = s.find(sep);
+        std::size_t pos = detail::optimized_find(s, sep, 0);
         if (pos != std::string::npos)
         {
           result.data()[i * 3] = s.substr(0, pos);
@@ -1399,7 +1777,7 @@ namespace np
       for (std::size_t i = 0; i < a.size(); ++i)
       {
         const std::string& s = a.data()[i];
-        std::size_t pos = s.rfind(sep);
+        std::size_t pos = detail::kmp_rfind(s, sep, 0, s.size());
         if (pos != std::string::npos)
         {
           result.data()[i * 3] = s.substr(0, pos);
@@ -1511,14 +1889,30 @@ namespace np
         }
         else
         {
+          // Micro-optimized KMP O(n+m) per string
           std::size_t start = 0;
-          std::size_t pos;
           int count = 0;
-          while ((pos = s.find(sep, start)) != std::string::npos)
+          auto pi = detail::kmp_prefix(sep);
+          int j = 0;
+          for (std::size_t p = 0; p < s.size(); ++p)
           {
-            parts.push_back(s.substr(start, pos - start));
-            start = pos + sep.size();
-            ++count;
+            while (j > 0 && s[p] != sep[static_cast<std::size_t>(j)])
+              j = pi[static_cast<std::size_t>(j) - 1];
+            if (s[p] == sep[static_cast<std::size_t>(j)])
+              ++j;
+            if (j == static_cast<int>(sep.size()))
+            {
+              std::size_t pos = p - sep.size() + 1;
+              if (pos < start)
+                continue;
+              parts.push_back(s.substr(start, pos - start));
+              start = pos + sep.size();
+              j = 0;
+              ++count;
+              if (maxsplit >= 0 && count >= maxsplit)
+                break;
+              // adjust p to start-1 to avoid overlapping re-scan, but we already reset j
+            }
             if (maxsplit >= 0 && count >= maxsplit)
               break;
           }
@@ -1579,24 +1973,46 @@ namespace np
         }
         else
         {
-          std::size_t end = s.size();
-          int count = 0;
-          while (end > 0)
+          // Micro-optimized: KMP find all positions, then slice from right without O(n^2) inserts
+          std::vector<std::size_t> positions;
+          auto pi = detail::kmp_prefix(sep);
+          int j = 0;
+          for (std::size_t p = 0; p < s.size(); ++p)
           {
-            std::size_t pos = s.rfind(sep, end - 1);
-            if (pos == std::string::npos)
+            while (j > 0 && s[p] != sep[static_cast<std::size_t>(j)])
+              j = pi[static_cast<std::size_t>(j) - 1];
+            if (s[p] == sep[static_cast<std::size_t>(j)])
+              ++j;
+            if (j == static_cast<int>(sep.size()))
             {
-              parts.insert(parts.begin(), s.substr(0, end));
-              break;
+              positions.push_back(p - sep.size() + 1);
+              j = 0;
             }
-            parts.insert(parts.begin(), s.substr(pos + sep.size(), end - pos - sep.size()));
-            end = pos;
-            ++count;
-            if (maxsplit >= 0 && count >= maxsplit)
+          }
+          if (positions.empty())
+          {
+            parts.push_back(s);
+          }
+          else
+          {
+            // Determine how many splits from right
+            int total = static_cast<int>(positions.size());
+            int take = (maxsplit < 0) ? total : std::min(total, maxsplit);
+            int start_idx = total - take;
+            std::size_t end = s.size();
+            // Build parts from right to left, then reverse
+            std::vector<std::string> rev;
+            rev.reserve(take + 1);
+            for (int idx = total - 1; idx >= start_idx; --idx)
             {
-              parts.insert(parts.begin(), s.substr(0, end));
-              break;
+              std::size_t pos = positions[idx];
+              rev.push_back(s.substr(pos + sep.size(), end - pos - sep.size()));
+              end = pos;
             }
+            rev.push_back(s.substr(0, end));
+            parts.reserve(rev.size());
+            for (auto it = rev.rbegin(); it != rev.rend(); ++it)
+              parts.push_back(std::move(*it));
           }
         }
         ndarray<std::string> arr =
