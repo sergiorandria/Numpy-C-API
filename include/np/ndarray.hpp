@@ -766,6 +766,9 @@ namespace np
      * @complexity O(n), where n = size().
      */
     template <typename Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+    auto sum(std::optional<int> axis, bool keepdims = false) const -> ndarray<Acc>;
+
+    template <typename Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
     auto sum(int axis, bool keepdims = false) const -> ndarray<Acc>;
 
     /**
@@ -787,6 +790,9 @@ namespace np
      * @complexity O(n).
      */
     template <typename Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+    auto prod(std::optional<int> axis, bool keepdims = false) const -> ndarray<Acc>;
+
+    template <typename Acc = std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
     auto prod(int axis, bool keepdims = false) const -> ndarray<Acc>;
 
     /**
@@ -806,6 +812,8 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n).
      */
+    auto min(std::optional<int> axis, bool keepdims = false) const -> ndarray<T>;
+
     auto min(int axis, bool keepdims = false) const -> ndarray<T>;
 
     /**
@@ -827,6 +835,8 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n).
      */
+    auto max(std::optional<int> axis, bool keepdims = false) const -> ndarray<T>;
+
     auto max(int axis, bool keepdims = false) const -> ndarray<T>;
 
     /**
@@ -846,6 +856,8 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n).
      */
+    auto ptp(std::optional<int> axis, bool keepdims = false) const -> ndarray<T>;
+
     auto ptp(int axis, bool keepdims = false) const -> ndarray<T>;
 
     /**
@@ -867,6 +879,9 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n).
      */
+    auto mean(std::optional<int> axis, bool keepdims = false) const
+        -> ndarray<typename _mean_type<T>::type>;
+
     auto mean(int axis, bool keepdims = false) const
         -> ndarray<typename _mean_type<T>::type>;
 
@@ -888,6 +903,9 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n).
      */
+    auto var(std::optional<int> axis, bool keepdims = false) const
+        -> ndarray<typename _mean_type<T>::type>;
+
     auto var(int axis, bool keepdims = false) const
         -> ndarray<typename _mean_type<T>::type>;
 
@@ -907,6 +925,9 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n).
      */
+    auto std(std::optional<int> axis, bool keepdims = false) const
+        -> ndarray<typename _mean_type<T>::type>;
+
     auto std(int axis, bool keepdims = false) const
         -> ndarray<typename _mean_type<T>::type>;
 
@@ -926,6 +947,8 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n).
      */
+    auto all(std::optional<int> axis, bool keepdims = false) const -> ndarray<bool>;
+
     auto all(int axis, bool keepdims = false) const -> ndarray<bool>;
 
     /**
@@ -944,6 +967,8 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n).
      */
+    auto any(std::optional<int> axis, bool keepdims = false) const -> ndarray<bool>;
+
     auto any(int axis, bool keepdims = false) const -> ndarray<bool>;
 
     /**
@@ -963,6 +988,9 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n).
      */
+    auto argmax(std::optional<int> axis, bool keepdims = false) const
+        -> ndarray<std::size_t>;
+
     auto argmax(int axis, bool keepdims = false) const -> ndarray<std::size_t>;
 
     /**
@@ -982,6 +1010,9 @@ namespace np
      * @throws np::AxisError if the axis is out of bounds.
      * @complexity O(n).
      */
+    auto argmin(std::optional<int> axis, bool keepdims = false) const
+        -> ndarray<std::size_t>;
+
     auto argmin(int axis, bool keepdims = false) const -> ndarray<std::size_t>;
 
     /**
@@ -1003,6 +1034,16 @@ namespace np
         -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
 
     /**
+     * @brief Cumulative sum with optional axis (flattened when std::nullopt).
+     * @param axis Optional axis; std::nullopt means flattened.
+     * @return Array of cumulative sums.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto cumsum(std::optional<int> axis) const
+        -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
+
+    /**
      * @brief Cumulative product (flattened when no axis is given).
      * @return 1-D array of cumulative products.
      * @complexity O(n).
@@ -1020,6 +1061,16 @@ namespace np
     auto cumprod(int axis) const
         -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
 
+    /**
+     * @brief Cumulative product with optional axis (flattened when std::nullopt).
+     * @param axis Optional axis; std::nullopt means flattened.
+     * @return Array of cumulative products.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n).
+     */
+    auto cumprod(std::optional<int> axis) const
+        -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>;
+
     // Sorting / searching
     /**
      * @brief In-place sort along an axis (default: last axis).
@@ -1032,6 +1083,14 @@ namespace np
     void sort(int axis = -1);
 
     /**
+     * @brief In-place sort with optional axis (std::nullopt = last axis).
+     * @param axis Optional axis.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n log n).
+     */
+    void sort(std::optional<int> axis);
+
+    /**
      * @brief Sorted copy of the array along an axis (default: last).
      * @param axis Axis along which to sort.
      * @return A new sorted array.
@@ -1039,6 +1098,15 @@ namespace np
      * @complexity O(n log n).
      */
     auto sorted(int axis = -1) const -> ndarray<T>;
+
+    /**
+     * @brief Sorted copy with optional axis (std::nullopt = last axis).
+     * @param axis Optional axis.
+     * @return A new sorted array.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n log n).
+     */
+    auto sorted(std::optional<int> axis) const -> ndarray<T>;
 
     /**
      * @brief Indices that would sort the array along an axis.
@@ -1049,6 +1117,15 @@ namespace np
      * @complexity O(n log n).
      */
     auto argsort(int axis = -1) const -> ndarray<std::size_t>;
+
+    /**
+     * @brief Indices that would sort with optional axis (std::nullopt = last).
+     * @param axis Optional axis.
+     * @return Array of indices.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n log n).
+     */
+    auto argsort(std::optional<int> axis) const -> ndarray<std::size_t>;
 
     /**
      * @brief Indices that would partition at position k along
@@ -1064,6 +1141,18 @@ namespace np
     auto argpartition(std::size_t kth, int axis = -1) const -> ndarray<std::size_t>;
 
     /**
+     * @brief Argpartition with optional axis (std::nullopt = last).
+     * @param kth Partition index.
+     * @param axis Optional axis.
+     * @return Array of partition indices.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @throws std::out_of_range if `kth >= axis_len`.
+     * @complexity O(n) average (introselect).
+     */
+    auto argpartition(std::size_t kth, std::optional<int> axis) const
+        -> ndarray<std::size_t>;
+
+    /**
      * @brief Binary search for a value in a sorted 1D array.
      * @param value Value to search for.
      * @param side_right If true, return the rightmost
@@ -1072,7 +1161,9 @@ namespace np
      * @throws std::invalid_argument if the array is not 1-D.
      * @complexity O(log n).
      */
-    std::size_t searchsorted(const T& value, bool side_right = false) const;
+     std::size_t searchsorted(const T& value, bool side_right = false) const;
+
+     std::size_t searchsorted(const T& value, std::optional<bool> side_right) const;
 
     /**
      * @brief Searchsorted applied to every element of `values`.
@@ -1209,6 +1300,9 @@ namespace np
      */
     auto take(const std::vector<std::size_t>& indices, int axis = 0) const -> ndarray;
 
+    auto take(const std::vector<std::size_t>& indices, std::optional<int> axis) const
+        -> ndarray;
+
     /**
      * @brief Set elements at flat logical positions.
      * @param indices Flat logical positions to write to.
@@ -1224,6 +1318,11 @@ namespace np
     put(const std::vector<std::size_t>& indices,
         const std::vector<T>& values,
         char mode = 'r');
+
+    void put(
+        const std::vector<std::size_t>& indices,
+        const std::vector<T>& values,
+        std::optional<char> mode);
 
     /**
      * @brief Repeat elements (flattened when no axis given).
@@ -1244,6 +1343,16 @@ namespace np
     auto repeat(std::size_t repeats, int axis) const -> ndarray;
 
     /**
+     * @brief Repeat with optional axis (std::nullopt = flattened).
+     * @param repeats Number of repetitions per element.
+     * @param axis Optional axis.
+     * @return Array with repeated elements.
+     * @throws np::AxisError if the axis is out of bounds.
+     * @complexity O(n * repeats).
+     */
+    auto repeat(std::size_t repeats, std::optional<int> axis) const -> ndarray;
+
+    /**
      * @brief Clip values into [min_value, max_value].
      * @param min_value Lower bound.
      * @param max_value Upper bound.
@@ -1262,6 +1371,8 @@ namespace np
      */
     auto round(int decimals = 0) const -> ndarray;
 
+    auto round(std::optional<int> decimals) const -> ndarray;
+
     /**
      * @brief Diagonal of a 2D+ array.
      * @param offset Diagonal offset (0 = main diagonal,
@@ -1272,6 +1383,8 @@ namespace np
      */
     auto diagonal(int offset = 0) const -> ndarray;
 
+    auto diagonal(std::optional<int> offset) const -> ndarray;
+
     /**
      * @brief Sum along the diagonal.
      * @param offset Diagonal offset.
@@ -1280,6 +1393,8 @@ namespace np
      * @complexity O(min(shape[0], shape[1])).
      */
     T trace(int offset = 0) const;
+
+    T trace(std::optional<int> offset) const;
 
     /**
      * @brief Indices of non-zero elements (one array per dimension).
@@ -1337,6 +1452,10 @@ namespace np
     auto choose(const std::vector<ndarray<U>>& choices, char mode = 'r') const
         -> ndarray<U>;
 
+    template <typename U>
+    auto choose(const std::vector<ndarray<U>>& choices, std::optional<char> mode) const
+        -> ndarray<U>;
+
     /**
      * @brief Return selected slices along an axis.
      *
@@ -1389,6 +1508,8 @@ namespace np
      * @complexity O(n) average (introselect).
      */
     void partition(std::size_t kth, int axis = -1);
+
+    void partition(std::size_t kth, std::optional<int> axis);
 
     /**
      * @brief Real part: for complex element types the extracted
@@ -3328,6 +3449,19 @@ namespace np
   }
 
   template <typename T>
+  template <typename Acc>
+  auto ndarray<T>::sum(std::optional<int> axis, bool keepdims) const -> ndarray<Acc>
+  {
+    if (!axis.has_value())
+    {
+      ndarray<Acc> out(std::vector<int>{});
+      out.data()[0] = sum();
+      return out;
+    }
+    return sum<Acc>(*axis, keepdims);
+  }
+
+  template <typename T>
   auto ndarray<T>::prod() const
       -> std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>
   {
@@ -3343,6 +3477,19 @@ namespace np
   {
     return _reduce_axis<Acc>(
         axis, keepdims, Acc(1), [](Acc& acc, const T& v) { acc *= v; });
+  }
+
+  template <typename T>
+  template <typename Acc>
+  auto ndarray<T>::prod(std::optional<int> axis, bool keepdims) const -> ndarray<Acc>
+  {
+    if (!axis.has_value())
+    {
+      ndarray<Acc> out(std::vector<int>{});
+      out.data()[0] = prod();
+      return out;
+    }
+    return prod<Acc>(*axis, keepdims);
   }
 
   template <typename T>
@@ -3372,6 +3519,18 @@ namespace np
   }
 
   template <typename T>
+  auto ndarray<T>::min(std::optional<int> axis, bool keepdims) const -> ndarray<T>
+  {
+    if (!axis.has_value())
+    {
+      ndarray<T> out(std::vector<int>{});
+      out.data()[0] = min();
+      return out;
+    }
+    return min(*axis, keepdims);
+  }
+
+  template <typename T>
   T ndarray<T>::max() const
   {
     if (_numel() == 0)
@@ -3398,6 +3557,18 @@ namespace np
   }
 
   template <typename T>
+  auto ndarray<T>::max(std::optional<int> axis, bool keepdims) const -> ndarray<T>
+  {
+    if (!axis.has_value())
+    {
+      ndarray<T> out(std::vector<int>{});
+      out.data()[0] = max();
+      return out;
+    }
+    return max(*axis, keepdims);
+  }
+
+  template <typename T>
   T ndarray<T>::ptp() const
   {
     return max() - min();
@@ -3414,6 +3585,18 @@ namespace np
       out.data()[i] = mx.data()[i] - mn.data()[i];
     }
     return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::ptp(std::optional<int> axis, bool keepdims) const -> ndarray<T>
+  {
+    if (!axis.has_value())
+    {
+      ndarray<T> out(std::vector<int>{});
+      out.data()[0] = ptp();
+      return out;
+    }
+    return ptp(*axis, keepdims);
   }
 
   template <typename T>
@@ -3443,6 +3626,19 @@ namespace np
       v /= static_cast<MeanT>(axis_len);
     }
     return s;
+  }
+
+  template <typename T>
+  auto ndarray<T>::mean(std::optional<int> axis, bool keepdims) const
+      -> ndarray<typename _mean_type<T>::type>
+  {
+    if (!axis.has_value())
+    {
+      ndarray<typename _mean_type<T>::type> out(std::vector<int>{});
+      out.data()[0] = mean();
+      return out;
+    }
+    return mean(*axis, keepdims);
   }
 
   template <typename T>
@@ -3527,6 +3723,19 @@ namespace np
   }
 
   template <typename T>
+  auto ndarray<T>::var(std::optional<int> axis, bool keepdims) const
+      -> ndarray<typename _mean_type<T>::type>
+  {
+    if (!axis.has_value())
+    {
+      ndarray<typename _mean_type<T>::type> out(std::vector<int>{});
+      out.data()[0] = var();
+      return out;
+    }
+    return var(*axis, keepdims);
+  }
+
+  template <typename T>
   auto ndarray<T>::std() const -> typename _mean_type<T>::type
   {
     return static_cast<typename _mean_type<T>::type>(std::sqrt(var()));
@@ -3542,6 +3751,19 @@ namespace np
       x = static_cast<typename _mean_type<T>::type>(std::sqrt(x));
     }
     return v;
+  }
+
+  template <typename T>
+  auto ndarray<T>::std(std::optional<int> axis, bool keepdims) const
+      -> ndarray<typename _mean_type<T>::type>
+  {
+    if (!axis.has_value())
+    {
+      ndarray<typename _mean_type<T>::type> out(std::vector<int>{});
+      out.data()[0] = std();
+      return out;
+    }
+    return std(*axis, keepdims);
   }
 
   template <typename T>
@@ -3563,6 +3785,18 @@ namespace np
   }
 
   template <typename T>
+  auto ndarray<T>::all(std::optional<int> axis, bool keepdims) const -> ndarray<bool>
+  {
+    if (!axis.has_value())
+    {
+      ndarray<bool> out(std::vector<int>{});
+      out.data()[0] = all();
+      return out;
+    }
+    return all(*axis, keepdims);
+  }
+
+  template <typename T>
   bool ndarray<T>::any() const
   {
     bool result = false;
@@ -3578,6 +3812,18 @@ namespace np
         keepdims,
         std::optional<bool>(false),
         [](bool& acc, const T& v) { acc = acc || (v != T{}); });
+  }
+
+  template <typename T>
+  auto ndarray<T>::any(std::optional<int> axis, bool keepdims) const -> ndarray<bool>
+  {
+    if (!axis.has_value())
+    {
+      ndarray<bool> out(std::vector<int>{});
+      out.data()[0] = any();
+      return out;
+    }
+    return any(*axis, keepdims);
   }
 
   template <typename T>
@@ -3666,6 +3912,19 @@ namespace np
   }
 
   template <typename T>
+  auto ndarray<T>::argmax(std::optional<int> axis, bool keepdims) const
+      -> ndarray<std::size_t>
+  {
+    if (!axis.has_value())
+    {
+      ndarray<std::size_t> out(std::vector<int>{});
+      out.data()[0] = argmax();
+      return out;
+    }
+    return argmax(*axis, keepdims);
+  }
+
+  template <typename T>
   std::size_t ndarray<T>::argmin() const
   {
     if (_numel() == 0)
@@ -3694,6 +3953,19 @@ namespace np
   auto ndarray<T>::argmin(int axis, bool keepdims) const -> ndarray<std::size_t>
   {
     return _arg_reduce_axis(axis, keepdims, [](const T& v, const T& b) { return v < b; });
+  }
+
+  template <typename T>
+  auto ndarray<T>::argmin(std::optional<int> axis, bool keepdims) const
+      -> ndarray<std::size_t>
+  {
+    if (!axis.has_value())
+    {
+      ndarray<std::size_t> out(std::vector<int>{});
+      out.data()[0] = argmin();
+      return out;
+    }
+    return argmin(*axis, keepdims);
   }
 
   template <typename T>
@@ -3762,6 +4034,17 @@ namespace np
   }
 
   template <typename T>
+  auto ndarray<T>::cumsum(std::optional<int> axis) const
+      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+  {
+    if (!axis.has_value())
+    {
+      return cumsum();
+    }
+    return cumsum(*axis);
+  }
+
+  template <typename T>
   auto ndarray<T>::cumprod() const
       -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
   {
@@ -3786,7 +4069,24 @@ namespace np
     return _cum_axis<Acc>(axis, [](Acc& acc, const T& v) { return acc * v; });
   }
 
+  template <typename T>
+  auto ndarray<T>::cumprod(std::optional<int> axis) const
+      -> ndarray<std::conditional_t<std::is_same_v<T, bool>, std::int64_t, T>>
+  {
+    if (!axis.has_value())
+    {
+      return cumprod();
+    }
+    return cumprod(*axis);
+  }
+
   // Sorting / searching
+  template <typename T>
+  void ndarray<T>::sort(std::optional<int> axis)
+  {
+    sort(axis.value_or(-1));
+  }
+
   template <typename T>
   void ndarray<T>::sort(int axis)
   {
@@ -3837,6 +4137,18 @@ namespace np
   }
 
   template <typename T>
+  auto ndarray<T>::sorted(std::optional<int> axis) const -> ndarray<T>
+  {
+    return sorted(axis.value_or(-1));
+  }
+
+  template <typename T>
+  auto ndarray<T>::argsort(std::optional<int> axis) const -> ndarray<std::size_t>
+  {
+    return argsort(axis.value_or(-1));
+  }
+
+  template <typename T>
   auto ndarray<T>::argsort(int axis) const -> ndarray<std::size_t>
   {
     axis = _normalize_axis(axis);
@@ -3881,6 +4193,13 @@ namespace np
       od.advance();
     }
     return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::argpartition(std::size_t kth, std::optional<int> axis) const
+      -> ndarray<std::size_t>
+  {
+    return argpartition(kth, axis.value_or(-1));
   }
 
   template <typename T>
@@ -3947,6 +4266,12 @@ namespace np
     const auto it = side_right ? std::upper_bound(first, last, value)
                                : std::lower_bound(first, last, value);
     return static_cast<std::size_t>(std::distance(first, it));
+  }
+
+  template <typename T>
+  std::size_t ndarray<T>::searchsorted(const T& value, std::optional<bool> side_right) const
+  {
+    return searchsorted(value, side_right.value_or(false));
   }
 
   template <typename T>
@@ -4214,6 +4539,13 @@ namespace np
   }
 
   template <typename T>
+  auto ndarray<T>::take(const std::vector<std::size_t>& indices, std::optional<int> axis) const
+      -> ndarray
+  {
+    return take(indices, axis.value_or(0));
+  }
+
+  template <typename T>
   auto ndarray<T>::take(const std::vector<std::size_t>& indices, int axis) const
       -> ndarray
   {
@@ -4255,6 +4587,15 @@ namespace np
       od.advance();
     }
     return out;
+  }
+
+  template <typename T>
+  void ndarray<T>::put(
+      const std::vector<std::size_t>& indices,
+      const std::vector<T>& values,
+      std::optional<char> mode)
+  {
+    put(indices, values, mode.value_or('r'));
   }
 
   template <typename T>
@@ -4304,6 +4645,16 @@ namespace np
           }
         });
     return out;
+  }
+
+  template <typename T>
+  auto ndarray<T>::repeat(std::size_t repeats, std::optional<int> axis) const -> ndarray
+  {
+    if (!axis.has_value())
+    {
+      return repeat(repeats);
+    }
+    return repeat(repeats, *axis);
   }
 
   template <typename T>
@@ -4368,6 +4719,18 @@ namespace np
   }
 
   template <typename T>
+  auto ndarray<T>::round(std::optional<int> decimals) const -> ndarray
+  {
+    return round(decimals.value_or(0));
+  }
+
+  template <typename T>
+  auto ndarray<T>::diagonal(std::optional<int> offset) const -> ndarray
+  {
+    return diagonal(offset.value_or(0));
+  }
+
+  template <typename T>
   auto ndarray<T>::diagonal(int offset) const -> ndarray
   {
     if (shape.size() < 2)
@@ -4409,6 +4772,12 @@ namespace np
       od.advance();
     }
     return out;
+  }
+
+  template <typename T>
+  T ndarray<T>::trace(std::optional<int> offset) const
+  {
+    return trace(offset.value_or(0));
   }
 
   template <typename T>
@@ -4511,6 +4880,14 @@ namespace np
   auto ndarray<T>::conjugate() const -> ndarray
   {
     return conj();
+  }
+
+  template <typename T>
+  template <typename U>
+  auto ndarray<T>::choose(const std::vector<ndarray<U>>& choices, std::optional<char> mode) const
+      -> ndarray<U>
+  {
+    return choose(choices, mode.value_or('r'));
   }
 
   template <typename T>
@@ -4638,6 +5015,12 @@ namespace np
   auto ndarray<T>::matmul(const ndarray<U>& b) const -> ndarray<std::common_type_t<T, U>>
   {
     return np::linalg::matmul(*this, b);
+  }
+
+  template <typename T>
+  void ndarray<T>::partition(std::size_t kth, std::optional<int> axis)
+  {
+    partition(kth, axis.value_or(-1));
   }
 
   template <typename T>

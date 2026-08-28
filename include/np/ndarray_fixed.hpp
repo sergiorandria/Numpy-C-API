@@ -24,6 +24,7 @@
 #include <cstddef>
 #include <functional>
 #include <initializer_list>
+#include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -31,6 +32,8 @@
 #include "detail/expr.hpp"
 #include "detail/math_constexpr.hpp"
 #include "detail/scalar_custom.hpp"
+#include "exceptions.hpp"
+#include "ndarray.hpp"
 
 namespace np::detail::fixed
 {
@@ -327,7 +330,7 @@ namespace np
      */
     template <int Axis = -1>
       requires(Axis >= -1 && Axis < static_cast<int>(rank))
-    constexpr auto std(int ddof = 0) const
+    constexpr auto std(std::optional<int> ddof = std::nullopt) const
     {
       using traits = detail::fixed::scalar_traits<T>;
       using R = detail::fixed::float_t<typename traits::value_type>;
@@ -345,13 +348,13 @@ namespace np
           const R d = static_cast<R>(traits::get(m_data[i])) - mean_v;
           sq += d * d;
         }
-        return std_denom(sq, size_v, ddof);
+        return std_denom(sq, size_v, ddof.value_or(0));
       }
       else
       {
         using tag = typename detail::expr::
             remove_at<Axis, 0, detail::expr::shape_tag<Extents...>>::type;
-        return std_axis_impl(Axis, tag{}, ddof);
+        return std_axis_impl(Axis, tag{}, ddof.value_or(0));
       }
     }
 
@@ -562,6 +565,63 @@ namespace np
       using tag = typename detail::expr::
           remove_at<Axis, 0, detail::expr::shape_tag<Extents...>>::type;
       return squeeze_axis_impl<Axis>(tag{});
+    }
+
+    /**
+     * @brief Squeeze with optional axis (std::nullopt = remove all).
+     *        Runtime variant that returns a dynamic ndarray.
+     * @param axis Optional axis to remove; std::nullopt removes all
+     *             extent-1 axes.
+     * @return Dynamic ndarray with squeezed shape.
+     */
+    auto squeeze(std::optional<int> axis) const -> np::ndarray<T>
+    {
+      if (!axis.has_value())
+      {
+        // Remove all 1-extents: build dynamic shape
+        std::vector<int> out_shape;
+        for (std::size_t d = 0; d < rank; ++d)
+        {
+          if (static_shape[d] != 1)
+          {
+            out_shape.push_back(static_shape[d]);
+          }
+        }
+        np::ndarray<T> out(out_shape);
+        for (std::size_t i = 0; i < size_v; ++i)
+        {
+          out.data()[i] = m_data[i];
+        }
+        return out;
+      }
+      int ax = *axis;
+      if (ax < 0)
+      {
+        ax += static_cast<int>(rank);
+      }
+      if (ax < 0 || ax >= static_cast<int>(rank))
+      {
+        throw np::AxisError("squeeze axis out of bounds");
+      }
+      if (static_shape[ax] != 1)
+      {
+        throw std::invalid_argument("squeeze axis must have extent 1");
+      }
+      std::vector<int> out_shape;
+      out_shape.reserve(rank - 1);
+      for (std::size_t d = 0; d < rank; ++d)
+      {
+        if (static_cast<int>(d) != ax)
+        {
+          out_shape.push_back(static_shape[d]);
+        }
+      }
+      np::ndarray<T> out(out_shape);
+      for (std::size_t i = 0; i < size_v; ++i)
+      {
+        out.data()[i] = m_data[i];
+      }
+      return out;
     }
 
     /**
