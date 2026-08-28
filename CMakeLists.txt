@@ -55,6 +55,8 @@ option(NP_COMPILED_UNITS
        "Enable the compile-time (negative-trait and constexpr-fold) test units"
        ON)
 
+option(NP_USE_THREADING "Enable threadpool for sorting/searching/loops (NP_THREADPOOL)" OFF)
+
 # ── Compilation optimization ──────────────────────────────────────────
 # Tuned for powerful multi-core machines; all options are OFF by default
 # to keep debug builds fast, but can be enabled for Release.
@@ -135,6 +137,9 @@ target_include_directories(np INTERFACE
     $<INSTALL_INTERFACE:include>)
 find_package(Threads REQUIRED)
 target_link_libraries(np INTERFACE Threads::Threads)
+if(NP_USE_THREADING)
+  target_compile_definitions(np INTERFACE NP_USE_THREADING)
+endif()
 
 include(CTest)
 if(BUILD_TESTING)

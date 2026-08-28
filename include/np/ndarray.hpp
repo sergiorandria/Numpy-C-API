@@ -41,6 +41,10 @@
 #include "dtype.hpp"
 #include "exceptions.hpp"
 
+#ifdef NP_USE_THREADING
+#include "threadpool.hpp"
+#endif
+
 namespace np
 {
   namespace matrix
@@ -171,6 +175,27 @@ namespace np
         return static_cast<R>(std::pow(static_cast<double>(a), static_cast<double>(b)));
       }
     }
+
+#ifdef NP_USE_THREADING
+    constexpr std::size_t kParallelThreshold = 10000;
+
+    template <typename Func>
+    inline void maybe_parallel_for(std::size_t begin, std::size_t end, Func&& f)
+    {
+      const std::size_t n = (end > begin) ? end - begin : 0;
+      if (n > kParallelThreshold)
+      {
+        ::np::ThreadPool::global().parallel_for(begin, end, std::forward<Func>(f));
+      }
+      else
+      {
+        for (std::size_t i = begin; i < end; ++i)
+        {
+          f(i);
+        }
+      }
+    }
+#endif
 
   } // namespace detail
 
@@ -2811,6 +2836,34 @@ namespace np
         adj_b[d] = (kb < 0 || b.shape[kb] == 1) ? 0 : b.strides[kb];
       }
 
+#ifdef NP_USE_THREADING
+      const std::size_t n_elem = out.size();
+      if (n_elem > detail::kParallelThreshold)
+      {
+        std::vector<std::vector<std::size_t>> all_idx;
+        all_idx.reserve(n_elem);
+        Odometer od_tmp(out_shape);
+        while (!od_tmp.done())
+        {
+          all_idx.push_back(od_tmp.idx());
+          od_tmp.advance();
+        }
+        auto do_one = [&](std::size_t i)
+        {
+          const auto& idx = all_idx[i];
+          std::size_t fa = a.offset, fb = b.offset, fo = 0;
+          for (int d = 0; d < nr; ++d)
+          {
+            fa += idx[d] * adj_a[d];
+            fb += idx[d] * adj_b[d];
+            fo += idx[d] * out.strides[d];
+          }
+          out.data()[fo] = fn(a.data()[fa], b.data()[fb]);
+        };
+        detail::maybe_parallel_for(0, n_elem, do_one);
+        return out;
+      }
+#endif
       Odometer od(out_shape);
       while (!od.done())
       {
@@ -4266,6 +4319,75 @@ namespace np
     std::vector<int> slice_shape = shape;
     slice_shape.erase(slice_shape.begin() + axis);
 
+#ifdef NP_USE_THREADING
+    // Collect slices for parallel dispatch
+    std::vector<std::vector<std::size_t>> all_slices;
+    {
+      detail::Odometer od(slice_shape);
+      while (!od.done())
+      {
+        all_slices.push_back(od.idx());
+        od.advance();
+      }
+      if (all_slices.empty())
+      {
+        all_slices.push_back({});
+      }
+    }
+    const std::size_t n_slices = all_slices.size();
+    auto do_slice = [&](std::size_t si)
+    {
+      const auto& s = all_slices[si];
+      std::vector<std::size_t> full(nd);
+      std::vector<typename ndarray<T>::value_type> work(axis_len);
+      for (std::size_t p = 0; p < axis_len; ++p)
+      {
+        std::size_t f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          full[d] = (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
+          f += full[d] * strides[d];
+        }
+        work[p] = (*data_)[offset + f];
+      }
+      if constexpr (std::is_integral_v<value_type>)
+      {
+        if (axis_len >= 64)
+        {
+          detail::radix_sort_integral(work);
+        }
+        else
+        {
+          std::sort(work.begin(), work.end());
+        }
+      }
+      else
+      {
+        std::sort(work.begin(), work.end());
+      }
+      for (std::size_t p = 0; p < axis_len; ++p)
+      {
+        std::size_t f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          full[d] = (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
+          f += full[d] * strides[d];
+        }
+        (*data_)[offset + f] = work[p];
+      }
+    };
+    if (n_slices > 4)
+    {
+      detail::maybe_parallel_for(0, n_slices, do_slice);
+    }
+    else
+    {
+      for (std::size_t si = 0; si < n_slices; ++si)
+      {
+        do_slice(si);
+      }
+    }
+#else
     std::vector<std::size_t> full(nd);
     detail::Odometer od(slice_shape);
     while (!od.done())
@@ -4283,12 +4405,16 @@ namespace np
         work[p] = (*data_)[offset + f];
       }
       // Micro-optimized: radix O(n) for integral, pdqsort O(n log n) otherwise
-      if constexpr (std::is_integral_v<T>)
+      if constexpr (std::is_integral_v<value_type>)
       {
         if (axis_len >= 64)
+        {
           detail::radix_sort_integral(work);
+        }
         else
+        {
           std::sort(work.begin(), work.end());
+        }
       }
       else
       {
@@ -4306,6 +4432,7 @@ namespace np
       }
       od.advance();
     }
+#endif
   }
 
   template <typename T>
@@ -4339,7 +4466,83 @@ namespace np
     std::vector<int> slice_shape = shape;
     slice_shape.erase(slice_shape.begin() + axis);
 
-    std::vector<std::pair<std::size_t, T>> work;
+#ifdef NP_USE_THREADING
+    // Collect slices for parallel dispatch
+    std::vector<std::vector<std::size_t>> all_slices;
+    {
+      detail::Odometer od(slice_shape);
+      while (!od.done())
+      {
+        all_slices.push_back(od.idx());
+        od.advance();
+      }
+      if (all_slices.empty())
+      {
+        all_slices.push_back({});
+      }
+    }
+    const std::size_t n_slices = all_slices.size();
+    auto do_slice = [&](std::size_t si)
+    {
+      const auto& s = all_slices[si];
+      std::vector<std::pair<std::size_t, value_type>> work;
+      work.reserve(axis_len);
+      for (std::size_t p = 0; p < axis_len; ++p)
+      {
+        std::size_t f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          const std::size_t coord = (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
+          f += coord * strides[d];
+        }
+        work.emplace_back(p, (*data_)[offset + f]);
+      }
+      if constexpr (std::is_integral_v<value_type>)
+      {
+        if (axis_len >= 64)
+        {
+          detail::radix_sort_pair(work);
+        }
+        else
+        {
+          std::sort(
+              work.begin(),
+              work.end(),
+              [](auto& a, auto& b) { return a.second < b.second; });
+        }
+      }
+      else
+      {
+        std::sort(
+            work.begin(),
+            work.end(),
+            [](auto& a, auto& b) { return a.second < b.second; });
+      }
+      for (std::size_t p = 0; p < axis_len; ++p)
+      {
+        std::size_t f = 0;
+        for (int d = 0; d < nd; ++d)
+        {
+          const std::size_t coord = (d < axis) ? s[d] : (d == axis ? p : s[d - 1]);
+          f += coord * out.strides[d];
+        }
+        out.data()[f] = work[p].first;
+      }
+    };
+    if (n_slices > 4)
+    {
+      detail::maybe_parallel_for(0, n_slices, do_slice);
+    }
+    else
+    {
+      for (std::size_t si = 0; si < n_slices; ++si)
+      {
+        do_slice(si);
+      }
+    }
+    return out;
+#else
+    std::vector<std::pair<std::size_t, value_type>> work;
     work.reserve(axis_len);
     detail::Odometer od(slice_shape);
     while (!od.done())
@@ -4357,15 +4560,19 @@ namespace np
         work.emplace_back(p, (*data_)[offset + f]);
       }
       // Micro-optimized: radix for integral keys, pdqsort otherwise
-      if constexpr (std::is_integral_v<T>)
+      if constexpr (std::is_integral_v<value_type>)
       {
         if (axis_len >= 64)
+        {
           detail::radix_sort_pair(work);
+        }
         else
+        {
           std::sort(
               work.begin(),
               work.end(),
               [](auto& a, auto& b) { return a.second < b.second; });
+        }
       }
       else
       {
@@ -4387,6 +4594,7 @@ namespace np
       od.advance();
     }
     return out;
+#endif
   }
 
   template <typename T>
@@ -4500,10 +4708,18 @@ namespace np
       throw std::invalid_argument("searchsorted requires a 1D array");
     }
     ndarray<std::size_t> out(std::vector<int>{static_cast<int>(values.size())});
+#ifdef NP_USE_THREADING
+    auto do_search = [&](std::size_t i)
+    {
+      out.data()[i] = searchsorted(values.data()[values._flat_logical(i)]);
+    };
+    detail::maybe_parallel_for(0, values.size(), do_search);
+#else
     for (std::size_t i = 0; i < values.size(); ++i)
     {
       out.data()[i] = searchsorted(values.data()[values._flat_logical(i)]);
     }
+#endif
     return out;
   }
 
@@ -4725,6 +4941,14 @@ namespace np
     }
     if (is_contiguous())
     {
+#ifdef NP_USE_THREADING
+      const std::size_t n = data_->size();
+      if (n > detail::kParallelThreshold)
+      {
+        detail::maybe_parallel_for(0, n, [&](std::size_t i) { (*data_)[i] = value; });
+        return;
+      }
+#endif
       std::fill(data_->begin(), data_->end(), value);
       return;
     }
