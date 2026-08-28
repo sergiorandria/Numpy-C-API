@@ -506,18 +506,21 @@ namespace np
    */
   NP_API template <typename T = double>
   NP_NODISCARD auto
-  eye(std::size_t n, std::optional<std::size_t> m = std::nullopt, int k = 0) -> ndarray<T>
+  eye(std::size_t n,
+      std::optional<std::size_t> m = std::nullopt,
+      std::optional<int> k = std::nullopt) -> ndarray<T>
   {
     std::size_t cols = m.has_value() ? *m : n;
     if (cols == 0)
       cols = n; // keep backward compat: eye(n,0) -> n x n
+    const int kk = k.value_or(0);
     std::vector<int> shape = {static_cast<int>(n), static_cast<int>(cols)};
     ndarray<T> out(shape, dtype_of<T>, T{0});
     const std::ptrdiff_t rows = static_cast<std::ptrdiff_t>(n);
     const std::ptrdiff_t cols_p = static_cast<std::ptrdiff_t>(cols);
     for (std::ptrdiff_t i = 0; i < rows; ++i)
     {
-      const std::ptrdiff_t j = i + k;
+      const std::ptrdiff_t j = i + kk;
       if (j >= 0 && j < cols_p)
       {
         out.set(

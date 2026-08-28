@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstddef>
 #include <initializer_list>
+#include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
@@ -267,21 +268,35 @@ namespace np
      *
      * @param n  Number of rows.
      * @param m  Number of columns.
-     * @param k  Diagonal offset (default: 0).
+     * @param k  Diagonal offset (optional, default: 0 via std::nullopt).
      * @return   Matrix<T> with ones on the k-th diagonal.
      */
-    static auto eye(std::size_t n, std::size_t m, int k = 0) -> Matrix<T>
+    static auto eye(std::size_t n, std::size_t m, std::optional<int> k = std::nullopt)
+        -> Matrix<T>
     {
+      const int kk = k.value_or(0);
       Matrix<T> out(n, m, T{0});
       for (std::size_t i = 0; i < n; ++i)
       {
-        const std::ptrdiff_t j = static_cast<std::ptrdiff_t>(i) + k;
+        const std::ptrdiff_t j = static_cast<std::ptrdiff_t>(i) + kk;
         if (j >= 0 && static_cast<std::size_t>(j) < m)
         {
           out(i, static_cast<std::size_t>(j)) = T{1};
         }
       }
       return out;
+    }
+
+    /** @brief n x m matrix with ones on the k-th diagonal (int overload).
+     *
+     * @param n  Number of rows.
+     * @param m  Number of columns.
+     * @param k  Diagonal offset.
+     * @return   Matrix<T> with ones on the k-th diagonal.
+     */
+    static auto eye(std::size_t n, std::size_t m, int k) -> Matrix<T>
+    {
+      return eye(n, m, std::optional<int>{k});
     }
   };
 
