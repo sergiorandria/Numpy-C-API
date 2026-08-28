@@ -17,7 +17,8 @@ set(NP_TESTS
     test_scalar_custom
     test_char
     test_chararray
-    test_unimplemented)
+    test_unimplemented
+    test_threadpool)
 
 if(NP_COMPILED_UNITS)
     list(APPEND NP_TESTS test_constexpr test_compile_time)

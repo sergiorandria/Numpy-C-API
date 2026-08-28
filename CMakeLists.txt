@@ -60,6 +60,8 @@ add_library(np::np ALIAS np)
 target_include_directories(np INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
+find_package(Threads REQUIRED)
+target_link_libraries(np INTERFACE Threads::Threads)
 
 include(CTest)
 if(BUILD_TESTING)

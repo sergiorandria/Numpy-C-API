@@ -26,6 +26,7 @@
 #include "statistics.hpp"
 #include "io.hpp"
 #include "polynomial.hpp"
+#include "threadpool.hpp"
 // Note: random.hpp and concatenate.hpp are not included by default.
 // Include them explicitly if needed to avoid template conflicts.
 
