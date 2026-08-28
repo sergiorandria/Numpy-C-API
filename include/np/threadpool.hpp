@@ -39,7 +39,21 @@
 #include <utility>
 #include <vector>
 
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
 #include "api_macros.hpp"
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 #ifndef NP_THREADPOOL_LOCKFREE
 #define NP_THREADPOOL_LOCKFREE 1
@@ -57,6 +71,104 @@
   {                                                                                      \
   } while (0)
 #endif
+
+// Adaptive helpers – internal hidden
+namespace np
+{
+  namespace detail
+  {
+    namespace __np
+    {
+      /**
+       * @brief Adaptive thread count based on CPU cores (hidden).
+       * @return Number of threads to use when 0 is requested.
+       */
+      NP_HIDDEN inline std::size_t __np_adaptive_thread_count() noexcept
+      {
+#ifdef _WIN32
+        SYSTEM_INFO si{};
+        GetSystemInfo(&si);
+        std::size_t n = static_cast<std::size_t>(si.dwNumberOfProcessors);
+        if (n == 0)
+        {
+          // Fallback for >64 cores (processor groups)
+          n = static_cast<std::size_t>(GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
+        }
+        if (n == 0)
+        {
+          n = std::thread::hardware_concurrency();
+        }
+        if (n == 0)
+        {
+          n = 4;
+        }
+        // Leave one core for OS on many-core Windows
+        if (n > 8)
+        {
+          n = (n * 3) / 4;
+          if (n == 0)
+          {
+            n = 8;
+          }
+        }
+        return n;
+#else
+        std::size_t n = std::thread::hardware_concurrency();
+        if (n == 0)
+        {
+#ifdef _SC_NPROCESSORS_ONLN
+          long v = sysconf(_SC_NPROCESSORS_ONLN);
+          if (v > 0)
+          {
+            n = static_cast<std::size_t>(v);
+          }
+#endif
+        }
+        if (n == 0)
+        {
+          n = 4;
+        }
+        // Adaptive: avoid oversubscription on many-core (e.g., 64+)
+        if (n > 16)
+        {
+          // Use 75% of cores for compute-bound pool, reserve for system
+          n = (n * 3) / 4;
+        }
+        else if (n > 8)
+        {
+          n -= 1;
+        }
+        if (n == 0)
+        {
+          n = 1;
+        }
+        // Clamp to 64 to avoid excessive threads on 128+ core machines
+        if (n > 64)
+        {
+          n = 64;
+        }
+        return n;
+#endif
+      }
+
+#ifdef _WIN32
+      /**
+       * @brief Pin thread to ideal processor on Windows (hidden).
+       */
+      NP_HIDDEN inline void __np_pin_thread_windows(std::size_t idx) noexcept
+      {
+        // Distribute workers across processor groups if needed
+        const DWORD_PTR mask = static_cast<DWORD_PTR>(1)
+            << (idx % (sizeof(DWORD_PTR) * 8));
+        // Best-effort: ignore failures (e.g., insufficient privilege)
+        SetThreadAffinityMask(GetCurrentThread(), mask);
+        SetThreadIdealProcessor(GetCurrentThread(), static_cast<DWORD>(idx % 64));
+      }
+#endif
+
+    } // namespace __np
+  } // namespace detail
+} // namespace np
 
 namespace np
 {
@@ -295,52 +407,52 @@ namespace np
       bool (*__np_empty_ptr)(const WorkStealingDeque*);
       std::size_t (*__np_size_ptr)(const WorkStealingDeque*);
 
-      static void __np_push_bottom_mutex(WorkStealingDeque* self, T v)
+      NP_HIDDEN static void __np_push_bottom_mutex(WorkStealingDeque* self, T v)
       {
         self->__np_impl_mutex_->__np_push_bottom(std::move(v));
       }
 
-      static std::optional<T> __np_pop_bottom_mutex(WorkStealingDeque* self)
+      NP_HIDDEN static std::optional<T> __np_pop_bottom_mutex(WorkStealingDeque* self)
       {
         return self->__np_impl_mutex_->__np_pop_bottom();
       }
 
-      static std::optional<T> __np_steal_mutex(WorkStealingDeque* self)
+      NP_HIDDEN static std::optional<T> __np_steal_mutex(WorkStealingDeque* self)
       {
         return self->__np_impl_mutex_->__np_steal();
       }
 
-      static bool __np_empty_mutex(const WorkStealingDeque* self)
+      NP_HIDDEN static bool __np_empty_mutex(const WorkStealingDeque* self)
       {
         return self->__np_impl_mutex_->__np_empty();
       }
 
-      static std::size_t __np_size_mutex(const WorkStealingDeque* self)
+      NP_HIDDEN static std::size_t __np_size_mutex(const WorkStealingDeque* self)
       {
         return self->__np_impl_mutex_->__np_size();
       }
 
-      static void __np_push_bottom_lockfree(WorkStealingDeque* self, T v)
+      NP_HIDDEN static void __np_push_bottom_lockfree(WorkStealingDeque* self, T v)
       {
         self->__np_impl_lockfree_->__np_push_bottom(std::move(v));
       }
 
-      static std::optional<T> __np_pop_bottom_lockfree(WorkStealingDeque* self)
+      NP_HIDDEN static std::optional<T> __np_pop_bottom_lockfree(WorkStealingDeque* self)
       {
         return self->__np_impl_lockfree_->__np_pop_bottom();
       }
 
-      static std::optional<T> __np_steal_lockfree(WorkStealingDeque* self)
+      NP_HIDDEN static std::optional<T> __np_steal_lockfree(WorkStealingDeque* self)
       {
         return self->__np_impl_lockfree_->__np_steal();
       }
 
-      static bool __np_empty_lockfree(const WorkStealingDeque* self)
+      NP_HIDDEN static bool __np_empty_lockfree(const WorkStealingDeque* self)
       {
         return self->__np_impl_lockfree_->__np_empty();
       }
 
-      static std::size_t __np_size_lockfree(const WorkStealingDeque* self)
+      NP_HIDDEN static std::size_t __np_size_lockfree(const WorkStealingDeque* self)
       {
         return self->__np_impl_lockfree_->__np_size();
       }
@@ -474,8 +586,30 @@ namespace np
     static ThreadPool& global(std::size_t n_threads = 0)
     {
       __NP_TP_LOG("ThreadPool::global");
+      if (n_threads == 0)
+      {
+        n_threads = detail::__np::__np_adaptive_thread_count();
+      }
       static ThreadPool instance(n_threads);
       return instance;
+    }
+
+    /**
+     * @brief Recommended thread count for this machine (adaptive).
+     * @return Number of threads that balances cores and load.
+     */
+    NP_NODISCARD static std::size_t adaptive_concurrency() noexcept
+    {
+      return detail::__np::__np_adaptive_thread_count();
+    }
+
+    /**
+     * @brief Check if pool size matches current adaptive count.
+     * @return true if pool size equals adaptive_concurrency().
+     */
+    NP_NODISCARD bool is_adaptive() const noexcept
+    {
+      return size() == adaptive_concurrency();
     }
 
   private:
@@ -524,16 +658,12 @@ namespace np
 #endif
     }
 
-    // Internal __np ctor/dtor/size with two impls
-    static void __np_ctor_mutex(ThreadPool* self, std::size_t n_threads)
+    // Internal __np ctor/dtor/size with two impls – hidden
+    NP_HIDDEN static void __np_ctor_mutex(ThreadPool* self, std::size_t n_threads)
     {
       if (n_threads == 0)
       {
-        n_threads = std::thread::hardware_concurrency();
-        if (n_threads == 0)
-        {
-          n_threads = 4;
-        }
+        n_threads = detail::__np::__np_adaptive_thread_count();
       }
       self->__np_impl = new __np_ThreadPoolData();
       self->__np_impl->queues.reserve(n_threads);
@@ -550,13 +680,20 @@ namespace np
       }
     }
 
-    static void __np_ctor_lockfree(ThreadPool* self, std::size_t n_threads)
+    NP_HIDDEN static void __np_ctor_lockfree(ThreadPool* self, std::size_t n_threads)
     {
       // Same scaffolding; deque internally lock-free with memory_order
+      // Adaptive cores already handled in mutex path if forwarded, but
+      // re-check for direct lockfree construction
+      if (n_threads == 0)
+      {
+        n_threads = detail::__np::__np_adaptive_thread_count();
+      }
       __np_ctor_mutex(self, n_threads);
+      // Override pointers to lockfree already done in __np_init_ptrs
     }
 
-    static void __np_dtor_mutex(ThreadPool* self)
+    NP_HIDDEN static void __np_dtor_mutex(ThreadPool* self)
     {
       if (self->__np_impl)
       {
@@ -581,22 +718,22 @@ namespace np
       }
     }
 
-    static void __np_dtor_lockfree(ThreadPool* self)
+    NP_HIDDEN static void __np_dtor_lockfree(ThreadPool* self)
     {
       __np_dtor_mutex(self);
     }
 
-    static std::size_t __np_size_mutex(const ThreadPool* self)
+    NP_HIDDEN static std::size_t __np_size_mutex(const ThreadPool* self)
     {
       return self->__np_impl ? self->__np_impl->workers.size() : 0;
     }
 
-    static std::size_t __np_size_lockfree(const ThreadPool* self)
+    NP_HIDDEN static std::size_t __np_size_lockfree(const ThreadPool* self)
     {
       return __np_size_mutex(self);
     }
 
-    static void __np_enqueue_mutex(ThreadPool* self, Task t)
+    NP_HIDDEN static void __np_enqueue_mutex(ThreadPool* self, Task t)
     {
       const std::size_t idx =
           self->__np_impl->next_queue.fetch_add(1, std::memory_order_relaxed)
@@ -608,7 +745,7 @@ namespace np
       }
     }
 
-    static void __np_enqueue_lockfree(ThreadPool* self, Task t)
+    NP_HIDDEN static void __np_enqueue_lockfree(ThreadPool* self, Task t)
     {
       // Lock-free deque push uses release semantics internally
       const std::size_t idx =
@@ -621,7 +758,7 @@ namespace np
       }
     }
 
-    static void __np_wait_mutex(ThreadPool* self)
+    NP_HIDDEN static void __np_wait_mutex(ThreadPool* self)
     {
       while (true)
       {
@@ -643,12 +780,12 @@ namespace np
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
-    static void __np_wait_lockfree(ThreadPool* self)
+    NP_HIDDEN static void __np_wait_lockfree(ThreadPool* self)
     {
       __np_wait_mutex(self);
     }
 
-    static void __np_shutdown_mutex(ThreadPool* self)
+    NP_HIDDEN static void __np_shutdown_mutex(ThreadPool* self)
     {
       if (!self->__np_impl)
       {
@@ -673,12 +810,12 @@ namespace np
       }
     }
 
-    static void __np_shutdown_lockfree(ThreadPool* self)
+    NP_HIDDEN static void __np_shutdown_lockfree(ThreadPool* self)
     {
       __np_shutdown_mutex(self);
     }
 
-    static std::optional<Task> __np_try_steal_any_mutex(ThreadPool* self)
+    NP_HIDDEN static std::optional<Task> __np_try_steal_any_mutex(ThreadPool* self)
     {
       for (std::size_t i = 0; i < self->__np_impl->queues.size(); ++i)
       {
@@ -697,14 +834,17 @@ namespace np
       return std::nullopt;
     }
 
-    static std::optional<Task> __np_try_steal_any_lockfree(ThreadPool* self)
+    NP_HIDDEN static std::optional<Task> __np_try_steal_any_lockfree(ThreadPool* self)
     {
       // Steal/pop use memory_order internally via deque
       return __np_try_steal_any_mutex(self);
     }
 
-    static void __np_worker_loop_mutex(ThreadPool* self, std::size_t idx)
+    NP_HIDDEN static void __np_worker_loop_mutex(ThreadPool* self, std::size_t idx)
     {
+#ifdef _WIN32
+      detail::__np::__np_pin_thread_windows(idx);
+#endif
       constexpr int kSpinIters = 64;
       while (!self->__np_impl->done.load(std::memory_order_acquire))
       {
@@ -786,14 +926,14 @@ namespace np
       }
     }
 
-    static void __np_worker_loop_lockfree(ThreadPool* self, std::size_t idx)
+    NP_HIDDEN static void __np_worker_loop_lockfree(ThreadPool* self, std::size_t idx)
     {
       __np_worker_loop_mutex(self, idx);
     }
 
     // parallel_for internal with two impls
     template <typename Func>
-    void __np_parallel_for_mutex(
+    NP_HIDDEN void __np_parallel_for_mutex(
         std::size_t begin, std::size_t end, Func&& func, std::size_t chunk)
     {
       if (begin >= end)
@@ -843,7 +983,7 @@ namespace np
     }
 
     template <typename Func>
-    void __np_parallel_for_lockfree(
+    NP_HIDDEN void __np_parallel_for_lockfree(
         std::size_t begin, std::size_t end, Func&& func, std::size_t chunk)
     {
       __np_parallel_for_mutex(begin, end, std::forward<Func>(func), chunk);
