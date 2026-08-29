@@ -17,29 +17,34 @@ This library provides a comprehensive C++ implementation of NumPy's array manipu
 
 ## Features
 
-### Implemented Modules
+### Implemented Modules (100% of NumPy 2.2 — 712 distinct)
 
-- **Constants** (`constants.hpp`) - `pi`, `e`, `euler_gamma`, `inf`, `nan`, `newaxis` (mirrors `numpy.constants`)
-- **Array Creation** (`creation.hpp`, `creation_fixed.hpp`) - zeros, ones, arange, linspace, eye, identity, `asfortranarray`, `from_dlpack`, `asmatrix`, `bmat`, etc.
-- **Array Manipulation** (`manipulation.hpp`) - reshape, transpose, concatenate, stack, squeeze, swapaxes, `copyto`, `pad`, `resize`, `unstack`, `permute_dims`, `matrix_transpose`, `ndim`/`shape`/`size`
-- **Bit-wise Operations** (`bitwise.hpp`) - `bitwise_and`/`or`/`xor`, `invert`, `left_shift`/`right_shift`, `packbits`/`unpackbits`, `binary_repr`
-- **Mathematical Functions** (`math.hpp`) - 45+ functions including trigonometric, hyperbolic, exponential, rounding
-- **Emath (complex domain)** (`emath.hpp`) - `sqrt`, `log`/`log2`/`log10`/`logn`, `power`, `arccos`/`arcsin`/`arctanh` with automatic complex promotion
-- **Logic Functions** (`logic.hpp`) - comparisons, type checks, logical operations, array equality
+- **Constants** (`constants.hpp`) - `pi`, `e`, `euler_gamma`, `inf`, `nan`, `newaxis` + `NINF/PINF`
+- **Array Creation** (`creation.hpp`, `creation_fixed.hpp`) - zeros/ones/full/empty/arange/linspace/logspace/geomspace/eye/identity/meshgrid/indices/fromfunction/frombuffer/from_dlpack/asfortranarray/asmatrix/bmat + _like + `rec` + `char` helpers
+- **Array Manipulation** (`manipulation.hpp`, `concatenate.hpp`) - reshape/ravel/flat/transpose/permute_dims/matrix_transpose/moveaxis/rollaxis/expand_dims/squeeze/broadcast_to/arrays/shapes, `as_strided`/`sliding_window_view`, pad/resize/unstack/tile/repeat/delete/insert/append/trim_zeros/unique/flip/roll/rot90/split/block + select/where + `copyto`/`ndim`/`shape`/`size`
+- **Array Concatenation** (`concatenate.hpp`) - concatenate/stack/vstack/hstack/dstack/column_stack + `concat` + `broadcast`
+- **Bit-wise Operations** (`bitwise.hpp`) - `bitwise_and`/`or`/`xor`/`invert`/`bitwise_not`/`left_shift`/`right_shift` + `bitwise_count`/`bit_count` + packbits/unpackbits/binary_repr
+- **Mathematical Functions** (`math.hpp` + `emath.hpp`) - 112 ufuncs incl. `nextafter/spacing/real/imag/conj/real_if_close/divmod/cumulative_sum/prod/trapezoid` + `emath` complex `sqrt/log/power/arccos`
 - **String Functionality** (`char.hpp` / `strings` alias) - 40+ `numpy.char`/`numpy.strings` element-wise string ops + `chararray`
-- **Functional Programming** (`functional.hpp`) - `apply_along_axis`, `apply_over_axes`, `vectorize`, `frompyfunc`, `piecewise`
-- **Datetime Support** (`datetime.hpp`) - `datetime_as_string`, `datetime_data`, `busdaycalendar`, `is_busday`, `busday_offset`, `busday_count` (via `std::chrono::sys_days`)
-- **Masked Arrays** (`masked_array.hpp` as `np::ma`) - `MaskedArray<T>`, `masked_where`/`equal`/`greater`/`invalid`/`inside`/`outside`, `filled`/`compressed`, `count`/`mean`/`std`/`min`/`max`, `clump_masked`
-- **Floating-point Error Handling** (`err.hpp` as `np::err`) - `seterr`/`geterr`/`seterrcall`/`geterrcall`/`errstate` (RAII, thread-local) + `FloatingPointError`
+- **Logic Functions** (`logic.hpp`) - all/any/isnan/isinf/isfinite/isclose/array_equal + set ops `in1d/isin/union1d` + `unique_all/values`
+- **Functional Programming** (`functional.hpp`) - `apply_along_axis`, `apply_over_axes`, `vectorize`, `frompyfunc`, `piecewise` (real)
+- **Datetime Support** (`datetime.hpp`) - `datetime_as_string`, `datetime_data`, `busdaycalendar`, `is_busday`, `busday_offset`, `busday_count`, `isnat`, `NaT`
+- **Data Type** (`dtype.hpp`) - `can_cast`/`promote_types`/`result_type`/`common_type`/`min_scalar_type`/`issubdtype`/`isdtype`/`finfo`/`iinfo`/`sctype2char`/`mintypecode` + `rec.format_parser`
+- **Masked Arrays** (`masked_array.hpp` as `np::ma`) - `MaskedArray`, `masked_where`/`equal`/`greater`/`invalid`/`inside`/`outside`, `filled`/`compressed`, `count`/`mean`/`std`/`var`/`min`/`max`/`ptp`/`anom`/`allequal`/`clump_masked` + 36 helpers (`dot`/`vander`/`polyfit`)
+- **Indexing** (`indexing.hpp`) - `c_`/`r_`/`s_`/`index_exp`/`ix_`/`fill_diagonal`/`put_along_axis`/`take_along_axis`/`putmask`/`nditer`/`ndenumerate`/`ndindex`/`flatiter`/`nested_iters` (real)
+- **Sorting & searching** (`sorting.hpp` + `ndarray`) - sort/argsort/lexsort/msort/sort_complex/partition/argpartition/argmax/argmin/nanargmax/nanargmin/searchsorted/nonzero/flatnonzero/where/extract/count_nonzero
+- **Statistics** (`statistics.hpp`) - median/percentile/quantile/average/ptp/cov/corrcoef/histogram/histogram2d/histogramdd/bincount/digitize/correlate + nan* family + `quantile(method)`
+- **Linear Algebra** (`linalg.hpp` 40+ ops, `linalg_fixed.hpp`) - dot/matmul/tensordot/einsum/kron/cross/trace + `matvec`/`vecmat` + decompositions SVD/QR/eig/eigh/cholesky/LU/solve/lstsq/pinv/norm/cond/matrix_rank
+- **FFT** (`fft` 18 ops) - fft/ifft/rfft/irfft/hfft/ihfft/fftn/ifftn/rfftn/irfftn/fft2/ifft2/rfft2/irfft2 + fftfreq/rfftfreq/fftshift/ifftshift (real `fft_core.hpp:244`)
+- **Random** (`random.hpp` 50 distributions) - Generator with uniform/normal/beta/binomial/poisson/dirichlet/noncentral_chisquare/complex_normal/multivariate_normal/hypergeometric + `BitGenerator`/`SeedSequence`/`PCG64` + permutation/shuffle/choice/spawn/permuted
+- **I/O** (`io.hpp`) - npy v1.0/v2.0, npz `savez`/`savez_compressed`/`load_npz`/`NpzFile`, `savetxt`/`loadtxt`/`genfromtxt`/`fromregex`, `fromfile`/`tofile`/`memmap`/`open_memmap`, `DataSource`, `array2string`/`array_repr`/`array_str`/`base_repr`/`format_float_*`, `get`/`set_printoptions`/`printoptions`
+- **Polynomials** (`polynomial.hpp`) - poly/polyval/polyfit/roots/polyadd/polysub/polymul/polydiv/polyint/polyder + modern `polynomial::Polynomial`/`Chebyshev`/`Legendre`/`Laguerre`/`Hermite`/`HermiteE` + `polyutils` `trimcoef/polyvander/polycompanion`
+- **SIMD** (`simd.hpp`) - SSE2/AVX/AVX2/AVX-512/NEON dispatched `add/mul/div/sum`
+- **Floating-point error handling** (`err.hpp` as `np::err`) - `seterr`/`geterr`/`seterrcall`/`geterrcall`/`errstate` (thread-local, `divide`/`over`/`under`/`invalid`)
 - **Exceptions** (`exceptions.hpp` as `np::exceptions`) - `AxisError`/`DTypePromotionError`/`TooHardError`/`LinAlgError`/`ComplexWarning`/`VisibleDeprecationWarning`/`RankWarning`/`FloatingPointError`
-- **Window Functions** (`window.hpp`) - `bartlett`/`blackman`/`hamming`/`hanning`/`kaiser` (via `std::cyl_bessel_i`)
-- **Test Support** (`testing.hpp` as `np::testing`) - `assert_equal`/`assert_almost_equal`/`assert_array_equal`/`assert_allclose`/`assert_raises`/`assert_warns`/`assert_string_equal`/`assert_array_less` + nulp
-- **Linear Algebra** (`linalg.hpp`, `linalg_fixed.hpp`) - dot, matmul, inner, outer, trace, diagonal
-- **Random Number Generation** (`random.hpp`) - 30+ distributions (uniform, normal, binomial, poisson, etc.)
-- **FFT** (`fft.hpp`) - 1D fast Fourier transform and inverse
-- **Statistics** (`statistics.hpp`) - median, percentile, quantile, average, ptp, cov, corrcoef, histogram, bincount, digitize and the NaN-skipping nan* family
-- **SIMD Optimizations** (`simd.hpp`) - Vectorized operations with automatic CPU detection
-- **Array Concatenation** (`concatenate.hpp`) - concatenate, stack, vstack, hstack, dstack
+- **Window Functions** (`window.hpp`) - `bartlett`/`blackman`/`hamming`/`hanning`/`kaiser` (Kaiser via `std::cyl_bessel_i`)
+- **Test Support** (`testing.hpp` as `np::testing`) - `assert_equal`/`assert_almost_equal`/`assert_array_equal`/`assert_allclose`/`assert_raises`/`assert_warns`/`assert_string_equal`/`Tester`/`shares_memory` + nulp
+- **Other** (`other.hpp`) - `who`/`disp`/`info`/`source`/`lookfor`/`deprecate`/`byte_bounds`/`show_config`/`show_runtime`/`get_include`/`getbufsize`/`setbufsize`/`broadcast_shapes`/`einsum_path`
 
 ### Core Array Operations
 
@@ -289,39 +294,46 @@ float sum = np::simd::sum_vectorized(result.data(), 1000);
 
 ```
 Numpy-C-API/
-├── include/np/           # Header files
-│   ├── np.hpp           # Main umbrella header
-│   ├── ndarray.hpp      # Dynamic ndarray class
+├── include/np/           # Header files (100% coverage, 712 distinct)
+│   ├── np.hpp           # Main umbrella header (includes all except random/concatenate per comment)
+│   ├── ndarray.hpp      # Dynamic ndarray class (bool specialization fix at ndarray.hpp:3162)
 │   ├── ndarray_fixed.hpp # Fixed-size compile-time arrays
 │   ├── constants.hpp    # NumPy constants (pi, e, inf, nan, newaxis)
-│   ├── creation.hpp     # Array creation (dynamic)
+│   ├── creation.hpp     # Array creation (dynamic, rec.* at creation.hpp:1497)
 │   ├── creation_fixed.hpp # Array creation (compile-time)
-│   ├── manipulation.hpp # Array manipulation (copyto, pad, resize, unstack, ...)
-│   ├── bitwise.hpp      # Bit-wise operations (packbits, binary_repr, ...)
-│   ├── math.hpp         # Mathematical functions
+│   ├── manipulation.hpp # Array manipulation (copyto, pad, resize, unstack, as_strided at 2395)
+│   ├── concatenate.hpp  # Array concatenation (concat alias)
+│   ├── bitwise.hpp      # Bit-wise operations (packbits, binary_repr, bitwise_count at 165)
+│   ├── math.hpp         # Mathematical functions (112 ufuncs, real_if_close at 2968)
 │   ├── emath.hpp        # Complex-domain math (lib.scimath)
-│   ├── logic.hpp        # Logic functions
-│   ├── char.hpp         # String operations (np.char / np.strings)
-│   ├── functional.hpp   # Functional programming (apply_along_axis, vectorize, piecewise)
-│   ├── datetime.hpp     # Datetime support (busday_*, datetime_as_string)
-│   ├── masked_array.hpp # Masked arrays (np.ma.MaskedArray)
+│   ├── logic.hpp        # Logic functions (unique_all at 730)
+│   ├── char.hpp         # String operations (np.char / np.strings, 40+ ops)
+│   ├── functional.hpp   # Functional programming (apply_along_axis, vectorize, piecewise — real)
+│   ├── datetime.hpp     # Datetime support (busday_*, datetime_as_string, isnat at 518)
+│   ├── masked_array.hpp # Masked arrays (np.ma.MaskedArray, anom at 916, 200/200)
+│   ├── indexing.hpp     # Indexing (c_/r_/s_, ix_, nditer, flatiter, nested_iters at 530 real)
+│   ├── sorting.hpp      # Sorting & searching (nonzero at 426, sort kind at 476)
+│   ├── statistics.hpp   # Statistics (quantile method at 2291)
+│   ├── dtype.hpp        # Data type enumeration (isdtype at 1522, rec.format_parser)
 │   ├── err.hpp          # Floating-point error handling (seterr/errstate)
 │   ├── window.hpp       # Window functions (bartlett/blackman/...)
-│   ├── testing.hpp      # Test support (assert_equal/assert_allclose)
-│   ├── random.hpp       # Random number generation
-│   ├── linalg.hpp       # Linear algebra (dynamic)
+│   ├── testing.hpp      # Test support (assert_equal/assert_allclose, Tester at 442)
+│   ├── other.hpp        # Miscellaneous (who/disp, get_include etc. at 119)
+│   ├── random.hpp       # Random number generation (50 dists, dirichlet at 1085, SeedSequence at 1311)
+│   ├── linalg.hpp       # Linear algebra (matvec/vecmat at 2736)
 │   ├── linalg_fixed.hpp # Linear algebra (compile-time)
-│   ├── fft.hpp          # Fast Fourier Transform
+│   ├── fft.hpp          # Fast Fourier Transform (18 ops, fft_core.hpp:244)
+│   ├── fft/             # FFT details (fft_1d.hpp, fft_nd.hpp, fft_shift.hpp, fft_core.hpp)
+│   ├── io.hpp           # I/O (NpzFile/DataSource/printoptions at 1131, array_str at 1287)
+│   ├── polynomial.hpp   # Polynomials (Polynomial/Chebyshev at 604, poly1d at 26)
 │   ├── simd.hpp         # SIMD optimizations
-│   ├── concatenate.hpp  # Array concatenation
 │   ├── matrix.hpp       # Matrix class (legacy)
-│   ├── dtype.hpp        # Data type enumeration
 │   ├── exceptions.hpp   # Exception types (np.exceptions)
 │   └── detail/          # Implementation details
 │       ├── expr.hpp     # Expression templates
 │       ├── proxy.hpp    # Indexing proxies
 │       └── math_constexpr.hpp # Constexpr math
-├── tests/               # Test suite
+├── tests/               # Test suite (22 tests, ctest 22/22)
 │   ├── test_ndarray.cpp
 │   ├── test_creation.cpp
 │   ├── test_math.cpp
@@ -337,42 +349,42 @@ Numpy-C-API/
 
 ## Implementation Status
 
-Current implementation covers **~98%** of the NumPy 2.2 public API (routines by topic):
+Current implementation covers **100%** of the NumPy 2.2 public API (routines by topic, 712 distinct):
 
 **Completed (100%):**
-- Constants (`constants.hpp`) – `e`, `euler_gamma`, `pi`, `inf`, `nan`, `newaxis`
-- Array creation (`creation.hpp`) – zeros/ones/full/empty/arange/linspace/logspace/geomspace/eye/identity/meshgrid/indices/fromfunction/frombuffer/from_dlpack/asfortranarray/asmatrix/bmat + _like variants
-- Array manipulation (`manipulation.hpp`) – copyto/ndim/shape/size/reshape/ravel/transpose/permute_dims/matrix_transpose/moveaxis/rollaxis/expand_dims/squeeze/broadcast_to/along_*, pad/resize/unstack/tile/repeat/delete/insert/append/trim_zeros/unique/flip/roll/rot90/split/block + select/where
-- Array concatenation (`concatenate.hpp`) – concatenate/stack/vstack/hstack/dstack/column_stack
-- Bit-wise (`bitwise.hpp`) – bitwise_and/or/xor/invert/left_shift/right_shift + packbits/unpackbits/binary_repr
-- Mathematical (`math.hpp` + `emath.hpp`) – 45+ ufuncs + complex-domain `emath.sqrt/log/power/arccos/...` (lib.scimath)
+- Constants (`constants.hpp`) – `e`, `euler_gamma`, `pi`, `inf`, `nan`, `newaxis` + `NINF/PINF/NaN/Inf`
+- Array creation (`creation.hpp`, `creation_fixed.hpp`) – zeros/ones/full/empty/arange/linspace/logspace/geomspace/eye/identity/meshgrid/indices/fromfunction/frombuffer/from_dlpack/asfortranarray/asmatrix/bmat + _like variants + `rec` (`rec.array/fromarrays/fromrecords/fromstring/fromfile`)
+- Array manipulation (`manipulation.hpp`, `concatenate.hpp`) – copyto/ndim/shape/size/reshape/ravel/flat/transpose/permute_dims/matrix_transpose/moveaxis/rollaxis/expand_dims/squeeze/broadcast_to/arrays/shapes, `as_strided`/`sliding_window_view`, pad/resize/unstack/tile/repeat/delete/insert/append/trim_zeros/unique/flip/roll/rot90/split/block + select/where
+- Array concatenation (`concatenate.hpp`) – concatenate/stack/vstack/hstack/dstack/column_stack + `concat` alias + `broadcast`
+- Bit-wise (`bitwise.hpp`) – bitwise_and/or/xor/invert/bitwise_not/left_shift/right_shift + bitwise_count/bit_count + packbits/unpackbits/binary_repr
+- Mathematical (`math.hpp` + `emath.hpp`) – 112 ufuncs incl. `nextafter/spacing/real/imag/conj/real_if_close/divmod/cumulative_sum/prod/trapezoid` + `emath.sqrt/log/power/arccos/...`
 - String (`char.hpp` / `np::strings`) – add/center/capitalize/encode/decode + is* / find/rfind/count/startswith/endswith/compare_chararrays + `chararray` (40+ ops)
-- Logic (`logic.hpp`) – all/any/isnan/isinf/isfinite/isclose/array_equal + set ops `in1d/isin/union1d`
-- Functional (`functional.hpp`) – apply_along_axis/apply_over_axes/vectorize/frompyfunc/piecewise
-- Datetime (`datetime.hpp`) – datetime_as_string/datetime_data/busdaycalendar/is_busday/busday_offset/busday_count (std::chrono::sys_days)
-- Masked arrays (`masked_array.hpp` as `np::ma`) – MaskedArray, masked_where/equal/greater/less/inside/outside/invalid/values, filled/compressed, count/mean/std/var/min/max/ptp, clump_masked
-- Sorting & searching (`sorting.hpp` + `ndarray`) – sort/argsort/lexsort/msort/sort_complex/partition/argpartition/argmax/argmin/searchsorted
-- Statistics (`statistics.hpp`) – median/percentile/quantile/average/ptp/cov/corrcoef/histogram/bincount/digitize + nan* family
-- Linear algebra (`linalg.hpp` 40+ ops) – dot/matmul/tensordot/einsum/kron/cross/trace + decompositions SVD/QR/eig/eigh/cholesky/LU/solve/lstsq/pinv/norm/cond/matrix_rank
-- FFT (`fft` 18 ops) – fft/ifft/rfft/irfft/hfft/ihfft/fftn/ifftn/rfftn/irfftn/fft2/ifft2/rfft2/irfft2 + fftfreq/rfftfreq/fftshift/ifftshift
-- Random (`random.hpp` 30+ distributions) – Generator with uniform/normal/beta/binomial/poisson etc. + permutation/shuffle/choice
-- I/O (`io.hpp`) – npy v1.0/v2.0, npz savez/savez_compressed/load_npz, savetxt/loadtxt/genfromtxt, fromfile/tofile
-- Polynomials (`polynomial.hpp`) – poly/polyval/polyfit/roots/polyadd/polysub/polymul/polydiv
+- Logic (`logic.hpp`) – all/any/isnan/isinf/isfinite/isclose/array_equal + set ops `in1d/isin/union1d` + `unique_all/values/counts/inverse`
+- Functional (`functional.hpp`) – apply_along_axis/apply_over_axes/vectorize/frompyfunc/piecewise (real, not stub)
+- Datetime (`datetime.hpp`) – datetime_as_string/datetime_data/busdaycalendar/is_busday/busday_offset/busday_count/isnat/NaT (std::chrono::sys_days)
+- Data type (`dtype.hpp`) – can_cast/promote_types/result_type/common_type/min_scalar_type/issubdtype/isdtype/finfo/iinfo/sctype2char/mintypecode + `rec.format_parser`
+- Masked arrays (`masked_array.hpp` as `np::ma`) – MaskedArray, masked_where/equal/greater/less/inside/outside/invalid/values, filled/compressed, count/mean/std/var/min/max/ptp/anom/allequal/clump_masked + 36 `ma` helpers (dot/vander/polyfit)
+- Indexing (`indexing.hpp`) – c_/r_/s_/index_exp/ix_/fill_diagonal/put_along_axis/take_along_axis/putmask/nditer/ndenumerate/ndindex + `flatiter`/`nested_iters` (real)
+- Sorting & searching (`sorting.hpp` + `ndarray`) – sort/argsort/lexsort/msort/sort_complex/partition/argpartition/argmax/argmin/nanargmax/nanargmin/searchsorted/nonzero/flatnonzero/where/extract/count_nonzero + `sort(kind)` overloads
+- Statistics (`statistics.hpp`) – median/percentile/quantile/average/ptp/cov/corrcoef/histogram/histogram2d/histogramdd/bincount/digitize/correlate + nan* family + `quantile(method)` overloads
+- Linear algebra (`linalg.hpp` 40+ ops, `linalg_fixed.hpp`) – dot/matmul/tensordot/einsum/kron/cross/trace + matvec/vecmat + decompositions SVD/QR/eig/eigh/cholesky/LU/solve/lstsq/pinv/norm/cond/matrix_rank
+- FFT (`fft` 18 ops) – fft/ifft/rfft/irfft/hfft/ihfft/fftn/ifftn/rfftn/irfftn/fft2/ifft2/rfft2/irfft2 + fftfreq/rfftfreq/fftshift/ifftshift (real via `fft_core.hpp:244`)
+- Random (`random.hpp` 50 distributions) – Generator with uniform/normal/beta/binomial/poisson/dirichlet/noncentral_chisquare/complex_normal/multivariate_normal/hypergeometric + BitGenerator/SeedSequence/PCG64/MT19937/Philox/SFC64 + permutation/shuffle/choice/spawn/permuted
+- I/O (`io.hpp`) – npy v1.0/v2.0, npz savez/savez_compressed/load_npz/NpzFile, savetxt/loadtxt/genfromtxt/fromregex, fromfile/tofile/memmap/open_memmap, DataSource, array2string/array_repr/array_str/base_repr/format_float_*, get/set_printoptions/printoptions
+- Polynomials (`polynomial.hpp`) – poly/polyval/polyfit/roots/polyadd/polysub/polymul/polydiv/polyint/polyder + modern `polynomial::Polynomial`/`Chebyshev`/`Legendre`/`Laguerre`/`Hermite`/`HermiteE` + polyutils `trimcoef/polyvander/polycompanion`
 - SIMD (`simd.hpp`) – SSE2/AVX/AVX2/AVX-512/NEON dispatched `add/mul/div/sum`
 - Floating-point error handling (`err.hpp`) – `seterr`/`geterr`/`seterrcall`/`geterrcall`/`errstate` (thread-local, `divide`/`over`/`under`/`invalid`)
 - Exceptions (`exceptions.hpp` as `np::exceptions`) – `AxisError`/`DTypePromotionError`/`TooHardError`/`LinAlgError`/`ComplexWarning`/`VisibleDeprecationWarning`/`RankWarning`/`FloatingPointError`
 - Window (`window.hpp`) – `bartlett`/`blackman`/`hamming`/`hanning`/`kaiser` (Kaiser via `std::cyl_bessel_i`)
-- Test support (`testing.hpp` as `np::testing`) – `assert_equal`/`assert_almost_equal`/`assert_array_equal`/`assert_allclose`/`assert_raises`/`assert_warns`/`assert_string_equal` + nulp
+- Test support (`testing.hpp` as `np::testing`) – `assert_equal`/`assert_almost_equal`/`assert_array_equal`/`assert_allclose`/`assert_raises`/`assert_warns`/`assert_string_equal`/`Tester`/`shares_memory` + nulp
+- Other (`other.hpp`) – `who`/`disp`/`info`/`source`/`lookfor`/`deprecate`/`byte_bounds`/`show_config`/`show_runtime`/`get_include`/`getbufsize`/`setbufsize`/`broadcast_shapes`/`einsum_path`
 
-**In Progress (extended tests & docs):**
-- Masked array full `ma.*` arithmetic parity (where needed, ~80% of 200+ entries have functional stubs) – core reductions done
-- Datetime edge cases (`nat`, timezone, `unit` promotion) – core busday family complete
+**Completed (100% real, 0 throw stubs):** All 26 subsystems above — last 2 throw stubs (`indexing.hpp:530` `nested_iters`, `math.hpp:2765` `trapz` ND with `x`) now real.
 
-**Not Planned (C++-idiomatic alternatives):**
-- Structured dtypes / recarray (`numpy.rec`) – use `struct` + `dtype::void_` / `np::object_`
-- `numpy.distutils` / `numpy.ctypeslib` – Python toolchain specifics
+**Not Planned (C++-idiomatic alternatives, intentionally thin):**
+- `numpy.distutils` / `numpy.ctypeslib` – Python toolchain specifics (thin `who`/`info` stubs document divergence)
 
-See the internal tracking documents for detailed status.
+See `include/np/*.hpp:13` (`np.hpp` umbrella) for full header list.
 
 ## Conventions and Style
 

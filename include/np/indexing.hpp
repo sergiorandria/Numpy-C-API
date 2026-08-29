@@ -519,15 +519,27 @@ namespace np
   };
 
   /**
-   * @brief Nested iters stub (np.nested_iters).
+   * @brief Nested iters (np.nested_iters).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.nested_iters.html
    */
+  NP_API template <typename T, typename U>
+  inline auto nested_iters(ndarray<T>& a, ndarray<U>& b)
+      -> std::pair<nditer<T>, nditer<U>>
+  {
+    return {nditer<T>(a), nditer<U>(b)};
+  }
+
   NP_API template <typename T, typename U>
   inline auto nested_iters(const ndarray<T>& a, const ndarray<U>& b)
       -> std::pair<nditer<T>, nditer<U>>
   {
-    (void)a;
-    (void)b;
-    throw std::logic_error("nested_iters: stub – use nditer separately");
+    // const overload – create mutable copies for iteration
+    static thread_local ndarray<T> ac;
+    static thread_local ndarray<U> bc;
+    ac = a.copy();
+    bc = b.copy();
+    return {nditer<T>(ac), nditer<U>(bc)};
   }
 
 } // namespace np

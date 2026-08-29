@@ -2762,7 +2762,45 @@ namespace np
       }
       return sum;
     }
-    throw std::invalid_argument("trapz: ND with x not yet implemented (use dx version)");
+    // ND case – integrate along axis using x coordinates
+    std::vector<int> out_shape = y.shape;
+    out_shape.erase(out_shape.begin() + ax);
+    if (out_shape.empty())
+      out_shape.push_back(1);
+    ndarray<R> out(out_shape);
+    detail::Odometer od(out_shape);
+    std::vector<std::size_t> y_idx(y.ndim(), 0);
+    std::size_t axis_len = static_cast<std::size_t>(y.shape[ax]);
+    while (!od.done())
+    {
+      const auto& out_pos = od.idx();
+      // Map out_pos to y base index (excluding axis)
+      for (size_t d = 0, o = 0; d < y.ndim(); ++d)
+      {
+        if (static_cast<int>(d) == ax)
+          y_idx[d] = 0;
+        else
+          y_idx[d] = out_pos[o++];
+      }
+      R acc = R{0};
+      for (size_t k = 0; k + 1 < axis_len; ++k)
+      {
+        y_idx[static_cast<size_t>(ax)] = k;
+        R y0 = static_cast<R>(y.get(y_idx));
+        y_idx[static_cast<size_t>(ax)] = k + 1;
+        R y1 = static_cast<R>(y.get(y_idx));
+        R dx = static_cast<R>(
+            x.data()[x._flat_logical(k + 1)] - x.data()[x._flat_logical(k)]);
+        acc += (y0 + y1) * dx / R{2};
+      }
+      out.set(out_pos, acc);
+      od.advance();
+    }
+    if (out_shape.size() == 1 && out_shape[0] == 1 && y.ndim() > 1)
+    {
+      // keep as is for ND scalar case
+    }
+    return out;
   }
 
   // ── Missing parity: nextafter / spacing / real / imag / conj ──────────
