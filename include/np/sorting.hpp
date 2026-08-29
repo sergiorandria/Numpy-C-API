@@ -393,6 +393,36 @@ namespace np
     return arr.flatten();
   }
 
+  // ── argmax / argmin (free wrappers, numpy.sort parity) ─────────────
+  NP_API template <typename T>
+  NP_NODISCARD inline auto argmax(const ndarray<T>& a) -> std::size_t
+  {
+    return a.argmax();
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto argmax(const ndarray<T>& a, int axis) -> ndarray<std::size_t>
+  {
+    return a.argmax(axis);
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto argmin(const ndarray<T>& a) -> std::size_t
+  {
+    return a.argmin();
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto argmin(const ndarray<T>& a, int axis) -> ndarray<std::size_t>
+  {
+    return a.argmin(axis);
+  }
+
+  // nanargmax / nanargmin are provided by statistics.hpp and re-exported
+  // via the umbrella header; no duplicate definition here to avoid ODR
+  // clash. Sorting parity is satisfied when both headers are included
+  // (see include/np/np.hpp:33 includes sorting + statistics).
+
 } // namespace np
 
 #endif // NP_SORTING_HPP
