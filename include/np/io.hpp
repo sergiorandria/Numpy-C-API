@@ -722,7 +722,167 @@ namespace np
   void savez_compressed(
       const std::string& filename, const std::map<std::string, ndarray<T>>& arrays)
   {
+#ifdef NP_HAS_ZLIB
+    std::ofstream os(filename, std::ios::binary);
+    if (!os)
+      throw std::runtime_error("savez_compressed: cannot open " + filename);
+    struct Entry
+    {
+      std::string name;
+      std::string comp;
+      uint32_t crc;
+      uint32_t comp_size;
+      uint32_t uncomp_size;
+      uint32_t offset;
+    };
+    std::vector<Entry> entries;
+    entries.reserve(arrays.size());
+    for (auto& kv : arrays)
+    {
+      std::string npy = npy_bytes_for_array(kv.second);
+      uint32_t crc = detail::crc32_update(0, npy.data(), npy.size());
+      uLongf destLen = compressBound(static_cast<uLong>(npy.size()));
+      std::string comp(destLen, '\0');
+      int zret = compress2(
+          reinterpret_cast<Bytef*>(comp.data()),
+          &destLen,
+          reinterpret_cast<const Bytef*>(npy.data()),
+          static_cast<uLong>(npy.size()),
+          Z_DEFAULT_COMPRESSION);
+      if (zret != Z_OK)
+        throw std::runtime_error("savez_compressed: compress2 failed");
+      comp.resize(destLen);
+      uint32_t offset = static_cast<uint32_t>(os.tellp());
+      detail::write_le32(os, 0x04034b50u);
+      detail::write_le16(os, 20);
+      detail::write_le16(os, 0);
+      detail::write_le16(os, 8); // DEFLATE
+      detail::write_le16(os, 0);
+      detail::write_le16(os, 0);
+      detail::write_le32(os, crc);
+      detail::write_le32(os, static_cast<uint32_t>(comp.size()));
+      detail::write_le32(os, static_cast<uint32_t>(npy.size()));
+      std::string fname = kv.first + ".npy";
+      detail::write_le16(os, static_cast<uint16_t>(fname.size()));
+      detail::write_le16(os, 0);
+      os.write(fname.data(), fname.size());
+      os.write(comp.data(), comp.size());
+      entries.push_back(
+          {fname,
+           comp,
+           crc,
+           static_cast<uint32_t>(comp.size()),
+           static_cast<uint32_t>(npy.size()),
+           offset});
+    }
+    uint32_t cd_offset = static_cast<uint32_t>(os.tellp());
+    uint32_t cd_size = 0;
+    for (auto& e : entries)
+    {
+      detail::write_le32(os, 0x02014b50u);
+      detail::write_le16(os, 20);
+      detail::write_le16(os, 20);
+      detail::write_le16(os, 0);
+      detail::write_le16(os, 8);
+      detail::write_le16(os, 0);
+      detail::write_le16(os, 0);
+      detail::write_le32(os, e.crc);
+      detail::write_le32(os, e.comp_size);
+      detail::write_le32(os, e.uncomp_size);
+      detail::write_le16(os, static_cast<uint16_t>(e.name.size()));
+      detail::write_le16(os, 0);
+      detail::write_le16(os, 0);
+      detail::write_le16(os, 0);
+      detail::write_le16(os, 0);
+      detail::write_le32(os, 0);
+      detail::write_le32(os, e.offset);
+      os.write(e.name.data(), e.name.size());
+    }
+    cd_size = static_cast<uint32_t>(os.tellp()) - cd_offset;
+    detail::write_le32(os, 0x06054b50u);
+    detail::write_le16(os, 0);
+    detail::write_le16(os, 0);
+    detail::write_le16(os, static_cast<uint16_t>(entries.size()));
+    detail::write_le16(os, static_cast<uint16_t>(entries.size()));
+    detail::write_le32(os, cd_size);
+    detail::write_le32(os, cd_offset);
+    detail::write_le16(os, 0);
+#else
     savez(filename, arrays);
+#endif
+  }
+
+  /**
+   * @brief String representation of array (np.array2string).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.array2string.html
+   */
+  template <typename T>
+  NP_NODISCARD inline std::string array2string(
+      const ndarray<T>& arr,
+      const std::string& separator = " ",
+      int precision = 8,
+      bool suppress_small = false)
+  {
+    (void)suppress_small;
+    std::ostringstream oss;
+    oss << std::setprecision(precision);
+    if (arr.ndim() == 0)
+    {
+      oss << arr.item();
+      return oss.str();
+    }
+    if (arr.ndim() == 1)
+    {
+      oss << "[";
+      for (std::size_t i = 0; i < arr.size(); ++i)
+      {
+        if (i)
+          oss << separator;
+        oss << arr.data()[arr._flat_logical(i)];
+      }
+      oss << "]";
+      return oss.str();
+    }
+    oss << "[";
+    detail::Odometer od({arr.shape[0]});
+    // Simplified 2-D pretty
+    if (arr.ndim() == 2)
+    {
+      for (int i = 0; i < arr.shape[0]; ++i)
+      {
+        if (i)
+          oss << separator;
+        oss << "[";
+        for (int j = 0; j < arr.shape[1]; ++j)
+        {
+          if (j)
+            oss << separator;
+          oss << arr.at(static_cast<std::size_t>(i), static_cast<std::size_t>(j));
+        }
+        oss << "]";
+      }
+    }
+    else
+    {
+      for (std::size_t i = 0; i < arr.size(); ++i)
+      {
+        if (i)
+          oss << separator;
+        oss << arr.data()[arr._flat_logical(i)];
+      }
+    }
+    oss << "]";
+    return oss.str();
+  }
+
+  /**
+   * @brief Repr string (np.array_repr).
+   */
+  template <typename T>
+  NP_NODISCARD inline std::string array_repr(const ndarray<T>& arr)
+  {
+    return "array(" + array2string(arr, ", ") + ")";
   }
 
   /** @brief Load .npz file (expects dtype T for all entries).
@@ -780,11 +940,34 @@ namespace np
       // Local header
       if (detail::read_le32(buf.data() + lh_offset) != 0x04034b50u)
         throw std::runtime_error("load_npz: bad local header");
+      uint16_t lh_method = detail::read_le16(buf.data() + lh_offset + 8);
       uint16_t lh_name = detail::read_le16(buf.data() + lh_offset + 26);
       uint16_t lh_extra = detail::read_le16(buf.data() + lh_offset + 28);
       size_t data_off = lh_offset + 30 + lh_name + lh_extra;
-      // npy data is stored as file data
-      std::string npy(buf.data() + data_off, comp_size);
+      // npy data is stored as file data – handle STORE (0) vs DEFLATE (8)
+      std::string npy;
+      if (lh_method == 8)
+      {
+#ifdef NP_HAS_ZLIB
+        std::string comp(buf.data() + data_off, comp_size);
+        npy.resize(uncomp_size);
+        uLongf destLen = static_cast<uLongf>(uncomp_size);
+        int zret = uncompress(
+            reinterpret_cast<Bytef*>(npy.data()),
+            &destLen,
+            reinterpret_cast<const Bytef*>(comp.data()),
+            static_cast<uLong>(comp.size()));
+        if (zret != Z_OK)
+          throw std::runtime_error("load_npz: uncompress failed");
+        npy.resize(destLen);
+#else
+        throw std::runtime_error("load_npz: deflate entry but zlib not available");
+#endif
+      }
+      else
+      {
+        npy.assign(buf.data() + data_off, comp_size);
+      }
       // Parse npy from memory
       // Reuse read_npy_header logic on stringstream
       std::istringstream npy_is(npy, std::ios::binary);

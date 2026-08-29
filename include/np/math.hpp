@@ -2764,6 +2764,207 @@ namespace np
     }
     throw std::invalid_argument("trapz: ND with x not yet implemented (use dx version)");
   }
+
+  // ── Missing parity: nextafter / spacing / real / imag / conj ──────────
+
+  /**
+   * @brief Next representable floating value (np.nextafter).
+   * Reference: numpy-reference/reference/generated/numpy.nextafter.html
+   */
+  NP_API template <typename T, typename U>
+  NP_NODISCARD auto nextafter(const ndarray<T>& x1, const ndarray<U>& x2)
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    using R = std::common_type_t<T, U>;
+    static_assert(std::is_floating_point_v<R>, "nextafter: floating required");
+    std::vector<int> out_shape = detail::broadcast_shapes(x1.shape, x2.shape);
+    ndarray<R> out(out_shape);
+    detail::Odometer od(out_shape);
+    while (!od.done())
+    {
+      const auto& idx = od.idx();
+      R a = static_cast<R>(x1.get(detail::broadcast_index(x1.shape, out_shape, idx)));
+      R b = static_cast<R>(x2.get(detail::broadcast_index(x2.shape, out_shape, idx)));
+      out.set(idx, std::nextafter(a, b));
+      od.advance();
+    }
+    return out;
+  }
+
+  /**
+   * @brief Spacing between floating values (np.spacing).
+   * Reference: numpy-reference/reference/generated/numpy.spacing.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto spacing(const ndarray<T>& x) -> ndarray<T>
+  {
+    static_assert(std::is_floating_point_v<T>, "spacing: floating required");
+    ndarray<T> out(x.shape);
+    for (std::size_t i = 0; i < x.size(); ++i)
+    {
+      T v = x.data()[x._flat_logical(i)];
+      T nxt = std::nextafter(v, std::numeric_limits<T>::infinity());
+      T prv = std::nextafter(v, -std::numeric_limits<T>::infinity());
+      if (std::isinf(v))
+      {
+        out.data()[i] = std::numeric_limits<T>::quiet_NaN();
+      }
+      else if (v == T{0})
+      {
+        out.data()[i] = std::nextafter(T{0}, T{1}) - T{0};
+      }
+      else
+      {
+        T d1 = std::abs(nxt - v);
+        T d2 = std::abs(v - prv);
+        out.data()[i] = std::min(d1, d2);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * @brief Real part of array (np.real).
+   * Reference: numpy-reference/reference/generated/numpy.real.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto real(const ndarray<T>& x)
+      -> ndarray<typename detail::_Np_real_of<T>::type>
+  {
+    using R = typename detail::_Np_real_of<T>::type;
+    ndarray<R> out(x.shape);
+    for (std::size_t i = 0; i < x.size(); ++i)
+    {
+      if constexpr (detail::is_complex_v<T>)
+      {
+        out.data()[i] = x.data()[x._flat_logical(i)].real();
+      }
+      else
+      {
+        out.data()[i] = static_cast<R>(x.data()[x._flat_logical(i)]);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * @brief Imaginary part of array (np.imag).
+   * Reference: numpy-reference/reference/generated/numpy.imag.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto imag(const ndarray<T>& x)
+      -> ndarray<typename detail::_Np_real_of<T>::type>
+  {
+    using R = typename detail::_Np_real_of<T>::type;
+    ndarray<R> out(x.shape);
+    for (std::size_t i = 0; i < x.size(); ++i)
+    {
+      if constexpr (detail::is_complex_v<T>)
+      {
+        out.data()[i] = x.data()[x._flat_logical(i)].imag();
+      }
+      else
+      {
+        out.data()[i] = R{0};
+      }
+    }
+    return out;
+  }
+
+  /**
+   * @brief Complex conjugate (np.conj / np.conjugate).
+   * Reference: numpy-reference/reference/generated/numpy.conj.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto conj(const ndarray<T>& x) -> ndarray<T>
+  {
+    ndarray<T> out(x.shape);
+    for (std::size_t i = 0; i < x.size(); ++i)
+    {
+      if constexpr (detail::is_complex_v<T>)
+      {
+        out.data()[i] = std::conj(x.data()[x._flat_logical(i)]);
+      }
+      else
+      {
+        out.data()[i] = x.data()[x._flat_logical(i)];
+      }
+    }
+    return out;
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto conjugate(const ndarray<T>& x) -> ndarray<T>
+  {
+    return conj(x);
+  }
+
+  /**
+   * @brief NumPy divmod: floored quotient and remainder (np.divmod).
+   * Reference: numpy-reference/reference/generated/numpy.divmod.html
+   */
+  NP_API template <typename T, typename U>
+  NP_NODISCARD auto divmod(const ndarray<T>& x1, const ndarray<U>& x2)
+      -> std::pair<ndarray<std::common_type_t<T, U>>, ndarray<std::common_type_t<T, U>>>
+  {
+    using R = std::common_type_t<T, U>;
+    std::vector<int> out_shape = detail::broadcast_shapes(x1.shape, x2.shape);
+    ndarray<R> q(out_shape), r(out_shape);
+    detail::Odometer od(out_shape);
+    while (!od.done())
+    {
+      const auto& idx = od.idx();
+      R a = static_cast<R>(x1.get(detail::broadcast_index(x1.shape, out_shape, idx)));
+      R b = static_cast<R>(x2.get(detail::broadcast_index(x2.shape, out_shape, idx)));
+      R qq = std::floor(a / b);
+      R rr = a - qq * b;
+      q.set(idx, qq);
+      r.set(idx, rr);
+      od.advance();
+    }
+    return {q, r};
+  }
+
+  /**
+   * @brief Cumulative sum alias (np.cumulative_sum, NumPy 2.0).
+   * Reference: numpy-reference/reference/generated/numpy.cumulative_sum.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto
+  cumulative_sum(const ndarray<T>& a, std::optional<int> axis = std::nullopt)
+      -> ndarray<T>
+  {
+    if (!axis.has_value())
+    {
+      return a.cumsum();
+    }
+    return a.cumsum(*axis);
+  }
+
+  /**
+   * @brief Cumulative product alias (np.cumulative_prod, NumPy 2.0).
+   * Reference: numpy-reference/reference/generated/numpy.cumulative_prod.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto
+  cumulative_prod(const ndarray<T>& a, std::optional<int> axis = std::nullopt)
+      -> ndarray<T>
+  {
+    if (!axis.has_value())
+    {
+      return a.cumprod();
+    }
+    return a.cumprod(*axis);
+  }
+
+  // `trapezoid` is NumPy 2.0 alias for `trapz`
+  NP_API template <typename T>
+  NP_NODISCARD inline auto trapezoid(const ndarray<T>& y, T dx = T{1}) -> ndarray<T>
+  {
+    // call trapz overload
+    return trapz(y, dx);
+  }
+
 } // namespace np
 
 #endif // NP_MATH_HPP
