@@ -885,6 +885,88 @@ namespace np
     return "array(" + array2string(arr, ", ") + ")";
   }
 
+  /**
+   * @brief Format float (np.format_float_positional / scientific).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.format_float_positional.html
+   */
+  NP_API inline std::string
+  format_float_positional(double x, int precision = -1, bool trim = true)
+  {
+    std::ostringstream oss;
+    if (precision >= 0)
+      oss << std::setprecision(precision) << std::fixed << x;
+    else
+      oss << std::setprecision(8) << x;
+    std::string s = oss.str();
+    if (trim)
+    {
+      if (s.find('.') != std::string::npos)
+      {
+        while (!s.empty() && s.back() == '0')
+          s.pop_back();
+        if (!s.empty() && s.back() == '.')
+          s.pop_back();
+      }
+    }
+    return s;
+  }
+
+  NP_API inline std::string
+  format_float_scientific(double x, int precision = -1, bool trim = true)
+  {
+    std::ostringstream oss;
+    if (precision >= 0)
+      oss << std::setprecision(precision) << std::scientific << x;
+    else
+      oss << std::setprecision(8) << std::scientific << x;
+    std::string s = oss.str();
+    (void)trim;
+    return s;
+  }
+
+  /**
+   * @brief From regex text file (np.fromregex).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.fromregex.html
+   *
+   * Simplified: reads file, applies regex with capturing groups and returns
+   * array of matched groups as strings (converted to double where possible).
+   */
+  NP_API inline auto fromregex(
+      const std::string& filename,
+      const std::string& regexp,
+      const std::string& dtype_str = "float64") -> ndarray<double>
+  {
+    (void)dtype_str;
+    std::ifstream is(filename);
+    if (!is)
+      throw std::runtime_error("fromregex: cannot open " + filename);
+    std::string content(
+        (std::istreambuf_iterator<char>(is)), std::istreambuf_iterator<char>());
+    std::regex re(regexp);
+    std::sregex_iterator it(content.begin(), content.end(), re), end;
+    std::vector<double> vals;
+    for (; it != end; ++it)
+    {
+      for (size_t g = 1; g < it->size(); ++g)
+      {
+        try
+        {
+          vals.push_back(std::stod((*it)[g].str()));
+        }
+        catch (...)
+        {
+          vals.push_back(std::numeric_limits<double>::quiet_NaN());
+        }
+      }
+    }
+    ndarray<double> out(std::vector<int>{static_cast<int>(vals.size())});
+    for (size_t i = 0; i < vals.size(); ++i)
+      out.data()[i] = vals[i];
+    return out;
+  }
+
   /** @brief Load .npz file (expects dtype T for all entries).
    *
    * Returns map name (without .npy) → ndarray<T>.

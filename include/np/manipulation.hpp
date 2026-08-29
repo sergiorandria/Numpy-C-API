@@ -2373,6 +2373,98 @@ namespace np
     return delete_arr(arr, indices, axis);
   }
 
+  // ── flat view helper (np.flatiter / np.ndarray.flat) ────────────
+  /**
+   * @brief Flat iterator view (np.ndarray.flat).
+   * Returns a 1-D copy that iterates in C order (logical flat).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.ndarray.flat.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto flat(const ndarray<T>& a) -> ndarray<T>
+  {
+    return a.ravel();
+  }
+
+  /**
+   * @brief Strided view (np.lib.stride_tricks.as_strided).
+   *
+   * Reference:
+   * numpy-reference/reference/generated/numpy.lib.stride_tricks.as_strided.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto as_strided(
+      const ndarray<T>& x,
+      const std::vector<int>& shape,
+      const std::vector<std::size_t>& strides) -> ndarray<T>
+  {
+    ndarray<T> out = x;
+    out.shape = shape;
+    out.strides = strides;
+    // keep same offset and shared storage (view)
+    return out;
+  }
+
+  /**
+   * @brief Sliding window view (np.lib.stride_tricks.sliding_window_view).
+   *
+   * Reference:
+   * numpy-reference/reference/generated/numpy.lib.stride_tricks.sliding_window_view.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto
+  sliding_window_view(const ndarray<T>& x, int window_shape, int axis = -1) -> ndarray<T>
+  {
+    if (x.ndim() == 0)
+      throw std::invalid_argument("sliding_window_view: 0-d not supported");
+    int ax = axis == -1 ? static_cast<int>(x.ndim() - 1) : axis;
+    if (ax < 0)
+      ax += static_cast<int>(x.ndim());
+    if (ax < 0 || ax >= static_cast<int>(x.ndim()))
+      throw AxisError("sliding_window_view: axis out of bounds");
+    int n = x.shape[ax];
+    if (window_shape <= 0 || window_shape > n)
+      throw std::invalid_argument("sliding_window_view: invalid window_shape");
+    std::vector<int> out_shape = x.shape;
+    out_shape[ax] = n - window_shape + 1;
+    out_shape.push_back(window_shape);
+    // Simplified: return strided copy via as_strided semantics
+    ndarray<T> out(out_shape);
+    detail::Odometer od(out_shape);
+    while (!od.done())
+    {
+      std::vector<std::size_t> out_idx = od.idx();
+      int win_idx = static_cast<int>(out_idx.back());
+      out_idx.pop_back();
+      std::vector<std::size_t> src_idx(x.ndim(), 0);
+      for (size_t d = 0, o = 0; d < x.ndim(); ++d)
+      {
+        if (static_cast<int>(d) == ax)
+          src_idx[d] = out_idx[o++] + win_idx;
+        else
+          src_idx[d] = out_idx[o++];
+      }
+      out.set(od.idx(), x.get(src_idx));
+      od.advance();
+    }
+    return out;
+  }
+
+  // Broadcast shapes helper exposed as np.broadcast_shapes
+  NP_API inline auto
+  broadcast_shapes(const std::vector<int>& a, const std::vector<int>& b)
+      -> std::vector<int>
+  {
+    return detail::broadcast_shapes(a, b);
+  }
+
+  NP_API inline auto broadcast_shapes(
+      const std::vector<int>& a, const std::vector<int>& b, const std::vector<int>& c)
+      -> std::vector<int>
+  {
+    return detail::broadcast_shapes(detail::broadcast_shapes(a, b), c);
+  }
+
 } // namespace np
 
 #endif // NP_MANIPULATION_HPP

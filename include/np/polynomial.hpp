@@ -456,6 +456,11 @@ namespace np
         return true;
       }
 
+      bool has_samepars(const Polynomial& other) const
+      {
+        return has_samedomain(other) && has_samewindow(other);
+      }
+
       std::pair<double, double> mapparms() const
       {
         double scl =

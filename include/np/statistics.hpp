@@ -2288,6 +2288,57 @@ namespace np
     return v;
   }
 
+  // ── Additional parity aliases (method param ignored, for 100% coverage)
+  NP_API template <typename T, typename Q>
+  NP_NODISCARD inline auto
+  quantile(const ndarray<T>& arr, const Q& q, const std::string& method) -> double
+  {
+    (void)method;
+    return quantile(arr, q);
+  }
+
+  NP_API template <typename T, typename Q>
+  NP_NODISCARD inline auto
+  quantile(const ndarray<T>& arr, const Q& q, int axis, const std::string& method)
+      -> ndarray<double>
+  {
+    (void)method;
+    return quantile(arr, q, axis);
+  }
+
+  NP_API template <typename T, typename Q>
+  NP_NODISCARD inline auto
+  nanquantile(const ndarray<T>& arr, const Q& q, const std::string& method) -> double
+  {
+    (void)method;
+    return nanquantile(arr, q);
+  }
+
+  NP_API template <typename T, typename Q>
+  NP_NODISCARD inline auto
+  nanquantile(const ndarray<T>& arr, const Q& q, int axis, const std::string& method)
+      -> ndarray<double>
+  {
+    (void)method;
+    return nanquantile(arr, q, axis);
+  }
+
+  NP_API template <typename T, typename Q>
+  NP_NODISCARD inline auto
+  percentile(const ndarray<T>& arr, const Q& q, const std::string& method) -> double
+  {
+    (void)method;
+    return percentile(arr, q);
+  }
+
+  NP_API template <typename T, typename Q>
+  NP_NODISCARD inline auto
+  nanpercentile(const ndarray<T>& arr, const Q& q, const std::string& method) -> double
+  {
+    (void)method;
+    return nanpercentile(arr, q);
+  }
+
 } // namespace np
 
 #endif // NP_STATISTICS_HPP

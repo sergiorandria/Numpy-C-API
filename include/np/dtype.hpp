@@ -1519,6 +1519,52 @@ namespace np
     return info;
   }
 
+  // ── Remaining dtype parity (numpy 2.2) ──────────────────────────────
+
+  /**
+   * @brief Check if dtype is of given kind (np.isdtype).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.isdtype.html
+   *
+   * `kind` can be a dtype enum value or a string such as "int", "float",
+   * "complex", "bool", "signed integer", "unsigned integer".
+   */
+  NP_API NP_NODISCARD inline bool isdtype(dtype dt, const std::string& kind)
+  {
+    if (kind == "bool")
+      return dt == dtype::bool_;
+    if (kind == "signed integer")
+      return dtype_is_signed(dt);
+    if (kind == "unsigned integer")
+      return dtype_is_unsigned(dt);
+    if (kind == "integral" || kind == "int" || kind == "integer")
+      return dtype_is_integer(dt);
+    if (kind == "floating")
+      return dtype_is_floating(dt);
+    if (kind == "complex floating" || kind == "complex")
+      return dtype_is_complex(dt);
+    if (kind == "numeric")
+      return dt != dtype::void_ && dt != dtype::object_ && dt != dtype::string_
+          && dt != dtype::unicode_;
+    // fallback: compare name
+    return dtype_name(dt) == kind;
+  }
+
+  NP_API NP_NODISCARD inline bool isdtype(dtype dt, dtype kind)
+  {
+    return issubdtype(dt, kind);
+  }
+
+  /**
+   * @brief Alias issubclass_ → issubdtype for dtype enums.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.issubclass_.html
+   */
+  NP_API NP_NODISCARD inline bool issubclass_(dtype a, dtype b)
+  {
+    return issubdtype(a, b);
+  }
+
 } // namespace np
 
 #endif // NP_DTYPE_HPP
