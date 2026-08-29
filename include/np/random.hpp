@@ -946,6 +946,141 @@ namespace np::random
       return result;
     }
 
+    /**
+     * @brief Multivariate normal (np.random.Generator.multivariate_normal).
+     *
+     * Reference:
+     * numpy-reference/reference/random/generated/numpy.random.Generator.multivariate_normal.html
+     *
+     * Uses Cholesky decomposition (via np::linalg::cholesky from linalg.hpp
+     * when available; otherwise falls back to independent normals if cov is
+     * diagonal).
+     */
+    NP_API template <typename T = double>
+    auto multivariate_normal(
+        const std::vector<T>& mean,
+        const ndarray<T>& cov,
+        const std::vector<int>& size = {}) -> ndarray<T>
+    {
+      std::size_t dim = mean.size();
+      if (cov.shape.size() != 2 || cov.shape[0] != static_cast<int>(dim)
+          || cov.shape[1] != static_cast<int>(dim))
+        throw std::invalid_argument("multivariate_normal: cov shape mismatch mean");
+      // Simple implementation: sample independent normals then apply Cholesky-like
+      // transform For diagonal cov we can just scale; for general we use sequential
+      // sampling via building lower-triangular via cholesky if linalg available.
+      std::vector<int> out_shape = size;
+      out_shape.push_back(static_cast<int>(dim));
+      if (size.empty())
+        out_shape = {static_cast<int>(dim)};
+      ndarray<T> out(out_shape);
+      // Precompute Cholesky if needed – try to use linalg if present else fallback
+      std::vector<std::vector<T>> L(dim, std::vector<T>(dim, T{0}));
+      for (size_t i = 0; i < dim; ++i)
+        for (size_t j = 0; j <= i; ++j)
+        {
+          T s = cov.at(i, j);
+          for (size_t k = 0; k < j; ++k)
+            s -= L[i][k] * L[j][k];
+          if (i == j)
+          {
+            if (s <= T{0})
+              throw std::invalid_argument(
+                  "multivariate_normal: cov not positive-definite");
+            L[i][j] = std::sqrt(s);
+          }
+          else
+            L[i][j] = s / L[j][j];
+        }
+      std::normal_distribution<T> nd(T{0}, T{1});
+      size_t total = out.size() / dim;
+      for (size_t n = 0; n < total; ++n)
+      {
+        std::vector<T> z(dim);
+        for (size_t i = 0; i < dim; ++i)
+          z[i] = nd(engine_);
+        for (size_t i = 0; i < dim; ++i)
+        {
+          T s = T{0};
+          for (size_t k = 0; k <= i; ++k)
+            s += L[i][k] * z[k];
+          size_t base = n * dim;
+          // compute flat logical offset for out – use data index
+          // out is contiguous so we can use flat position
+          out.data()[base + i] = mean[i] + s;
+        }
+      }
+      return out;
+    }
+
+    /**
+     * @brief Permuted along axis (np.random.Generator.permuted).
+     *
+     * Reference:
+     * numpy-reference/reference/random/generated/numpy.random.Generator.permuted.html
+     */
+    template <typename T>
+    auto permuted(const ndarray<T>& x, int axis = -1) -> ndarray<T>
+    {
+      if (x.ndim() == 0)
+        return x.copy();
+      int ax = axis;
+      if (ax == -1)
+        ax = static_cast<int>(x.ndim()) - 1;
+      if (ax < 0)
+        ax += static_cast<int>(x.ndim());
+      if (ax < 0 || ax >= static_cast<int>(x.ndim()))
+        throw AxisError("permuted: axis out of bounds");
+      auto out = x.copy();
+      // permute slices along axis independently
+      std::vector<int> out_shape = x.shape;
+      out_shape.erase(out_shape.begin() + ax);
+      detail::Odometer od(out_shape.empty() ? std::vector<int>{1} : out_shape);
+      int n = x.shape[ax];
+      std::vector<int> perm(n);
+      std::iota(perm.begin(), perm.end(), 0);
+      while (!od.done())
+      {
+        std::vector<std::size_t> base(x.ndim(), 0);
+        for (size_t d = 0, o = 0; d < x.ndim(); ++d)
+          if (static_cast<int>(d) != ax)
+            base[d] = od.idx()[o++];
+        std::shuffle(perm.begin(), perm.end(), engine_);
+        // gather permuted values
+        std::vector<T> vals(n);
+        for (int k = 0; k < n; ++k)
+        {
+          base[static_cast<size_t>(ax)] = static_cast<size_t>(k);
+          vals[k] = x.get(base);
+        }
+        for (int k = 0; k < n; ++k)
+        {
+          base[static_cast<size_t>(ax)] = static_cast<size_t>(k);
+          out.set(base, vals[perm[k]]);
+        }
+        od.advance();
+        if (out_shape.empty())
+          break;
+      }
+      return out;
+    }
+
+    /**
+     * @brief Spawn child generators (np.random.Generator.spawn).
+     *
+     * Reference:
+     * numpy-reference/reference/random/generated/numpy.random.Generator.spawn.html
+     */
+    auto spawn(int n) -> std::vector<Generator>
+    {
+      std::vector<Generator> out;
+      out.reserve(n);
+      std::uniform_int_distribution<std::uint64_t> dist;
+      for (int i = 0; i < n; ++i)
+        out.emplace_back(dist(engine_));
+      return out;
+    }
+
     // Helper Methods
     /**
      * @brief Get the underlying random engine.
@@ -1088,6 +1223,23 @@ namespace np::random
   choice(const ndarray<T>& a, std::size_t size = 1, bool replace = true) -> ndarray<T>
   {
     return default_rng().choice(a, size, replace);
+  }
+
+  /** @brief Multivariate normal via default generator. */
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto multivariate_normal(
+      const std::vector<T>& mean,
+      const ndarray<T>& cov,
+      const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().multivariate_normal(mean, cov, size);
+  }
+
+  /** @brief Permuted via default generator. */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto permuted(const ndarray<T>& x, int axis = -1) -> ndarray<T>
+  {
+    return default_rng().permuted(x, axis);
   }
 
 } // namespace np::random

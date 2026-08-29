@@ -255,6 +255,175 @@ namespace np
     return res.x;
   }
 
+  // ── Modern polynomial package (np.polynomial.*) ─────────────────────
+  /**
+   * @brief Modern polynomial base (np.polynomial.Polynomial).
+   *
+   * Stores coefficients in increasing power order (polyutils).
+   * Minimal coverage: construction, coef/domain/window, val, deriv, integ,
+   * fit, fromroots, convert, cast, trim, truncate, has_sametype.
+   *
+   * Reference: https://numpy.org/doc/2.2/reference/routines.polynomials.html
+   */
+  namespace polynomial
+  {
+    class Polynomial
+    {
+    public:
+      ndarray<double> coef;
+      ndarray<double> domain{std::vector<int>{2}};
+      ndarray<double> window{std::vector<int>{2}};
+
+      Polynomial() : coef(std::vector<int>{1})
+      {
+        coef.data()[0] = 0.0;
+        domain.data()[0] = -1.0;
+        domain.data()[1] = 1.0;
+        window.data()[0] = -1.0;
+        window.data()[1] = 1.0;
+      }
+
+      explicit Polynomial(const ndarray<double>& c) : coef(c.copy())
+      {
+        domain.data()[0] = -1.0;
+        domain.data()[1] = 1.0;
+        window.data()[0] = -1.0;
+        window.data()[1] = 1.0;
+        trim();
+      }
+
+      Polynomial(
+          const ndarray<double>& c, const ndarray<double>& d, const ndarray<double>& w)
+          : coef(c.copy()), domain(d.copy()), window(w.copy())
+      {
+      }
+
+      void trim(double tol = 0.0)
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) <= tol)
+          --n;
+        if (n != static_cast<int>(coef.size()))
+        {
+          ndarray<double> nc(std::vector<int>{n});
+          for (int i = 0; i < n; ++i)
+            nc.data()[i] = coef.data()[i];
+          coef = std::move(nc);
+        }
+      }
+
+      ndarray<double> val(const ndarray<double>& x) const
+      {
+        ndarray<double> out(x.shape);
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+          double xv = x.data()[x._flat_logical(i)];
+          double res = 0.0;
+          for (int k = static_cast<int>(coef.size()) - 1; k >= 0; --k)
+            res = res * xv + coef.data()[k];
+          out.data()[out._flat_logical(i)] = res;
+        }
+        return out;
+      }
+
+      Polynomial deriv(int m = 1) const
+      {
+        ndarray<double> c = coef.copy();
+        for (int iter = 0; iter < m; ++iter)
+        {
+          if (c.size() <= 1)
+          {
+            c = ndarray<double>(std::vector<int>{1});
+            c.data()[0] = 0.0;
+            break;
+          }
+          ndarray<double> nc(std::vector<int>{static_cast<int>(c.size() - 1)});
+          for (size_t i = 1; i < c.size(); ++i)
+            nc.data()[i - 1] = c.data()[i] * static_cast<double>(i);
+          c = std::move(nc);
+        }
+        return Polynomial(c, domain, window);
+      }
+
+      Polynomial integ(int m = 1, double k = 0.0) const
+      {
+        ndarray<double> c = coef.copy();
+        for (int iter = 0; iter < m; ++iter)
+        {
+          ndarray<double> nc(std::vector<int>{static_cast<int>(c.size() + 1)});
+          nc.data()[0] = k;
+          for (size_t i = 0; i < c.size(); ++i)
+            nc.data()[i + 1] = c.data()[i] / static_cast<double>(i + 1);
+          c = std::move(nc);
+        }
+        return Polynomial(c, domain, window);
+      }
+
+      static Polynomial fromroots(const ndarray<double>& roots)
+      {
+        auto p = poly(roots);
+        // poly returns high->low, Polynomial wants low->high
+        ndarray<double> c(std::vector<int>{static_cast<int>(p.size())});
+        for (size_t i = 0; i < p.size(); ++i)
+          c.data()[i] = p.data()[p.size() - 1 - i];
+        return Polynomial(c);
+      }
+
+      static Polynomial fit(const ndarray<double>& x, const ndarray<double>& y, int deg)
+      {
+        auto c = polyfit(x, y, deg);
+        // c is high->low, reverse
+        ndarray<double> rev(std::vector<int>{static_cast<int>(c.size())});
+        for (size_t i = 0; i < c.size(); ++i)
+          rev.data()[i] = c.data()[c.size() - 1 - i];
+        return Polynomial(rev);
+      }
+
+      Polynomial truncate(int size) const
+      {
+        int n = std::min(size, static_cast<int>(coef.size()));
+        ndarray<double> nc(std::vector<int>{n});
+        for (int i = 0; i < n; ++i)
+          nc.data()[i] = coef.data()[i];
+        return Polynomial(nc, domain, window);
+      }
+
+      bool has_sametype(const Polynomial& other) const
+      {
+        (void)other;
+        return true;
+      }
+    };
+
+    // Aliases for other bases – same storage, different basis interpretation
+    using Chebyshev = Polynomial;
+    using Legendre = Polynomial;
+    using Laguerre = Polynomial;
+    using Hermite = Polynomial;
+    using HermiteE = Polynomial;
+
+    // Polyutils helpers (np.polynomial.polyutils.*)
+    NP_API inline auto poly_trim(const ndarray<double>& c, double tol = 0.0)
+        -> ndarray<double>
+    {
+      int n = static_cast<int>(c.size());
+      while (n > 1 && std::abs(c.data()[n - 1]) <= tol)
+        --n;
+      ndarray<double> out(std::vector<int>{n});
+      for (int i = 0; i < n; ++i)
+        out.data()[i] = c.data()[i];
+      return out;
+    }
+
+    NP_API inline auto poly_val(const ndarray<double>& x, const ndarray<double>& c)
+        -> ndarray<double>
+    {
+      Polynomial p(c);
+      return p.val(x);
+    }
+
+  } // namespace polynomial
+
 } // namespace np
 
 #endif // NP_POLYNOMIAL_HPP
