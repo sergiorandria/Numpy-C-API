@@ -178,6 +178,54 @@ namespace np::exceptions
     }
   };
 
+  /** @brief Raised when a floating-point operation has an invalid value.
+   *
+   * Mirrors Python's FloatingPointError used by np.seterr(..., "raise").
+   *
+   * Reference: numpy-reference/reference/generated/numpy.seterr.html
+   */
+  class FloatingPointError : public NumpyError
+  {
+  public:
+    explicit FloatingPointError(
+        const std::string& msg,
+        const std::source_location& loc = std::source_location::current())
+        : NumpyError(msg, loc)
+    {
+    }
+  };
+
+  /** @brief Raised when max_work was exceeded (e.g. isclose with TooHard).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.exceptions.TooHardError.html
+   */
+  class TooHardError : public NumpyError
+  {
+  public:
+    explicit TooHardError(
+        const std::string& msg,
+        const std::source_location& loc = std::source_location::current())
+        : NumpyError(msg, loc)
+    {
+    }
+  };
+
+  /** @brief Visible deprecation warning (np.exceptions.VisibleDeprecationWarning).
+   *
+   * Reference:
+   * numpy-reference/reference/generated/numpy.exceptions.VisibleDeprecationWarning.html
+   */
+  class VisibleDeprecationWarning : public NumpyError
+  {
+  public:
+    explicit VisibleDeprecationWarning(
+        const std::string& msg,
+        const std::source_location& loc = std::source_location::current())
+        : NumpyError(msg, loc)
+    {
+    }
+  };
+
 } // namespace np::exceptions
 
 namespace np
@@ -187,8 +235,17 @@ namespace np
   using MatrixDimError = exceptions::MatrixDimError;
   using DtypePromotionError = exceptions::DtypePromotionError;
   using VisibleDeprecation = exceptions::VisibleDeprecation;
+  using VisibleDeprecationWarning = exceptions::VisibleDeprecationWarning;
   using ComplexWarning = exceptions::ComplexWarning;
   using LinAlgError = exceptions::LinAlgError;
+  using FloatingPointError = exceptions::FloatingPointError;
+  using TooHardError = exceptions::TooHardError;
 } // namespace np
+
+namespace np::exceptions
+{
+  // Backward compat: numpy 1.x exposed VisibleDeprecation as VisibleDeprecationWarning
+  using VisibleDeprecationWarningAlias = VisibleDeprecationWarning;
+} // namespace np::exceptions
 
 #endif // NP_EXCEPTIONS_HPP

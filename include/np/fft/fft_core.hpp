@@ -830,8 +830,8 @@ namespace np::fft
                   full_idx_local[d] = oi[p++];
                 }
               }
-              const std::size_t base = np::detail::flat_index(
-                  full_idx_local, src.strides, src.offset);
+              const std::size_t base =
+                  np::detail::flat_index(full_idx_local, src.strides, src.offset);
               for (std::size_t k = 0; k < read; ++k)
               {
                 spec_local[k] = src.data()[base + k * src_stride];
@@ -856,8 +856,8 @@ namespace np::fft
                 }
               }
               transform(full_local, true, scale, cache);
-              const std::size_t db = np::detail::flat_index(
-                  full_idx_local, dst.strides, dst.offset);
+              const std::size_t db =
+                  np::detail::flat_index(full_idx_local, dst.strides, dst.offset);
               for (std::size_t k = 0; k < n; ++k)
               {
                 dst.data()[db + k * dst_stride] = full_local[k].real();

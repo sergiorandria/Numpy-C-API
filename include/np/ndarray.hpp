@@ -2679,6 +2679,35 @@ namespace np
       return r;
     }
 
+    NP_NODISCARD inline std::vector<std::size_t> broadcast_index(
+        const std::vector<int>& in_shape,
+        const std::vector<int>& out_shape,
+        const std::vector<std::size_t>& out_idx)
+    {
+      std::vector<std::size_t> in_idx(in_shape.size(), 0);
+      std::size_t out_nd = out_shape.size();
+      std::size_t in_nd = in_shape.size();
+      for (std::size_t d = 0; d < out_nd; ++d)
+      {
+        std::ptrdiff_t in_d =
+            static_cast<std::ptrdiff_t>(d) - static_cast<std::ptrdiff_t>(out_nd - in_nd);
+        if (in_d < 0)
+        {
+          continue;
+        }
+        std::size_t id = static_cast<std::size_t>(in_d);
+        if (in_shape[id] == 1)
+        {
+          in_idx[id] = 0;
+        }
+        else
+        {
+          in_idx[id] = out_idx[d];
+        }
+      }
+      return in_idx;
+    }
+
     /* Micro-optimized radix sort for integral types: O(n) vs O(n log n)
      * Uses 4-pass 8-bit counting sort (LSD) with sign-bit flipping for signed.
      * For floating point, reinterprets bits as integer with sign handling.

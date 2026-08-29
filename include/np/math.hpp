@@ -45,8 +45,8 @@ namespace np
   namespace detail
   {
 
-        // Type constraints
-        /** @brief Accepts arithmetic types and std::complex specializations. */
+    // Type constraints
+    /** @brief Accepts arithmetic types and std::complex specializations. */
     template <typename T>
     concept Numeric = std::is_arithmetic_v<T> || is_complex_v<T>;
 
@@ -58,8 +58,8 @@ namespace np
     template <typename T>
     concept Arithmetic = std::is_arithmetic_v<T>;
 
-        // Element-wise helpers
-        /** @brief Apply unary function element-wise with broadcasting.
+    // Element-wise helpers
+    /** @brief Apply unary function element-wise with broadcasting.
      *
      * Time complexity: O(N) where N is the number of elements
      * in the broadcast output shape. Space complexity: O(N).
@@ -311,9 +311,9 @@ namespace np
 
   } // namespace detail
 
-    // Trigonometric functions
+  // Trigonometric functions
   // Reference: numpy-reference/reference/generated/numpy.sin.html (etc.)
-    /** @brief Trigonometric sine, element-wise.
+  /** @brief Trigonometric sine, element-wise.
    *
    * @tparam T  Element type (floating-point, integral or complex).
    * @param x   Input array.
@@ -598,9 +598,9 @@ namespace np
     return radians(x, out);
   }
 
-    // Hyperbolic functions
+  // Hyperbolic functions
   // Reference: numpy-reference/reference/generated/numpy.sinh.html (etc.)
-    /** @brief Hyperbolic sine, element-wise.
+  /** @brief Hyperbolic sine, element-wise.
    *
    * @tparam T  Element type.
    * @param x   Input array.
@@ -724,9 +724,9 @@ namespace np
     return detail::ufunc_unary_into(x, out, [](const T& v) { return std::atanh(v); });
   }
 
-    // Exponential and logarithmic functions
+  // Exponential and logarithmic functions
   // Reference: numpy-reference/reference/generated/numpy.exp.html (etc.)
-    /** @brief Calculate the exponential of all elements.
+  /** @brief Calculate the exponential of all elements.
    *
    * @tparam T  Element type.
    * @param x   Input array.
@@ -1032,9 +1032,9 @@ namespace np
         });
   }
 
-    // Rounding functions
+  // Rounding functions
   // Reference: numpy-reference/reference/generated/numpy.floor.html (etc.)
-    /** @brief Return the floor of the input, element-wise.
+  /** @brief Return the floor of the input, element-wise.
    *
    * The floor is the largest integer <= x.
    *
@@ -1207,9 +1207,9 @@ namespace np
     return round(x, decimals, out);
   }
 
-    // Arithmetic functions
+  // Arithmetic functions
   // Reference: numpy-reference/reference/generated/numpy.absolute.html (etc.)
-    /** @brief Calculate the absolute value element-wise.
+  /** @brief Calculate the absolute value element-wise.
    *
    * For complex types, returns the magnitude. For real types,
    * returns the absolute value.
@@ -1928,9 +1928,9 @@ namespace np
         x1, x2, out, [](const T& a, const U& b) { return detail::floored_div(a, b); });
   }
 
-    // Miscellaneous
+  // Miscellaneous
   // Reference: numpy-reference/reference/generated/numpy.clip.html (etc.)
-    /** @brief Clip values to [a_min, a_max].
+  /** @brief Clip values to [a_min, a_max].
    *
    * Values below a_min are set to a_min; values above a_max
    * are set to a_max. Elements within the range are unchanged.
@@ -2073,9 +2073,9 @@ namespace np
         });
   }
 
-    // Additional math utilities (sinc, unwrap, angle, fix, ediff1d)
+  // Additional math utilities (sinc, unwrap, angle, fix, ediff1d)
   // Reference: numpy-reference/reference/routines.math.html
-    /** @brief Sinc function: sin(pi*x)/(pi*x), with sinc(0)=1.
+  /** @brief Sinc function: sin(pi*x)/(pi*x), with sinc(0)=1.
    *
    * @tparam T Floating-point element type.
    * @param x Input array.
@@ -2245,8 +2245,8 @@ namespace np
     return out;
   }
 
-    // Additional arithmetic / utility ufuncs
-    /** @brief Element-wise addition with broadcasting (np.add). */
+  // Additional arithmetic / utility ufuncs
+  /** @brief Element-wise addition with broadcasting (np.add). */
   NP_API template <detail::Numeric T, detail::Numeric U>
   NP_NODISCARD auto add(const ndarray<T>& a, const ndarray<U>& b)
       -> ndarray<std::common_type_t<T, U>>

@@ -157,10 +157,8 @@ namespace np
         return pi;
       }
 
-      inline std::size_t kmp_find(
-          const std::string& text,
-          const std::string& pat,
-          std::size_t start = 0)
+      inline std::size_t
+      kmp_find(const std::string& text, const std::string& pat, std::size_t start = 0)
       {
         if (pat.empty())
         {
@@ -213,8 +211,9 @@ namespace np
         if (start >= end || pat.size() > end - start)
           return std::string::npos;
         // Reverse KMP: search reversed strings
-        std::string rev_text(text.rbegin() + static_cast<std::ptrdiff_t>(n - end),
-                             text.rbegin() + static_cast<std::ptrdiff_t>(n - start));
+        std::string rev_text(
+            text.rbegin() + static_cast<std::ptrdiff_t>(n - end),
+            text.rbegin() + static_cast<std::ptrdiff_t>(n - start));
         std::string rev_pat(pat.rbegin(), pat.rend());
         auto pos = kmp_find(rev_text, rev_pat, 0);
         if (pos == std::string::npos)
@@ -392,9 +391,7 @@ namespace np
        * build SAM, else KMP.
        */
       inline std::size_t optimized_find(
-          const std::string& text,
-          const std::string& pat,
-          std::size_t start = 0)
+          const std::string& text, const std::string& pat, std::size_t start = 0)
       {
         if (pat.empty())
           return start <= text.size() ? start : std::string::npos;
@@ -420,11 +417,8 @@ namespace np
         return kmp_find(text, pat, start);
       }
 
-      inline int optimized_count(
-          const std::string& text,
-          const std::string& pat,
-          int start,
-          int end)
+      inline int
+      optimized_count(const std::string& text, const std::string& pat, int start, int end)
       {
         int n = static_cast<int>(text.size());
         int e = (end < 0) ? n : std::min(end, n);
@@ -434,9 +428,9 @@ namespace np
         std::string slice = text.substr(st, e - st);
         if (slice.size() < pat.size())
           return 0;
-        // Use SAM for counting occurrences (overlapping count via cnt), but we need non-overlapping count per numpy.
-        // Numpy counts non-overlapping, so we still need to iterate.
-        // Use KMP to find non-overlapping in O(n+m)
+        // Use SAM for counting occurrences (overlapping count via cnt), but we need
+        // non-overlapping count per numpy. Numpy counts non-overlapping, so we still need
+        // to iterate. Use KMP to find non-overlapping in O(n+m)
         int cnt = 0;
         auto pi = kmp_prefix(pat);
         int j = 0;
@@ -555,7 +549,8 @@ namespace np
             {
               // Find end of format specifier: flags/width/precision then type
               std::size_t q = p + 1;
-              while (q < fmt.size() && std::string("-+ #0").find(fmt[q]) != std::string::npos)
+              while (q < fmt.size()
+                     && std::string("-+ #0").find(fmt[q]) != std::string::npos)
                 ++q;
               while (q < fmt.size() && std::isdigit(static_cast<unsigned char>(fmt[q])))
                 ++q;
@@ -565,7 +560,8 @@ namespace np
                 while (q < fmt.size() && std::isdigit(static_cast<unsigned char>(fmt[q])))
                   ++q;
               }
-              if (q < fmt.size() && std::string("diouxXeEfFgGcrs").find(fmt[q]) != std::string::npos)
+              if (q < fmt.size()
+                  && std::string("diouxXeEfFgGcrs").find(fmt[q]) != std::string::npos)
               {
                 out += val;
                 p = q;
@@ -1005,7 +1001,8 @@ namespace np
           result.data()[i] = s_in;
           continue;
         }
-        std::size_t new_len = s_in.size() + positions.size() * (new_str.size() - old.size());
+        std::size_t new_len =
+            s_in.size() + positions.size() * (new_str.size() - old.size());
         std::string out;
         out.reserve(new_len);
         std::size_t prev = 0;
@@ -1237,11 +1234,10 @@ namespace np
         else
         {
           // compare suffix at end of slice without allocation
-          result.data()[i] = s.compare(
-                                 static_cast<std::size_t>(e - suffix.size()),
-                                 suffix.size(),
-                                 suffix)
-                             == 0;
+          result.data()[i] =
+              s.compare(
+                  static_cast<std::size_t>(e - suffix.size()), suffix.size(), suffix)
+              == 0;
         }
       }
       return result;
@@ -1281,7 +1277,8 @@ namespace np
         }
         else
         {
-          result.data()[i] = s.compare(static_cast<std::size_t>(st), prefix.size(), prefix) == 0;
+          result.data()[i] =
+              s.compare(static_cast<std::size_t>(st), prefix.size(), prefix) == 0;
         }
       }
       return result;
@@ -1363,7 +1360,8 @@ namespace np
           continue;
         }
         // Micro-optimized reverse KMP O(n+m) vs naive O(n*m)
-        std::size_t pos = detail::kmp_rfind(s, sub, static_cast<std::size_t>(st), static_cast<std::size_t>(e));
+        std::size_t pos = detail::kmp_rfind(
+            s, sub, static_cast<std::size_t>(st), static_cast<std::size_t>(e));
         if (pos != std::string::npos)
         {
           result.data()[i] = static_cast<int>(pos);
@@ -1928,15 +1926,15 @@ namespace np
 
     // Backward-compat flattened overload (deprecated)
     NP_API inline auto split_flattened(
-        const ndarray<std::string>& a,
-        const std::string& sep = "",
-        int maxsplit = -1) -> ndarray<std::string>
+        const ndarray<std::string>& a, const std::string& sep = "", int maxsplit = -1)
+        -> ndarray<std::string>
     {
       auto grouped = split(a, sep, maxsplit);
       std::size_t total = 0;
       for (auto& g : grouped)
         total += g.size();
-      ndarray<std::string> res = empty<std::string>(std::vector<int>{static_cast<int>(total)});
+      ndarray<std::string> res =
+          empty<std::string>(std::vector<int>{static_cast<int>(total)});
       std::size_t p = 0;
       for (auto& g : grouped)
         for (std::size_t i = 0; i < g.size(); ++i)
@@ -1973,7 +1971,8 @@ namespace np
         }
         else
         {
-          // Micro-optimized: KMP find all positions, then slice from right without O(n^2) inserts
+          // Micro-optimized: KMP find all positions, then slice from right without O(n^2)
+          // inserts
           std::vector<std::size_t> positions;
           auto pi = detail::kmp_prefix(sep);
           int j = 0;
@@ -2024,15 +2023,15 @@ namespace np
     }
 
     NP_API inline auto rsplit_flattened(
-        const ndarray<std::string>& a,
-        const std::string& sep = "",
-        int maxsplit = -1) -> ndarray<std::string>
+        const ndarray<std::string>& a, const std::string& sep = "", int maxsplit = -1)
+        -> ndarray<std::string>
     {
       auto grouped = rsplit(a, sep, maxsplit);
       std::size_t total = 0;
       for (auto& g : grouped)
         total += g.size();
-      ndarray<std::string> res = empty<std::string>(std::vector<int>{static_cast<int>(total)});
+      ndarray<std::string> res =
+          empty<std::string>(std::vector<int>{static_cast<int>(total)});
       std::size_t p = 0;
       for (auto& g : grouped)
         for (std::size_t i = 0; i < g.size(); ++i)
@@ -2066,7 +2065,8 @@ namespace np
             line += '\n';
           parts.push_back(line);
         }
-        // Handle trailing newline producing extra empty? mimic numpy: if s ends with \n and keepends false, don't add empty
+        // Handle trailing newline producing extra empty? mimic numpy: if s ends with \n
+        // and keepends false, don't add empty
         ndarray<std::string> arr =
             empty<std::string>(std::vector<int>{static_cast<int>(parts.size())});
         arr.data() = parts;
@@ -2075,15 +2075,16 @@ namespace np
       return out;
     }
 
-    NP_API inline auto splitlines_flattened(
-        const ndarray<std::string>& a,
-        bool keepends = false) -> ndarray<std::string>
+    NP_API inline auto
+    splitlines_flattened(const ndarray<std::string>& a, bool keepends = false)
+        -> ndarray<std::string>
     {
       auto grouped = splitlines(a, keepends);
       std::size_t total = 0;
       for (auto& g : grouped)
         total += g.size();
-      ndarray<std::string> res = empty<std::string>(std::vector<int>{static_cast<int>(total)});
+      ndarray<std::string> res =
+          empty<std::string>(std::vector<int>{static_cast<int>(total)});
       std::size_t p = 0;
       for (auto& g : grouped)
         for (std::size_t i = 0; i < g.size(); ++i)
@@ -2445,8 +2446,7 @@ namespace np
       {
         return ch::rsplit(data_, sep, maxsplit);
       }
-      auto splitlines(bool keepends = false) const
-          -> std::vector<ndarray<std::string>>
+      auto splitlines(bool keepends = false) const -> std::vector<ndarray<std::string>>
       {
         return ch::splitlines(data_, keepends);
       }
@@ -2550,6 +2550,11 @@ namespace np
     };
 
   } /* namespace ch */
+
+  // NumPy 2.0 alias: numpy.strings (new) and numpy.char (legacy).
+  // Reference: https://numpy.org/doc/2.2/reference/routines.strings.html
+  namespace strings = ch;
+
 } /* namespace np */
 
 #endif /* NP_CHAR_HPP */

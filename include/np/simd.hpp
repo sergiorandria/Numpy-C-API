@@ -56,8 +56,8 @@ namespace np
   namespace simd
   {
 
-        // SIMD Trait Detection
-        /**
+    // SIMD Trait Detection
+    /**
      * @brief Compile-time detection of available SIMD features.
      */
     struct Features
@@ -126,8 +126,8 @@ namespace np
 #endif
     };
 
-        // Vectorized Operations
-        /**
+    // Vectorized Operations
+    /**
      * @brief Vector width for different types and instruction sets.
      */
     template <typename T>
@@ -146,8 +146,8 @@ namespace np
 #endif
     };
 
-        // SSE2/SSE4.1 Optimizations (x86-64)
-    #ifdef NP_SIMD_SSE2
+    // SSE2/SSE4.1 Optimizations (x86-64)
+#ifdef NP_SIMD_SSE2
 
     /**
      * @brief Vectorized addition for double arrays (SSE2).
@@ -385,8 +385,8 @@ namespace np
 
 #endif // NP_SIMD_SSE2
 
-        // AVX/AVX2 Optimizations (x86-64)
-    #ifdef NP_SIMD_AVX
+    // AVX/AVX2 Optimizations (x86-64)
+#ifdef NP_SIMD_AVX
 
     /**
      * @brief Vectorized addition for double arrays (AVX).
@@ -626,8 +626,8 @@ namespace np
 
 #endif // NP_SIMD_AVX
 
-        // AVX-512 Optimizations (x86-64)
-    #ifdef NP_SIMD_AVX512
+    // AVX-512 Optimizations (x86-64)
+#ifdef NP_SIMD_AVX512
 
     /**
      * @brief Vectorized addition for double arrays (AVX-512).
@@ -861,8 +861,8 @@ namespace np
 
 #endif // NP_SIMD_AVX512
 
-        // ARM NEON Optimizations
-    #ifdef NP_SIMD_NEON
+    // ARM NEON Optimizations
+#ifdef NP_SIMD_NEON
 
     /**
      * @brief Vectorized addition for float arrays (NEON).
@@ -983,8 +983,8 @@ namespace np
 
 #endif // NP_SIMD_NEON
 
-        // Generic Dispatch Functions (Runtime Selection)
-        /**
+    // Generic Dispatch Functions (Runtime Selection)
+    /**
      * @brief Vectorized addition with automatic dispatch.
      */
     template <typename T>

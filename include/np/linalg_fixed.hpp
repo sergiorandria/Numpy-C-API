@@ -143,8 +143,8 @@ namespace np::linalg
     return dot(a, b);
   }
 
-    // Constexpr kernels (np::detail::fixed)
-    namespace detail::fixed
+  // Constexpr kernels (np::detail::fixed)
+  namespace detail::fixed
   {
 
     // LU factorization with partial pivoting of the (N x N) matrix a.
@@ -723,8 +723,8 @@ namespace np::linalg
 
   } // namespace detail::fixed
 
-    // Fixed-shape result structs
-    namespace fixed
+  // Fixed-shape result structs
+  namespace fixed
   {
 
     /** @brief QR decomposition; shapes are part of the type. */
@@ -763,8 +763,8 @@ namespace np::linalg
 
   } // namespace fixed
 
-    // Public API
-    // Trace of a square matrix: sum of the diagonal.
+  // Public API
+  // Trace of a square matrix: sum of the diagonal.
   // Reference: numpy-reference/reference/generated/numpy.trace.html
   NP_API template <typename T, int N>
   NP_NODISCARD constexpr auto trace(const ndarrayf<T, N, N>& a) ->

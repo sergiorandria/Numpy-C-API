@@ -32,9 +32,9 @@
 namespace np
 {
 
-    // Type checks
+  // Type checks
   // Reference: numpy-reference/reference/generated/numpy.isfinite.html (etc.)
-    /** @brief Test element-wise for finiteness (not infinity and not NaN).
+  /** @brief Test element-wise for finiteness (not infinity and not NaN).
    *
    * @tparam T  Element type (floating-point or complex).
    * @param x   Input array.
@@ -236,9 +236,9 @@ namespace np
     return result;
   }
 
-    // Logical operations
+  // Logical operations
   // Reference: numpy-reference/reference/generated/numpy.logical_and.html (etc.)
-    /** @brief Compute truth value of x1 AND x2 element-wise.
+  /** @brief Compute truth value of x1 AND x2 element-wise.
    *
    * Broadcasts x1 and x2 to a common shape.
    *
@@ -429,9 +429,9 @@ namespace np
     return result;
   }
 
-    // Comparison functions
+  // Comparison functions
   // Reference: numpy-reference/reference/generated/numpy.greater.html (etc.)
-    /** @brief Return (x1 > x2) element-wise.
+  /** @brief Return (x1 > x2) element-wise.
    *
    * @tparam T  Element type of x1.
    * @tparam U  Element type of x2.
@@ -517,8 +517,8 @@ namespace np
     return x1 != x2;
   }
 
-    // Free reductions all/any
-    /** @brief True if all elements are truthy (free fn). */
+  // Free reductions all/any
+  /** @brief True if all elements are truthy (free fn). */
   NP_API template <typename T>
   NP_NODISCARD bool all(const ndarray<T>& a)
   {
@@ -548,8 +548,8 @@ namespace np
     return a.any(axis, keepdims);
   }
 
-    // Type object checks
-    /** @brief True if dtype is complex (object check). */
+  // Type object checks
+  /** @brief True if dtype is complex (object check). */
   NP_API template <typename T>
   constexpr bool iscomplexobj(const T& obj)
   {
@@ -577,8 +577,8 @@ namespace np
     return isreal(a);
   }
 
-    // Membership / set operations
-    /** @brief Test element-wise membership (np.isin / np.in1d).
+  // Membership / set operations
+  /** @brief Test element-wise membership (np.isin / np.in1d).
    *
    * @tparam T Type of elements.
    * @tparam U Type of test elements.
@@ -727,9 +727,9 @@ namespace np
     return out;
   }
 
-    // Array comparison
+  // Array comparison
   // Reference: numpy-reference/reference/generated/numpy.array_equal.html (etc.)
-    /** @brief True if two arrays have the same shape and elements.
+  /** @brief True if two arrays have the same shape and elements.
    *
    * Time complexity: O(N) where N is the total element count.
    *

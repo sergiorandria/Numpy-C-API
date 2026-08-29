@@ -1803,6 +1803,413 @@ namespace np
     place(arr, mask, v);
   }
 
+  // ── Basic operations ────────────────────────────────────────────────
+
+  /**
+   * @brief Copies values from src to dst broadcasting as necessary.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.copyto.html
+   */
+  NP_API template <typename T>
+  void copyto(
+      ndarray<T>& dst,
+      const ndarray<T>& src,
+      const std::optional<ndarray<bool>>& where = std::nullopt)
+  {
+    // Broadcast src to dst shape if needed
+    ndarray<T> bsrc;
+    if (src.shape == dst.shape)
+    {
+      bsrc = src;
+    }
+    else
+    {
+      bsrc = broadcast_to(src, dst.shape);
+    }
+    if (!where.has_value())
+    {
+      detail::Odometer od(dst.shape);
+      while (!od.done())
+      {
+        dst.set(od.idx(), bsrc.get(od.idx()));
+        od.advance();
+      }
+      return;
+    }
+    const auto& mask = *where;
+    ndarray<bool> bmask;
+    if (mask.shape == dst.shape)
+    {
+      bmask = mask;
+    }
+    else
+    {
+      bmask = broadcast_to(mask, dst.shape);
+    }
+    detail::Odometer od(dst.shape);
+    while (!od.done())
+    {
+      if (bmask.get(od.idx()))
+      {
+        dst.set(od.idx(), bsrc.get(od.idx()));
+      }
+      od.advance();
+    }
+  }
+
+  /**
+   * @brief Number of dimensions (np.ndim).
+   * Reference: numpy-reference/reference/generated/numpy.ndim.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline int ndim(const ndarray<T>& a) noexcept
+  {
+    return static_cast<int>(a.ndim());
+  }
+
+  /**
+   * @brief Shape of array (np.shape).
+   * Reference: numpy-reference/reference/generated/numpy.shape.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline std::vector<int> shape(const ndarray<T>& a) noexcept
+  {
+    return a.shape;
+  }
+
+  /**
+   * @brief Size of array – total or along axis (np.size).
+   * Reference: numpy-reference/reference/generated/numpy.size.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline std::size_t size(const ndarray<T>& a) noexcept
+  {
+    return a.size();
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline int size(const ndarray<T>& a, int axis)
+  {
+    int ax = axis < 0 ? axis + static_cast<int>(a.ndim()) : axis;
+    if (ax < 0 || ax >= static_cast<int>(a.ndim()))
+    {
+      throw AxisError("size: axis out of bounds");
+    }
+    return a.shape[static_cast<std::size_t>(ax)];
+  }
+
+  /**
+   * @brief Alias for transpose (np.permute_dims).
+   * Reference: numpy-reference/reference/generated/numpy.permute_dims.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto permute_dims(const ndarray<T>& a) -> ndarray<T>
+  {
+    return a.transpose();
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto permute_dims(const ndarray<T>& a, const std::vector<int>& axes)
+      -> ndarray<T>
+  {
+    return a.transpose(axes);
+  }
+
+  /**
+   * @brief Transpose last two axes (np.matrix_transpose).
+   * Reference: numpy-reference/reference/generated/numpy.matrix_transpose.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto matrix_transpose(const ndarray<T>& x) -> ndarray<T>
+  {
+    if (x.ndim() < 2)
+    {
+      throw std::invalid_argument("matrix_transpose: need at least 2-D");
+    }
+    int ax1 = static_cast<int>(x.ndim()) - 2;
+    int ax2 = static_cast<int>(x.ndim()) - 1;
+    return x.swapaxes(ax1, ax2);
+  }
+
+  /**
+   * @brief Split array into sequence along axis, removing axis (np.unstack).
+   * Reference: numpy-reference/reference/generated/numpy.unstack.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto unstack(const ndarray<T>& x, int axis = 0) -> std::vector<ndarray<T>>
+  {
+    int ax = axis < 0 ? axis + static_cast<int>(x.ndim()) : axis;
+    if (ax < 0 || ax >= static_cast<int>(x.ndim()))
+    {
+      throw AxisError("unstack: axis out of bounds");
+    }
+    int n = x.shape[static_cast<std::size_t>(ax)];
+    std::vector<int> idx_spec;
+    idx_spec.reserve(1);
+    // Reuse split logic: slice along axis
+    std::vector<ndarray<T>> out;
+    out.reserve(n);
+    for (int i = 0; i < n; ++i)
+    {
+      std::vector<int> new_shape = x.shape;
+      new_shape.erase(new_shape.begin() + ax);
+      if (new_shape.empty())
+      {
+        new_shape = {1};
+      }
+      // Build slice by copying with fixed index on ax
+      ndarray<T> sl(new_shape.empty() ? std::vector<int>{1} : new_shape);
+      // Iterate over output indices and map to input
+      detail::Odometer od(new_shape.empty() ? std::vector<int>{1} : new_shape);
+      // Need shape for od: if we erased axis, od shape is new_shape
+      std::vector<int> od_shape = new_shape;
+      if (od_shape.empty())
+      {
+        od_shape = {1};
+      }
+      detail::Odometer od2(od_shape);
+      while (!od2.done())
+      {
+        const auto& oidx = od2.idx();
+        std::vector<std::size_t> src_idx(x.ndim(), 0);
+        for (std::size_t d = 0, o = 0; d < x.ndim(); ++d)
+        {
+          if (static_cast<int>(d) == ax)
+          {
+            src_idx[d] = static_cast<std::size_t>(i);
+          }
+          else
+          {
+            src_idx[d] = oidx[o++];
+          }
+        }
+        std::vector<std::size_t> dst_idx = oidx;
+        // For scalar case where new_shape was empty
+        if (new_shape.empty())
+        {
+          sl.data()[0] = x.get(src_idx);
+          break;
+        }
+        sl.set(dst_idx, x.get(src_idx));
+        od2.advance();
+      }
+      if (new_shape.empty())
+      {
+        // sl is shape {1} but unstack of 1-D with axis 0 and n elements
+        // should produce 0-D scalars; keep as 0-D view: reshape to {}
+        // Our ndarray doesn't support 0-D empty vector easily; keep 1-elem
+        // but squeeze?
+        out.push_back(sl);
+        continue;
+      }
+      out.push_back(std::move(sl));
+    }
+    return out;
+  }
+
+  /**
+   * @brief Return new array with specified shape, repeating data (np.resize).
+   * Reference: numpy-reference/reference/generated/numpy.resize.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto resize(const ndarray<T>& a, const std::vector<int>& new_shape)
+      -> ndarray<T>
+  {
+    if (new_shape.empty())
+    {
+      throw std::invalid_argument("resize: new_shape empty");
+    }
+    for (int d : new_shape)
+    {
+      if (d < 0)
+      {
+        throw std::invalid_argument("resize: negative dimension");
+      }
+    }
+    std::size_t total = 1;
+    for (int d : new_shape)
+    {
+      total *= static_cast<std::size_t>(d);
+    }
+    if (total == 0)
+    {
+      return ndarray<T>(new_shape);
+    }
+    ndarray<T> out(new_shape);
+    auto flat = a.ravel();
+    std::size_t src_n = flat.size();
+    if (src_n == 0)
+    {
+      // Fill with zeros if source empty (numpy would fill with 0)
+      for (std::size_t i = 0; i < total; ++i)
+      {
+        out.data()[i] = T{0};
+      }
+      return out;
+    }
+    for (std::size_t i = 0; i < total; ++i)
+    {
+      out.data()[i] = flat.data()[i % src_n];
+    }
+    return out;
+  }
+
+  /**
+   * @brief Pad array (np.pad).
+   *
+   * Supports modes: "constant" (default), "edge", "wrap", "reflect",
+   * "symmetric". `pad_width` may be an int (all axes/sides) or a vector
+   * of (before, after) pairs per axis. For ND, each axis may have its
+   * own pair.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.pad.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto
+  pad(const ndarray<T>& array,
+      const std::vector<std::pair<int, int>>& pad_width,
+      const std::string& mode = "constant",
+      T constant_values = T{0}) -> ndarray<T>
+  {
+    if (pad_width.size() != array.ndim())
+    {
+      throw std::invalid_argument("pad: pad_width size must match ndim");
+    }
+    std::vector<int> new_shape(array.ndim());
+    for (std::size_t d = 0; d < array.ndim(); ++d)
+    {
+      int w0 = pad_width[d].first;
+      int w1 = pad_width[d].second;
+      if (w0 < 0 || w1 < 0)
+      {
+        throw std::invalid_argument("pad: negative pad_width");
+      }
+      new_shape[d] = array.shape[d] + w0 + w1;
+    }
+    ndarray<T> out(new_shape, array.type, constant_values);
+    if (mode == "constant")
+    {
+      // already filled with constant_values, copy interior
+      detail::Odometer od(array.shape);
+      while (!od.done())
+      {
+        const auto& idx = od.idx();
+        std::vector<std::size_t> dst_idx(idx.size());
+        for (std::size_t d = 0; d < idx.size(); ++d)
+        {
+          dst_idx[d] = idx[d] + static_cast<std::size_t>(pad_width[d].first);
+        }
+        out.set(dst_idx, array.get(idx));
+        od.advance();
+      }
+      return out;
+    }
+    if (mode == "edge" || mode == "wrap" || mode == "reflect" || mode == "symmetric")
+    {
+      detail::Odometer od(new_shape);
+      while (!od.done())
+      {
+        const auto& didx = od.idx();
+        std::vector<std::size_t> src_idx(array.ndim());
+        bool in_interior = true;
+        for (std::size_t d = 0; d < array.ndim(); ++d)
+        {
+          int p0 = pad_width[d].first;
+          int n = array.shape[d];
+          int pos = static_cast<int>(didx[d]);
+          if (pos < p0 || pos >= p0 + n)
+          {
+            in_interior = false;
+          }
+        }
+        if (in_interior)
+        {
+          // Already handled by constant path? For non-constant we still need interior
+          // copy
+          std::vector<std::size_t> sidx(array.ndim());
+          for (std::size_t d = 0; d < array.ndim(); ++d)
+          {
+            sidx[d] = didx[d] - static_cast<std::size_t>(pad_width[d].first);
+          }
+          out.set(didx, array.get(sidx));
+        }
+        else
+        {
+          // Map didx to src per mode
+          for (std::size_t d = 0; d < array.ndim(); ++d)
+          {
+            int p0 = pad_width[d].first;
+            int n = array.shape[d];
+            int pos = static_cast<int>(didx[d]) - p0;
+            int src = 0;
+            if (mode == "edge")
+            {
+              src = std::clamp(pos, 0, n - 1);
+            }
+            else if (mode == "wrap")
+            {
+              src = ((pos % n) + n) % n;
+            }
+            else if (mode == "reflect")
+            {
+              // reflect without repeating edge: 0 1 2 | 1 0 | 1 2 ...
+              int period = 2 * n - 2;
+              if (period <= 0)
+              {
+                src = 0;
+              }
+              else
+              {
+                int p = ((pos % period) + period) % period;
+                src = p < n ? p : period - p;
+              }
+            }
+            else // symmetric (reflect with edge)
+            {
+              int period = 2 * n;
+              if (period == 0)
+              {
+                src = 0;
+              }
+              else
+              {
+                int p = ((pos % period) + period) % period;
+                src = p < n ? p : period - 1 - p;
+              }
+            }
+            src_idx[d] = static_cast<std::size_t>(src);
+          }
+          out.set(didx, array.get(src_idx));
+        }
+        od.advance();
+      }
+      return out;
+    }
+    throw std::invalid_argument("pad: unsupported mode '" + mode + "'");
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto
+  pad(const ndarray<T>& array,
+      int pad_width,
+      const std::string& mode = "constant",
+      T constant_values = T{0}) -> ndarray<T>
+  {
+    std::vector<std::pair<int, int>> pw(array.ndim(), {pad_width, pad_width});
+    return pad(array, pw, mode, constant_values);
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto
+  pad(const ndarray<T>& array,
+      std::pair<int, int> pad_width,
+      const std::string& mode = "constant",
+      T constant_values = T{0}) -> ndarray<T>
+  {
+    std::vector<std::pair<int, int>> pw(array.ndim(), pad_width);
+    return pad(array, pw, mode, constant_values);
+  }
+
 } // namespace np
 
 #endif // NP_MANIPULATION_HPP
