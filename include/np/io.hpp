@@ -1252,6 +1252,11 @@ namespace np
       std::ifstream is(path);
       return static_cast<bool>(is);
     }
+
+    std::ifstream open(const std::string& path) const
+    {
+      return std::ifstream(abspath(path));
+    }
   };
 
   struct PrintOptions
@@ -1265,12 +1270,12 @@ namespace np
 
   inline PrintOptions _print_opts{};
 
-  NP_API inline void set_printoptions(
+  NP_API inline auto set_printoptions(
       int precision = 8,
       int threshold = 1000,
       int linewidth = 75,
       const std::string& floatmode = "maxprec",
-      bool legacy = false)
+      bool legacy = false) -> void
   {
     _print_opts.precision = precision;
     _print_opts.threshold = threshold;
@@ -1279,10 +1284,48 @@ namespace np
     _print_opts.legacy = legacy;
   }
 
-  NP_API inline PrintOptions get_printoptions()
+  NP_API inline auto get_printoptions() -> PrintOptions
   {
     return _print_opts;
   }
+
+  struct printoptions
+  {
+    PrintOptions old;
+    explicit printoptions(
+        int precision = 8,
+        int threshold = 1000,
+        int linewidth = 75,
+        const std::string& floatmode = "maxprec",
+        bool legacy = false)
+        : old(_print_opts)
+    {
+      set_printoptions(precision, threshold, linewidth, floatmode, legacy);
+    }
+    ~printoptions()
+    {
+      _print_opts = old;
+    }
+  };
+
+  namespace lib
+  {
+    namespace format
+    {
+      NP_API inline auto open_memmap(
+          const std::string& filename,
+          const std::string& mode = "r+",
+          dtype dt = dtype::float64,
+          const std::vector<int>& shape = {},
+          std::size_t offset = 0) -> std::string
+      {
+        (void)dt;
+        (void)shape;
+        (void)offset;
+        return ::np::open_memmap(filename, mode, dt, shape, offset);
+      }
+    } // namespace format
+  } // namespace lib
 
   NP_API inline auto array_str(const ndarray<double>& a) -> std::string
   {
