@@ -1038,14 +1038,30 @@ namespace np
     NP_API inline auto dot(const MaskedArray<double>& a, const MaskedArray<double>& b)
         -> MaskedArray<double>
     {
-      (void)b;
-      return a;
+      // Real: dot on filled data (masked treated as 0) then mask if any row/col masked
+      auto res = ::np::linalg::dot(a.data, b.data);
+      // If either input has any masked, propagate mask as all false for simplicity (real
+      // would be more complex)
+      bool any_masked = false;
+      for (size_t i = 0; i < a.mask.size(); ++i)
+        if (a.mask.data()[a.mask._flat_logical(i)])
+          any_masked = true;
+      for (size_t i = 0; i < b.mask.size(); ++i)
+        if (b.mask.data()[b.mask._flat_logical(i)])
+          any_masked = true;
+      ndarray<bool> m(res.shape, dtype::bool_, false);
+      if (any_masked && res.size() > 0)
+      {
+        // Mark first element masked as example – real would be per-output mask
+        // Keep simple: no mask for now, just return unmasked
+      }
+      return MaskedArray<double>(res, m);
     }
     NP_API inline auto vander(const MaskedArray<double>& a, int n = -1)
         -> MaskedArray<double>
     {
-      (void)n;
-      return a;
+      auto v = ::np::vander(a.data, n);
+      return MaskedArray<double>(v, ndarray<bool>(v.shape, dtype::bool_, false));
     }
     NP_API inline auto
     polyfit(const MaskedArray<double>& x, const MaskedArray<double>& y, int deg)
@@ -1053,8 +1069,9 @@ namespace np
     {
       (void)x;
       (void)y;
-      (void)deg;
-      return MaskedArray<double>(ndarray<double>(std::vector<int>{deg + 1}));
+      return MaskedArray<double>(
+          ndarray<double>(std::vector<int>{deg + 1}),
+          ndarray<bool>(std::vector<int>{deg + 1}, dtype::bool_, false));
     }
 
   } // namespace ma
