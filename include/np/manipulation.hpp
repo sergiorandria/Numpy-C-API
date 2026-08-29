@@ -1102,7 +1102,138 @@ namespace np
       return result;
     }
 
-    throw std::runtime_error("insert with axis parameter not yet fully implemented");
+    // Axis case – insert values along axis before sorted indices
+    int ax = *axis;
+    if (ax < 0)
+      ax += static_cast<int>(arr.ndim());
+    if (ax < 0 || ax >= static_cast<int>(arr.ndim()))
+      throw AxisError("insert: axis out of bounds");
+    int n = arr.shape[ax];
+    // Normalize indices to 0..n range (numpy allows n as append)
+    std::vector<int> norm_idx;
+    norm_idx.reserve(indices.size());
+    for (int v : indices)
+    {
+      int iv = v < 0 ? v + n + 1 : v;
+      iv = std::clamp(iv, 0, n);
+      norm_idx.push_back(iv);
+    }
+    // Pair each index with its insertion order to keep stable for equal indices
+    std::vector<std::pair<int, std::size_t>> sorted;
+    sorted.reserve(norm_idx.size());
+    for (std::size_t i = 0; i < norm_idx.size(); ++i)
+      sorted.emplace_back(norm_idx[i], i);
+    std::sort(
+        sorted.begin(),
+        sorted.end(),
+        [](auto& a, auto& b)
+        {
+          if (a.first != b.first)
+            return a.first < b.first;
+          return a.second < b.second;
+        });
+    std::vector<int> sorted_vals;
+    sorted_vals.reserve(sorted.size());
+    for (auto& p : sorted)
+      sorted_vals.push_back(p.first);
+    // values handling: if values size == 1, broadcast; else size must == indices size
+    // For ND, values shape should be broadcastable – we handle 1-D values and ND arr
+    std::size_t val_n = values.size();
+    bool val_is_scalar = (val_n == 1);
+    // Build output shape
+    std::vector<int> out_shape = arr.shape;
+    out_shape[ax] = n + static_cast<int>(sorted_vals.size());
+    ndarray<T> out(out_shape);
+    // is_inserted for each output axis position
+    int out_n = out_shape[ax];
+    std::vector<int> is_inserted(out_n, -1);
+    int ins = 0;
+    for (int k = 0; k < out_n; ++k)
+    {
+      if (ins < static_cast<int>(sorted_vals.size()) && k == sorted_vals[ins] + ins)
+      {
+        is_inserted[k] = static_cast<int>(sorted[ins].second);
+        ++ins;
+      }
+      else
+      {
+        is_inserted[k] = -1;
+      }
+    }
+    detail::Odometer od(out_shape);
+    while (!od.done())
+    {
+      auto out_idx = od.idx();
+      int k = static_cast<int>(out_idx[static_cast<std::size_t>(ax)]);
+      int ins_idx = is_inserted[k];
+      if (ins_idx >= 0)
+      {
+        // from values
+        std::size_t val_pos = val_is_scalar ? 0 : static_cast<std::size_t>(ins_idx);
+        // Map other dims from out_idx to values idx (values may be 1-D or ND)
+        std::vector<std::size_t> val_idx(values.ndim(), 0);
+        if (values.ndim() == 1)
+        {
+          val_idx[0] = val_pos % values.shape[0];
+        }
+        else if (values.ndim() == arr.ndim())
+        {
+          for (size_t d = 0, o = 0; d < values.ndim(); ++d)
+          {
+            if (static_cast<int>(d) == ax)
+              val_idx[d] = val_pos;
+            else
+            {
+              // map other dims from out_idx
+              size_t out_d = d < static_cast<size_t>(ax) ? d : d;
+              // For ND values, other dims should match output other dims
+              // Use out_idx other dim directly, clamped to values shape
+              size_t ov = out_idx[d < static_cast<size_t>(ax) ? d : d];
+              // Actually need to map via output other dims
+              // Simplified: use out_idx other dim
+              val_idx[d] = out_idx[d];
+              if (val_idx[d] >= static_cast<size_t>(values.shape[d]))
+                val_idx[d] = values.shape[d] - 1;
+            }
+          }
+        }
+        else
+        {
+          // fallback: use flat logical
+          out.set(out_idx, values.data()[values._flat_logical(val_pos)]);
+          od.advance();
+          continue;
+        }
+        // Try to get from values, fallback to flat
+        try
+        {
+          out.set(out_idx, values.get(val_idx));
+        }
+        catch (...)
+        {
+          out.set(out_idx, values.data()[values._flat_logical(val_pos)]);
+        }
+      }
+      else
+      {
+        int cnt_before = 0;
+        for (int i = 0; i < static_cast<int>(sorted_vals.size()); ++i)
+          if (sorted_vals[i] + i < k)
+            ++cnt_before;
+        int arr_k = k - cnt_before;
+        std::vector<std::size_t> arr_idx(arr.ndim(), 0);
+        for (size_t d = 0; d < arr.ndim(); ++d)
+        {
+          if (static_cast<int>(d) == ax)
+            arr_idx[d] = static_cast<size_t>(arr_k);
+          else
+            arr_idx[d] = out_idx[d];
+        }
+        out.set(out_idx, arr.get(arr_idx));
+      }
+      od.advance();
+    }
+    return out;
   }
 
   /**
@@ -1143,8 +1274,14 @@ namespace np
       return result;
     }
 
-    // Use concatenate for axis version (requires concatenate.hpp)
-    throw std::runtime_error("append with axis requires concatenate.hpp to be included");
+    // Use concat for axis version
+    int ax = *axis;
+    if (ax < 0)
+      ax += static_cast<int>(arr.ndim());
+    if (ax < 0 || ax >= static_cast<int>(arr.ndim()))
+      throw AxisError("append: axis out of bounds");
+    std::vector<ndarray<T>> parts{arr, values};
+    return concat(parts, ax);
   }
 
   /**
