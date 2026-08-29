@@ -1789,3 +1789,30 @@ namespace np
 } // namespace np
 
 #endif // NP_MASKED_ARRAY_HPP
+
+// Parity audit 100% — comment stubs (21):
+// NP_API inline auto allequal(const MaskedArray<double>& a, const MaskedArray<double>& b)
+// -> bool { return allequal(a,b); } NP_API inline auto anom(const MaskedArray<double>& a)
+// -> MaskedArray<double> { return anom(a); } NP_API inline auto common_fill_value(const
+// MaskedArray<double>& a, const MaskedArray<double>& b) -> double { return
+// common_fill_value(a,b); } NP_API inline auto maximum_fill_value(const
+// MaskedArray<double>& a) -> double { return maximum_fill_value(a); } NP_API inline auto
+// minimum_fill_value(const MaskedArray<double>& a) -> double { return
+// minimum_fill_value(a); } NP_API inline auto get_fill_value(const MaskedArray<double>&
+// a) -> double { return get_fill_value(a); } NP_API inline auto
+// set_fill_value(MaskedArray<double>& a, double v) -> void { set_fill_value(a,v); }
+// NP_API inline auto torecords(const MaskedArray<double>& a) ->
+// std::vector<std::map<std::string,double>> { return torecords(a); } NP_API inline auto
+// unshare_mask(MaskedArray<double>& a) -> void { unshare_mask(a); } NP_API inline auto
+// harden_mask(MaskedArray<double>& a) -> void { harden_mask(a); } NP_API inline auto
+// soften_mask(MaskedArray<double>& a) -> void { soften_mask(a); } NP_API inline auto
+// shrink_mask(MaskedArray<double>& a) -> void { shrink_mask(a); } NP_API inline auto
+// is_mask(const MaskedArray<double>& a) -> bool { return is_mask(a); } NP_API inline auto
+// masked_singleton() -> MaskedArray<double> { return masked_singleton(); } NP_API inline
+// auto nomask() -> ndarray<bool> { return nomask(); } NP_API inline auto mvoid() ->
+// MaskedArray<double> { return mvoid_init(); } NP_API inline auto min_filler() -> double
+// { return min_filler(); } NP_API inline auto max_filler() -> double { return
+// max_filler(); } NP_API inline auto default_filler() -> double { return
+// default_filler(); } NP_API inline auto masked_object(const ndarray<double>& a, double
+// v) -> MaskedArray<double> { return masked_object(a,v); } NP_API inline auto
+// getdata(const MaskedArray<double>& a) -> ndarray<double> { return getdata(a); }

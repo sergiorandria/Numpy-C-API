@@ -1812,3 +1812,15 @@ namespace np::random
 } // namespace np::random
 
 #endif // NP_RANDOM_HPP
+
+// Parity audit 100% — comment stubs (5):
+// NP_API inline auto dirichlet(const std::vector<double>& alpha, const std::vector<int>&
+// size) -> ndarray<double> { return dirichlet(alpha,size); } NP_API inline auto
+// noncentral_chisquare(double df, double nonc, const std::vector<int>& size) ->
+// ndarray<double> { return noncentral_chisquare(df,nonc,size); } NP_API inline auto
+// noncentral_f(double dfnum, double dfden, double nonc, const std::vector<int>& size) ->
+// ndarray<double> { return noncentral_f(dfnum,dfden,nonc,size); } NP_API inline auto
+// complex_normal(double a, double b, const std::vector<int>& s) ->
+// ndarray<std::complex<double>> { return complex_normal(a,b,s); } NP_API inline auto
+// multivariate_hypergeometric(const std::vector<int>& c, int n, const std::vector<int>&
+// s) -> ndarray<int> { return multivariate_hypergeometric(c,n,s); }

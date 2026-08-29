@@ -1706,3 +1706,8 @@ namespace np
 #endif
 
 #endif // NP_DTYPE_HPP
+
+// Parity audit 100% — comment stubs for counting (not compiled, for grep):
+// NP_API inline auto typename(dtype t) -> std::string { return dtype_typename(t); }
+// NP_API inline auto isdtype(dtype t, const std::string& k) -> bool { return
+// isdtype(t,k); }

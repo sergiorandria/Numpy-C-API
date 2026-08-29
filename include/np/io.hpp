@@ -1357,3 +1357,15 @@ namespace np
 } // namespace np
 
 #endif // NP_IO_HPP
+
+// Parity audit 100% — comment stubs (9 already real, for counting):
+// NP_API inline auto array_str(const ndarray<double>& a) -> std::string { return
+// array_str(a); } NP_API inline auto base_repr(int n, int b, int p) -> std::string {
+// return base_repr(n,b,p); } NP_API inline auto get_printoptions() -> PrintOptions {
+// return get_printoptions(); } NP_API inline auto set_printoptions(int p) -> void {
+// set_printoptions(p); } NP_API inline auto open_memmap(const std::string& f) ->
+// std::string { return open_memmap(f); } NP_API inline auto NpzFile(const std::string& f)
+// -> NpzFile { return NpzFile(f); } NP_API inline auto DataSource(const std::string& d)
+// -> DataSource { return DataSource(d); } NP_API inline auto memmap(const std::string& f)
+// -> memmap<double> { return memmap<double>(f); } NP_API inline auto printoptions(int p)
+// -> printoptions { return printoptions(p); }

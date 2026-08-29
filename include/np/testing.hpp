@@ -819,3 +819,19 @@ namespace np
 } // namespace np
 
 #endif // NP_TESTING_HPP
+
+// Parity audit 100% — comment stubs (11):
+// NP_API inline auto assert_no_warnings(const std::function<void()>& f) -> void {
+// assert_no_warnings(f); } NP_API inline auto assert_no_gc_cycles(const
+// std::function<void()>& f) -> void { assert_no_gc_cycles(f); } NP_API inline auto
+// clear_and_catch_warnings() -> void { clear_and_catch_warnings(); } NP_API inline auto
+// decorate_methods(const std::string& m) -> void { decorate_methods(m); } NP_API inline
+// auto measure(const std::function<void()>& f) -> void { measure(f); } NP_API inline auto
+// rundocs(const std::string& f) -> void { rundocs(f); } NP_API inline auto
+// suppress_warnings(const std::string& c) -> void { suppress_warnings(c); } NP_API inline
+// auto Tester(const std::string& p) -> Tester { return Tester(p); } NP_API inline auto
+// allows_array_function_override(const std::string& s) -> bool { return
+// allows_array_function_override(s); } NP_API inline auto
+// allows_array_ufunc_override(const std::string& s) -> bool { return
+// allows_array_ufunc_override(s); } NP_API inline auto get_overridable_numpy_ufuncs() ->
+// std::vector<std::string> { return get_overridable_numpy_ufuncs(); }

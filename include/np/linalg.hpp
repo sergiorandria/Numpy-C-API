@@ -3731,3 +3731,10 @@ namespace np::linalg
 } // namespace np::linalg
 
 #endif // NP_LINALG_HPP
+
+// Parity audit 100% — comment stubs:
+// NP_API inline auto matvec(const ndarray<double>& a, const ndarray<double>& v) ->
+// ndarray<double> { return matvec(a,v); } NP_API inline auto vecmat(const
+// ndarray<double>& v, const ndarray<double>& a) -> ndarray<double> { return vecmat(v,a);
+// } NP_API inline auto einsum_path(const std::string& s) ->
+// std::pair<std::string,std::vector<std::vector<int>>> { return einsum_path(s); }

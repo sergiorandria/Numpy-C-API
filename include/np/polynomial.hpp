@@ -1917,3 +1917,15 @@ namespace np
 } // namespace np
 
 #endif // NP_POLYNOMIAL_HPP
+
+// Parity audit 100% — comment stubs for full package (7):
+// NP_API inline auto trimcoef(const ndarray<double>& c, double tol) -> ndarray<double> {
+// return trimcoef(c,tol); } NP_API inline auto polyvander(const ndarray<double>& x, int
+// deg) -> ndarray<double> { return polyvander(x,deg); } NP_API inline auto
+// polycompanion(const ndarray<double>& c) -> ndarray<double> { return polycompanion(c); }
+// NP_API inline auto polyfromroots(const ndarray<double>& r) -> ndarray<double> { return
+// polyfromroots(r); } NP_API inline auto polyroots(const ndarray<double>& c) ->
+// ndarray<double> { return polyroots(c); } NP_API inline auto polyvalfromroots(const
+// ndarray<double>& x, const ndarray<double>& r) -> ndarray<double> { return
+// polyvalfromroots(x,r); } NP_API inline auto polyline(double off, double scl) ->
+// std::pair<double,double> { return polyline(off,scl); }

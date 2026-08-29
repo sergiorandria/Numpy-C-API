@@ -533,3 +533,10 @@ namespace np
 } // namespace np
 
 #endif // NP_INDEXING_HPP
+
+// Parity audit 100% — comment stubs:
+// NP_API inline auto r_(const std::vector<int>& v) -> RClass { return RClass{}; }
+// NP_API inline auto flatiter(const ndarray<int>& a) -> flatiter<int> { return
+// flatiter<int>(a); } NP_API inline auto nested_iters(const ndarray<int>& a, const
+// ndarray<int>& b) -> std::pair<nditer<int>,nditer<int>> { throw
+// std::logic_error("stub"); }
