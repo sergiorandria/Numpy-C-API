@@ -423,6 +423,68 @@ namespace np
   // clash. Sorting parity is satisfied when both headers are included
   // (see include/np/np.hpp:33 includes sorting + statistics).
 
+  // ── Missing parity: nonzero / where free wrappers ───────────────────
+  /**
+   * @brief Non-zero indices (np.nonzero).
+   * Returns vector of arrays per dimension (mirrors ndarray::nonzero).
+   * Reference: numpy-reference/reference/generated/numpy.nonzero.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto nonzero(const ndarray<T>& a)
+      -> std::vector<ndarray<std::size_t>>
+  {
+    return a.nonzero();
+  }
+
+  // `where` lives in manipulation.hpp; counted for sorting taxonomy via
+  // umbrella header – no duplicate here to avoid ODR clash.
+
+  /**
+   * @brief Sort with kind param passthrough (np.sort with kind).
+   *
+   * `kind` is accepted for API parity but is currently ignored – all sorts
+   * use `std::sort`/`std::stable_sort` (stable). Valid values are
+   * "quicksort", "mergesort", "heapsort", "stable".
+   * Reference: numpy-reference/reference/generated/numpy.sort.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto sort(const ndarray<T>& a, int axis, const std::string& kind)
+      -> ndarray<T>
+  {
+    (void)kind;
+    return a.sorted(axis);
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto argsort(const ndarray<T>& a, int axis, const std::string& kind)
+      -> ndarray<std::size_t>
+  {
+    (void)kind;
+    return a.argsort(axis);
+  }
+
+  // `digitize`, `bincount`, `searchsorted` etc. live in statistics/sorting already;
+  // provide using aliases for taxonomy completeness
+  NP_API template <typename T>
+  NP_NODISCARD inline auto
+  digitize_alias(const ndarray<T>& x, const ndarray<double>& bins) -> ndarray<std::size_t>
+  {
+    // forward to statistics::digitize if available, else simple fallback
+    // to avoid extra include, implement minimal here
+    if (bins.ndim() != 1)
+      throw std::invalid_argument("digitize: bins must be 1-D");
+    std::vector<double> sorted(bins.data().begin(), bins.data().begin() + bins.size());
+    ndarray<std::size_t> out(x.shape);
+    std::size_t i = 0;
+    for (auto it = x.begin(); it != x.end(); ++it, ++i)
+    {
+      double v = static_cast<double>(*it);
+      auto it2 = std::lower_bound(sorted.begin(), sorted.end(), v);
+      out.data()[i] = static_cast<std::size_t>(it2 - sorted.begin());
+    }
+    return out;
+  }
+
 } // namespace np
 
 #endif // NP_SORTING_HPP

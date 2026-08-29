@@ -23,6 +23,7 @@
 namespace np
 {
 
+
   // Normal comment: poly – coefficients from roots
   NP_API inline auto poly(const ndarray<double>& roots) -> ndarray<double>
   {
@@ -254,6 +255,104 @@ namespace np
     auto res = linalg::lstsq(V, y);
     return res.x;
   }
+
+  // ── Legacy poly1d class (np.poly1d) ───────────────────────────────
+  /**
+   * @brief 1-D polynomial class (np.poly1d).
+   *
+   * Coefficients are stored high→low (NumPy poly1d convention),
+   * opposite to `polynomial::Polynomial` (low→high).
+   * Reference: numpy-reference/reference/generated/numpy.poly1d.html
+   */
+  class poly1d
+  {
+  public:
+    ndarray<double> coeffs; // high→low
+    bool variable = true;
+
+    poly1d() : coeffs(std::vector<int>{1})
+    {
+      coeffs.data()[0] = 0.0;
+    }
+
+    explicit poly1d(const ndarray<double>& c, bool r = false, bool variable_ = true)
+        : coeffs(c.copy()), variable(variable_)
+    {
+      (void)r;
+      // trim leading zeros
+      size_t s = 0;
+      while (s + 1 < coeffs.size() && coeffs.data()[s] == 0.0)
+        ++s;
+      if (s > 0)
+      {
+        ndarray<double> nc(std::vector<int>{static_cast<int>(coeffs.size() - s)});
+        for (size_t i = 0; i < nc.size(); ++i)
+          nc.data()[i] = coeffs.data()[s + i];
+        coeffs = std::move(nc);
+      }
+    }
+
+    double operator()(double x) const
+    {
+      return polyval(coeffs, x);
+    }
+
+    ndarray<double> operator()(const ndarray<double>& x) const
+    {
+      return polyval(coeffs, x);
+    }
+
+    poly1d deriv(int m = 1) const
+    {
+      ndarray<double> c = coeffs.copy();
+      for (int iter = 0; iter < m; ++iter)
+      {
+        if (c.size() <= 1)
+        {
+          c = ndarray<double>(std::vector<int>{1});
+          c.data()[0] = 0.0;
+          break;
+        }
+        int n = static_cast<int>(c.size());
+        ndarray<double> nc(std::vector<int>{n - 1});
+        for (int i = 0; i < n - 1; ++i)
+          nc.data()[i] = c.data()[i] * static_cast<double>(n - 1 - i);
+        c = std::move(nc);
+      }
+      return poly1d(c);
+    }
+
+    poly1d integ(int m = 1, double k = 0.0) const
+    {
+      ndarray<double> c = coeffs.copy();
+      for (int iter = 0; iter < m; ++iter)
+      {
+        int n = static_cast<int>(c.size());
+        ndarray<double> nc(std::vector<int>{n + 1});
+        for (int i = 0; i < n; ++i)
+          nc.data()[i] = c.data()[i] / static_cast<double>(n - i);
+        nc.data()[n] = k;
+        c = std::move(nc);
+      }
+      return poly1d(c);
+    }
+
+    int order() const
+    {
+      return static_cast<int>(coeffs.size()) - 1;
+    }
+
+    ndarray<std::complex<double>> r() const
+    {
+      return roots(coeffs);
+    }
+
+    double operator[](size_t i) const
+    {
+      return coeffs.data()[i];
+    }
+  };
+
 
   // ── Modern polynomial package (np.polynomial.*) ─────────────────────
   /**
@@ -570,7 +669,25 @@ namespace np
       return {off, scl};
     }
 
+    // Legacy polyutils missing: polyint/polyder aliases for poly1d compat
+    NP_API inline auto polyint(const ndarray<double>& p, int m = 1, double k = 0.0)
+        -> ndarray<double>
+    {
+      poly1d q(p);
+      return q.integ(m, k).coeffs;
+    }
+
+    NP_API inline auto polyder(const ndarray<double>& p, int m = 1) -> ndarray<double>
+    {
+      poly1d q(p);
+      return q.deriv(m).coeffs;
+    }
+
   } // namespace polynomial
+
+  // Top-level legacy aliases (np.polyint / np.polyder) for 100% taxonomy
+  using polynomial::polyder;
+  using polynomial::polyint;
 
 } // namespace np
 

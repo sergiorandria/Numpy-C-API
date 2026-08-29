@@ -83,7 +83,6 @@ namespace np
     inline constexpr double Inf = std::numeric_limits<double>::infinity();
     inline constexpr double PZERO = 0.0;
     inline constexpr double NZERO = -0.0;
-
   } // namespace constants
 
   // Top-level mirrors – `np::pi`, `np::e`, etc. as in Python `numpy.pi`
