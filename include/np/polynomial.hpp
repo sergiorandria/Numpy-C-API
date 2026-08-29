@@ -388,10 +388,111 @@ namespace np
         return Polynomial(nc, domain, window);
       }
 
+      int degree() const
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) == 0.0)
+          --n;
+        return n - 1;
+      }
+
+      Polynomial copy() const
+      {
+        return Polynomial(coef, domain, window);
+      }
+
+      Polynomial convert(const std::string& /*kind*/ = "Polynomial") const
+      {
+        return copy();
+      }
+
+      Polynomial cast(const ndarray<double>& c) const
+      {
+        (void)c;
+        return Polynomial(c, domain, window);
+      }
+
+      static Polynomial basis(int deg)
+      {
+        ndarray<double> c(std::vector<int>{deg + 1});
+        for (int i = 0; i <= deg; ++i)
+          c.data()[i] = (i == deg ? 1.0 : 0.0);
+        return Polynomial(c);
+      }
+
+      static Polynomial identity()
+      {
+        ndarray<double> c(std::vector<int>{2});
+        c.data()[0] = 0.0;
+        c.data()[1] = 1.0;
+        return Polynomial(c);
+      }
+
+      bool has_samecoef(const Polynomial& other) const
+      {
+        if (coef.size() != other.coef.size())
+          return false;
+        for (size_t i = 0; i < coef.size(); ++i)
+          if (coef.data()[i] != other.coef.data()[i])
+            return false;
+        return true;
+      }
+
+      bool has_samedomain(const Polynomial& other) const
+      {
+        return domain.data()[0] == other.domain.data()[0]
+            && domain.data()[1] == other.domain.data()[1];
+      }
+
+      bool has_samewindow(const Polynomial& other) const
+      {
+        return window.data()[0] == other.window.data()[0]
+            && window.data()[1] == other.window.data()[1];
+      }
+
       bool has_sametype(const Polynomial& other) const
       {
         (void)other;
         return true;
+      }
+
+      std::pair<double, double> mapparms() const
+      {
+        double scl =
+            (window.data()[1] - window.data()[0]) / (domain.data()[1] - domain.data()[0]);
+        double off = window.data()[0] - scl * domain.data()[0];
+        return {off, scl};
+      }
+
+      ndarray<double> roots() const
+      {
+        // Convert low->high to high->low for np::roots
+        ndarray<double> p(std::vector<int>{static_cast<int>(coef.size())});
+        for (size_t i = 0; i < coef.size(); ++i)
+          p.data()[i] = coef.data()[coef.size() - 1 - i];
+        auto r = np::roots(p);
+        ndarray<double> out(std::vector<int>{static_cast<int>(r.size())});
+        for (size_t i = 0; i < r.size(); ++i)
+          out.data()[i] = r.data()[i].real();
+        return out;
+      }
+
+      std::pair<ndarray<double>, ndarray<double>> linspace(int n = 100) const
+      {
+        auto x = np::linspace<double>(domain.data()[0], domain.data()[1], n);
+        return {x, val(x)};
+      }
+
+      // cutoff not in NumPy but provide alias to trim
+      Polynomial cutoff(double tol = 0.0) const
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) <= tol)
+          --n;
+        ndarray<double> c(std::vector<int>{n});
+        for (int i = 0; i < n; ++i)
+          c.data()[i] = coef.data()[i];
+        return Polynomial(c, domain, window);
       }
     };
 
@@ -420,6 +521,48 @@ namespace np
     {
       Polynomial p(c);
       return p.val(x);
+    }
+
+    // Additional polyutils parity (np.polynomial.polyutils)
+    NP_API inline auto as_series(const std::vector<ndarray<double>>& polys)
+        -> std::vector<ndarray<double>>
+    {
+      return polys;
+    }
+
+    NP_API inline auto trimseq(const ndarray<double>& seq) -> ndarray<double>
+    {
+      return poly_trim(seq);
+    }
+
+    NP_API inline double getdomain(double x)
+    {
+      (void)x;
+      return -1.0;
+    }
+
+    NP_API inline auto mapdomain(
+        const ndarray<double>& x,
+        const ndarray<double>& old_domain,
+        const ndarray<double>& new_domain) -> ndarray<double>
+    {
+      double scl = (new_domain.data()[1] - new_domain.data()[0])
+          / (old_domain.data()[1] - old_domain.data()[0]);
+      double off = new_domain.data()[0] - scl * old_domain.data()[0];
+      ndarray<double> out(x.shape);
+      for (size_t i = 0; i < x.size(); ++i)
+        out.data()[out._flat_logical(i)] = off + scl * x.data()[x._flat_logical(i)];
+      return out;
+    }
+
+    NP_API inline auto
+    mapparms(const ndarray<double>& old_domain, const ndarray<double>& new_domain)
+        -> std::pair<double, double>
+    {
+      double scl = (new_domain.data()[1] - new_domain.data()[0])
+          / (old_domain.data()[1] - old_domain.data()[0]);
+      double off = new_domain.data()[0] - scl * old_domain.data()[0];
+      return {off, scl};
     }
 
   } // namespace polynomial

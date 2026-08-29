@@ -1242,6 +1242,188 @@ namespace np::random
     return default_rng().permuted(x, axis);
   }
 
+  // ── Exhaustive default_rng wrappers (parity: expose all 30+ distributions)
+  // Reference: numpy-reference/reference/random/generator.html – every Generator
+  // method gets a free-function wrapper that forwards to default_rng().
+
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto standard_normal(const std::vector<int>& size = {})
+      -> ndarray<T>
+  {
+    return default_rng().standard_normal<T>(size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto standard_exponential(const std::vector<int>& size = {})
+      -> ndarray<T>
+  {
+    return default_rng().standard_exponential<T>(size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto standard_gamma(T shape, const std::vector<int>& size = {})
+      -> ndarray<T>
+  {
+    return default_rng().standard_gamma<T>(shape, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto
+  gamma(T shape, T scale = T{1}, const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().gamma<T>(shape, scale, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto beta(T a, T b, const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().beta<T>(a, b, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto chisquare(T df, const std::vector<int>& size = {})
+      -> ndarray<T>
+  {
+    return default_rng().chisquare<T>(df, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto f(T dfnum, T dfden, const std::vector<int>& size = {})
+      -> ndarray<T>
+  {
+    return default_rng().f<T>(dfnum, dfden, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto standard_t(T df, const std::vector<int>& size = {})
+      -> ndarray<T>
+  {
+    return default_rng().standard_t<T>(df, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto
+  lognormal(T mean = T{0}, T sigma = T{1}, const std::vector<int>& size = {})
+      -> ndarray<T>
+  {
+    return default_rng().lognormal<T>(mean, sigma, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto standard_cauchy(const std::vector<int>& size = {})
+      -> ndarray<T>
+  {
+    return default_rng().standard_cauchy<T>(size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto weibull(T a, const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().weibull<T>(a, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto poisson(T lam = T{1}, const std::vector<int>& size = {})
+      -> ndarray<std::int64_t>
+  {
+    return default_rng().poisson<T>(lam, size);
+  }
+  NP_API NP_NODISCARD inline auto
+  binomial(std::int64_t n, double p, const std::vector<int>& size = {})
+      -> ndarray<std::int64_t>
+  {
+    return default_rng().binomial(n, p, size);
+  }
+  NP_API NP_NODISCARD inline auto
+  negative_binomial(std::int64_t n, double p, const std::vector<int>& size = {})
+      -> ndarray<std::int64_t>
+  {
+    return default_rng().negative_binomial(n, p, size);
+  }
+  NP_API NP_NODISCARD inline auto geometric(double p, const std::vector<int>& size = {})
+      -> ndarray<std::int64_t>
+  {
+    return default_rng().geometric(p, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto pareto(T a, const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().pareto<T>(a, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto power(T a, const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().power<T>(a, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto
+  laplace(T loc = T{0}, T scale = T{1}, const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().laplace<T>(loc, scale, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto
+  gumbel(T loc = T{0}, T scale = T{1}, const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().gumbel<T>(loc, scale, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto
+  logistic(T loc = T{0}, T scale = T{1}, const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().logistic<T>(loc, scale, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto rayleigh(T scale = T{1}, const std::vector<int>& size = {})
+      -> ndarray<T>
+  {
+    return default_rng().rayleigh<T>(scale, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto
+  triangular(T left, T mode, T right, const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().triangular<T>(left, mode, right, size);
+  }
+  NP_API NP_NODISCARD inline auto hypergeometric(
+      std::int64_t ngood,
+      std::int64_t nbad,
+      std::int64_t nsample,
+      const std::vector<int>& size = {}) -> ndarray<std::int64_t>
+  {
+    return default_rng().hypergeometric(ngood, nbad, nsample, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto logseries(T p, const std::vector<int>& size = {})
+      -> ndarray<std::int64_t>
+  {
+    return default_rng().logseries<T>(p, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto wald(T mean, T scale, const std::vector<int>& size = {})
+      -> ndarray<T>
+  {
+    return default_rng().wald<T>(mean, scale, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto vonmises(T mu, T kappa, const std::vector<int>& size = {})
+      -> ndarray<T>
+  {
+    return default_rng().vonmises<T>(mu, kappa, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto zipf(T a, const std::vector<int>& size = {})
+      -> ndarray<std::int64_t>
+  {
+    return default_rng().zipf<T>(a, size);
+  }
+  NP_API NP_NODISCARD inline auto multinomial(
+      std::int64_t n, const std::vector<double>& pvals, const std::vector<int>& size = {})
+      -> ndarray<std::int64_t>
+  {
+    return default_rng().multinomial(n, pvals, size);
+  }
+  NP_API NP_NODISCARD inline auto bytes_wrapper(std::size_t length)
+      -> std::vector<std::uint8_t>
+  {
+    return default_rng().bytes(length);
+  }
+  NP_API NP_NODISCARD inline auto
+  integers_wrapper(std::int64_t low, std::int64_t high, const std::vector<int>& size = {})
+      -> ndarray<std::int64_t>
+  {
+    return default_rng().integers(low, high, size);
+  }
+
 } // namespace np::random
 
 #endif // NP_RANDOM_HPP
