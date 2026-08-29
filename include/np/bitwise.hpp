@@ -159,6 +159,59 @@ namespace np
   }
 
   /**
+   * @brief Alias `np.bitwise_not` (NumPy 2.0 synonym for `invert`).
+   * Reference: numpy-reference/reference/generated/numpy.bitwise_not.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto bitwise_not(const ndarray<T>& x) -> ndarray<T>
+  {
+    return invert(x);
+  }
+
+  /**
+   * @brief Count number of set bits per element (np.bitwise_count).
+   *
+   * Returns an array of `uint8`/`int` counts. For signed types the
+   * two's-complement representation is counted (as in NumPy, which
+   * counts bits of the underlying storage).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.bitwise_count.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto bitwise_count(const ndarray<T>& x) -> ndarray<std::uint8_t>
+  {
+    static_assert(std::is_integral_v<T>, "bitwise_count: integral required");
+    ndarray<std::uint8_t> out(x.shape);
+    for (std::size_t i = 0; i < x.size(); ++i)
+    {
+      using U = std::make_unsigned_t<T>;
+      U v = static_cast<U>(x.data()[x._flat_logical(i)]);
+      int cnt = 0;
+      if constexpr (sizeof(U) <= sizeof(unsigned int))
+      {
+        cnt = __builtin_popcount(static_cast<unsigned int>(v));
+      }
+      else if constexpr (sizeof(U) <= sizeof(unsigned long))
+      {
+        cnt = __builtin_popcountl(static_cast<unsigned long>(v));
+      }
+      else
+      {
+        cnt = __builtin_popcountll(static_cast<unsigned long long>(v));
+      }
+      out.data()[i] = static_cast<std::uint8_t>(cnt);
+    }
+    return out;
+  }
+
+  // NumPy also exposes `bit_count` as alias (Python 3.8 int.bit_count)
+  NP_API template <typename T>
+  NP_NODISCARD inline auto bit_count(const ndarray<T>& x) -> ndarray<std::uint8_t>
+  {
+    return bitwise_count(x);
+  }
+
+  /**
    * @brief Left shift bits (np.left_shift / np.bitwise_left_shift).
    * Reference: numpy-reference/reference/generated/numpy.left_shift.html
    */

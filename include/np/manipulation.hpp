@@ -2210,6 +2210,169 @@ namespace np
     return pad(array, pw, mode, constant_values);
   }
 
+  // ── Broadcast object (np.broadcast) ─────────────────────────────────
+  /**
+   * @brief Broadcast object mimicking `np.broadcast(*arrays)`.
+   *
+   * Holds the broadcast shape of all inputs and provides `nd`/`numiter`/
+   * `shape`/`size` attributes. Iteration is via index counter.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.broadcast.html
+   */
+  struct broadcast
+  {
+    int nd = 0;                           ///< Number of dimensions of broadcast
+    std::vector<int> shape;               ///< Broadcast shape
+    std::size_t size = 0;                 ///< Total elements in broadcast
+    int numiter = 0;                      ///< Number of arrays
+    std::size_t index = 0;                ///< Current flat index
+    std::vector<std::vector<int>> shapes; ///< Shapes of input arrays
+
+    broadcast() = default;
+
+    explicit broadcast(const std::vector<std::vector<int>>& shapes_)
+        : numiter(static_cast<int>(shapes_.size())), shapes(shapes_)
+    {
+      if (shapes.empty())
+      {
+        nd = 0;
+        shape = {};
+        size = 0;
+        return;
+      }
+      shape = shapes[0];
+      for (std::size_t i = 1; i < shapes.size(); ++i)
+      {
+        shape = detail::broadcast_shapes(shape, shapes[i]);
+      }
+      nd = static_cast<int>(shape.size());
+      size = 1;
+      for (int d : shape)
+      {
+        size *= static_cast<std::size_t>(d);
+      }
+    }
+
+    template <typename T>
+    explicit broadcast(const std::vector<ndarray<T>>& arrays)
+        : numiter(static_cast<int>(arrays.size()))
+    {
+      std::vector<std::vector<int>> sh;
+      sh.reserve(arrays.size());
+      for (auto& a : arrays)
+      {
+        sh.push_back(a.shape);
+      }
+      shapes = sh;
+      if (sh.empty())
+      {
+        nd = 0;
+        shape = {};
+        size = 0;
+        return;
+      }
+      shape = sh[0];
+      for (std::size_t i = 1; i < sh.size(); ++i)
+      {
+        shape = detail::broadcast_shapes(shape, sh[i]);
+      }
+      nd = static_cast<int>(shape.size());
+      size = 1;
+      for (int d : shape)
+      {
+        size *= static_cast<std::size_t>(d);
+      }
+    }
+
+    void reset() noexcept
+    {
+      index = 0;
+    }
+
+    bool has_next() const noexcept
+    {
+      return index < size;
+    }
+  };
+
+  /**
+   * @brief Alias for `np.concatenate` (NumPy 2.0 `np.concat`).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.concat.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto concat(const std::vector<ndarray<T>>& arrays, int axis = 0)
+      -> ndarray<T>
+  {
+    // Forward to concatenate in concatenate.hpp when available; otherwise
+    // perform a local implementation using broadcast_to/copy logic.
+    // To avoid circular include, implement inline using detail helpers:
+    if (arrays.empty())
+    {
+      throw std::invalid_argument("concat: need at least one array");
+    }
+    int ndim = static_cast<int>(arrays[0].ndim());
+    int ax = axis < 0 ? axis + ndim : axis;
+    if (ax < 0 || ax >= ndim)
+    {
+      throw std::invalid_argument("concat: axis out of bounds");
+    }
+    for (auto& a : arrays)
+    {
+      if (static_cast<int>(a.ndim()) != ndim)
+      {
+        throw std::invalid_argument("concat: ndim mismatch");
+      }
+      for (int d = 0; d < ndim; ++d)
+      {
+        if (d != ax && a.shape[d] != arrays[0].shape[d])
+        {
+          throw std::invalid_argument("concat: shape mismatch");
+        }
+      }
+    }
+    std::vector<int> out_shape = arrays[0].shape;
+    for (std::size_t i = 1; i < arrays.size(); ++i)
+    {
+      out_shape[ax] += arrays[i].shape[ax];
+    }
+    ndarray<T> out(out_shape);
+    std::size_t off = 0;
+    for (auto& arr : arrays)
+    {
+      std::size_t axis_n = static_cast<std::size_t>(arr.shape[ax]);
+      detail::Odometer od(arr.shape);
+      while (!od.done())
+      {
+        auto sidx = od.idx();
+        auto didx = sidx;
+        didx[static_cast<std::size_t>(ax)] += off;
+        out.set(didx, arr.get(sidx));
+        od.advance();
+      }
+      off += axis_n;
+    }
+    return out;
+  }
+
+  /**
+   * @brief `np.delete` alias – C++ keyword workaround.
+   *
+   * The C++ keyword `delete` cannot be used as a function name, so the
+   * implementation is `delete_arr`. This alias `np_delete` and the
+   * overload `remove` provide the same semantics under a legal identifier.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.delete.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto np_delete(
+      const ndarray<T>& arr,
+      const std::vector<int>& indices,
+      std::optional<int> axis = std::nullopt) -> ndarray<T>
+  {
+    return delete_arr(arr, indices, axis);
+  }
+
 } // namespace np
 
 #endif // NP_MANIPULATION_HPP

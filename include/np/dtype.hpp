@@ -863,6 +863,662 @@ namespace np
     return t == dtype::bool_;
   }
 
+  // ── Extended dtype API (parity with numpy dtype routines) ─────────────
+
+  namespace detail
+  {
+    inline constexpr int _dtype_rank(dtype t) noexcept
+    {
+      switch (t)
+      {
+        case dtype::bool_:
+          return 0;
+        case dtype::int8:
+          return 1;
+        case dtype::int16:
+          return 2;
+        case dtype::int32:
+          return 3;
+        case dtype::int64:
+          return 4;
+        case dtype::uint8:
+          return 5;
+        case dtype::uint16:
+          return 6;
+        case dtype::uint32:
+          return 7;
+        case dtype::uint64:
+          return 8;
+        case dtype::float16:
+          return 9;
+        case dtype::float32:
+          return 10;
+        case dtype::float64:
+          return 11;
+        case dtype::longdouble:
+          return 12;
+        case dtype::complex64:
+          return 13;
+        case dtype::complex128:
+          return 14;
+        case dtype::clongdouble:
+          return 15;
+        case dtype::datetime64:
+          return 16;
+        case dtype::timedelta64:
+          return 16;
+        case dtype::string_:
+          return 17;
+        case dtype::unicode_:
+          return 18;
+        case dtype::void_:
+          return 19;
+        case dtype::object_:
+          return 20;
+      }
+      return 20;
+    }
+
+    inline constexpr int _dtype_kind(dtype t) noexcept
+    {
+      if (t == dtype::bool_)
+        return 0;
+      if (t >= dtype::int8 && t <= dtype::int64)
+        return 1;
+      if (t >= dtype::uint8 && t <= dtype::uint64)
+        return 2;
+      if (t == dtype::float16 || t == dtype::float32 || t == dtype::float64
+          || t == dtype::longdouble)
+        return 3;
+      if (t == dtype::complex64 || t == dtype::complex128 || t == dtype::clongdouble)
+        return 4;
+      if (t == dtype::datetime64 || t == dtype::timedelta64)
+        return 5;
+      return 6;
+    }
+  } // namespace detail
+
+  /**
+   * @brief Can `from` be cast to `to` under given casting rule.
+   *
+   * Casting modes mirror NumPy: "no", "equiv", "safe", "same_kind",
+   * "unsafe". Here "safe" follows rank/kind promotion, "equiv" requires
+   * equality, "same_kind" allows within-kind promotion, "unsafe" always true.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.can_cast.html
+   */
+  NP_API NP_NODISCARD inline bool
+  can_cast(dtype from, dtype to, const std::string& casting = "safe")
+  {
+    if (from == to)
+    {
+      return true;
+    }
+    if (casting == "unsafe")
+    {
+      return true;
+    }
+    if (casting == "no" || casting == "equiv")
+    {
+      return false;
+    }
+    int rf = detail::_dtype_rank(from);
+    int rt = detail::_dtype_rank(to);
+    int kf = detail::_dtype_kind(from);
+    int kt = detail::_dtype_kind(to);
+    if (casting == "same_kind")
+    {
+      if (kf != kt)
+      {
+        // bool -> int/uint is considered same_kind in NumPy
+        if (kf == 0 && (kt == 1 || kt == 2))
+        {
+          return true;
+        }
+        return false;
+      }
+      return rt >= rf;
+    }
+    // safe
+    if (from == dtype::bool_)
+    {
+      return true;
+    }
+    if (kf == 1) // int
+    {
+      if (kt == 1)
+        return rt >= rf;
+      if (kt == 2)
+        return false; // int -> uint not safe (may overflow)
+      if (kt == 3 || kt == 4)
+        return rt >= rf;
+      return false;
+    }
+    if (kf == 2) // uint
+    {
+      if (kt == 2)
+        return rt >= rf;
+      if (kt == 3 || kt == 4)
+        return rt >= rf;
+      return false;
+    }
+    if (kf == 3) // float
+    {
+      if (kt == 3 || kt == 4)
+        return rt >= rf;
+      return false;
+    }
+    if (kf == 4) // complex
+    {
+      if (kt == 4)
+        return rt >= rf;
+      return false;
+    }
+    return false;
+  }
+
+  /**
+   * @brief Promote two dtypes to a common dtype (np.promote_types).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.promote_types.html
+   */
+  NP_API NP_NODISCARD inline dtype promote_types(dtype a, dtype b)
+  {
+    if (a == b)
+    {
+      return a;
+    }
+    int ra = detail::_dtype_rank(a);
+    int rb = detail::_dtype_rank(b);
+    return ra >= rb ? a : b;
+  }
+
+  /**
+   * @brief Result type from promotion of given dtypes (np.result_type).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.result_type.html
+   */
+  NP_API inline dtype result_type(std::initializer_list<dtype> dtypes)
+  {
+    if (dtypes.size() == 0)
+    {
+      throw std::invalid_argument("result_type: need at least one dtype");
+    }
+    auto it = dtypes.begin();
+    dtype cur = *it++;
+    for (; it != dtypes.end(); ++it)
+    {
+      cur = promote_types(cur, *it);
+    }
+    return cur;
+  }
+
+  NP_API template <typename... Ds>
+  NP_NODISCARD inline dtype result_type(dtype first, Ds... rest)
+  {
+    dtype cur = first;
+    ((cur = promote_types(cur, rest)), ...);
+    return cur;
+  }
+
+  /**
+   * @brief Find common type from array/dtype list (np.find_common_type).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.find_common_type.html
+   */
+  NP_API inline dtype find_common_type(
+      std::initializer_list<dtype> array_types, std::initializer_list<dtype> scalar_types)
+  {
+    dtype cur = dtype::bool_;
+    bool has = false;
+    for (auto d : array_types)
+    {
+      cur = has ? promote_types(cur, d) : d;
+      has = true;
+    }
+    for (auto d : scalar_types)
+    {
+      cur = has ? promote_types(cur, d) : d;
+      has = true;
+    }
+    if (!has)
+    {
+      return dtype::float64;
+    }
+    return cur;
+  }
+
+  /**
+   * @brief Common type of dtypes (np.common_type).
+   *
+   * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.common_type.html
+   */
+  NP_API inline dtype common_type(std::initializer_list<dtype> dtypes)
+  {
+    if (dtypes.size() == 0)
+    {
+      return dtype::float64;
+    }
+    return result_type(dtypes);
+  }
+
+  /**
+   * @brief Minimal scalar type that can hold value (np.min_scalar_type).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.min_scalar_type.html
+   */
+  NP_API NP_NODISCARD inline dtype min_scalar_type(long long v)
+  {
+    if (v >= 0)
+    {
+      if (v <= 127)
+        return dtype::int8;
+      if (v <= 32767)
+        return dtype::int16;
+      if (v <= 2147483647)
+        return dtype::int32;
+      return dtype::int64;
+    }
+    else
+    {
+      if (v >= -128)
+        return dtype::int8;
+      if (v >= -32768)
+        return dtype::int16;
+      if (v >= -2147483648LL)
+        return dtype::int32;
+      return dtype::int64;
+    }
+  }
+
+  NP_API NP_NODISCARD inline dtype min_scalar_type(double v)
+  {
+    (void)v;
+    return dtype::float64;
+  }
+
+  /**
+   * @brief Whether `a` is a sub-dtype of `b` (np.issubdtype).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.issubdtype.html
+   */
+  NP_API NP_NODISCARD inline bool issubdtype(dtype a, dtype b)
+  {
+    if (a == b)
+    {
+      return true;
+    }
+    // generic categories: use name-based check – if b is the generic
+    // integer/floating/complex kind, delegate to dtype_is_* helpers
+    // For our enum-based simulation, treat exact match for now plus
+    // kind expansion: b being a generic placeholder is simulated via
+    // callers passing the most general dtype of that kind.
+    // Check kind containment:
+    int ka = detail::_dtype_kind(a);
+    int kb = detail::_dtype_kind(b);
+    // If b is the maximal rank of its kind, treat as generic kind check
+    // Example: b == int64 represents "signedinteger", b == float64 -> "floating"
+    if (kb == 1 && ka == 1)
+      return true;
+    if (kb == 2 && ka == 2)
+      return true;
+    if (kb == 3 && ka == 3)
+      return true;
+    if (kb == 4 && ka == 4)
+      return true;
+    return false;
+  }
+
+  /**
+   * @brief Whether `a` is sub-class of `b` (np.issubsctype).
+   * Alias to `issubdtype` for enum dtypes.
+   */
+  NP_API NP_NODISCARD inline bool issubsctype(dtype a, dtype b)
+  {
+    return issubdtype(a, b);
+  }
+
+  /**
+   * @brief Whether dtype is a scalar type (np.issctype).
+   */
+  NP_API NP_NODISCARD inline bool issctype(dtype t)
+  {
+    return t != dtype::void_ && t != dtype::object_;
+  }
+
+  /**
+   * @brief Whether object is scalar type (np.isscalar).
+   * Overload for dtype enum already in `logic.hpp`; this is the dtype form.
+   */
+  NP_API NP_NODISCARD inline bool issubsctype_check(dtype t)
+  {
+    return issctype(t);
+  }
+
+  /**
+   * @brief Convert dtype to its scalar type (np.obj2sctype).
+   */
+  NP_API NP_NODISCARD inline dtype obj2sctype(dtype t)
+  {
+    return t;
+  }
+
+  NP_API NP_NODISCARD inline dtype obj2sctype(const std::string& name)
+  {
+    for (auto d :
+         {dtype::int8,
+          dtype::int16,
+          dtype::int32,
+          dtype::int64,
+          dtype::uint8,
+          dtype::uint16,
+          dtype::uint32,
+          dtype::uint64,
+          dtype::float32,
+          dtype::float64,
+          dtype::complex64,
+          dtype::complex128,
+          dtype::bool_})
+    {
+      if (dtype_name(d) == name)
+        return d;
+    }
+    return dtype::object_;
+  }
+
+  /**
+   * @brief Character code for dtype (np.sctype2char).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.sctype2char.html
+   */
+  NP_API NP_NODISCARD inline char sctype2char(dtype t)
+  {
+    switch (t)
+    {
+      case dtype::int8:
+        return 'b';
+      case dtype::int16:
+        return 'h';
+      case dtype::int32:
+        return 'i';
+      case dtype::int64:
+        return 'l';
+      case dtype::uint8:
+        return 'B';
+      case dtype::uint16:
+        return 'H';
+      case dtype::uint32:
+        return 'I';
+      case dtype::uint64:
+        return 'L';
+      case dtype::float16:
+        return 'e';
+      case dtype::float32:
+        return 'f';
+      case dtype::float64:
+        return 'd';
+      case dtype::longdouble:
+        return 'g';
+      case dtype::complex64:
+        return 'F';
+      case dtype::complex128:
+        return 'D';
+      case dtype::clongdouble:
+        return 'G';
+      case dtype::bool_:
+        return '?';
+      case dtype::string_:
+        return 'S';
+      case dtype::unicode_:
+        return 'U';
+      case dtype::datetime64:
+        return 'M';
+      case dtype::timedelta64:
+        return 'm';
+      case dtype::void_:
+        return 'V';
+      case dtype::object_:
+        return 'O';
+    }
+    return '?';
+  }
+
+  /**
+   * @brief Human-readable name alias (np.typename).
+   *
+   * `typename` is a C++ keyword so the function is `dtype_typename`.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.typename.html
+   */
+  NP_API NP_NODISCARD inline std::string dtype_typename(dtype t)
+  {
+    return std::string(dtype_name(t));
+  }
+
+  // Alias to satisfy `np.typename` spelling where macro permits
+  NP_API NP_NODISCARD inline std::string type_name(dtype t)
+  {
+    return std::string(dtype_name(t));
+  }
+
+  /**
+   * @brief Minimal type code for given dtypes (np.mintypecode).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.mintypecode.html
+   */
+  NP_API NP_NODISCARD inline char
+  mintypecode(std::initializer_list<dtype> dtypes, bool allow_blocked = false)
+  {
+    (void)allow_blocked;
+    if (dtypes.size() == 0)
+    {
+      return 'd';
+    }
+    dtype cur = *dtypes.begin();
+    for (auto d : dtypes)
+    {
+      cur = promote_types(cur, d);
+    }
+    return sctype2char(cur);
+  }
+
+  NP_API NP_NODISCARD inline char
+  mintypecode(const std::string& charlist, bool allow_blocked = false)
+  {
+    (void)allow_blocked;
+    dtype cur = dtype::bool_;
+    bool first = true;
+    for (char c : charlist)
+    {
+      dtype d = dtype::object_;
+      switch (c)
+      {
+        case 'b':
+          d = dtype::int8;
+          break;
+        case 'h':
+          d = dtype::int16;
+          break;
+        case 'i':
+          d = dtype::int32;
+          break;
+        case 'l':
+          d = dtype::int64;
+          break;
+        case 'B':
+          d = dtype::uint8;
+          break;
+        case 'H':
+          d = dtype::uint16;
+          break;
+        case 'I':
+          d = dtype::uint32;
+          break;
+        case 'L':
+          d = dtype::uint64;
+          break;
+        case 'f':
+          d = dtype::float32;
+          break;
+        case 'd':
+          d = dtype::float64;
+          break;
+        case 'F':
+          d = dtype::complex64;
+          break;
+        case 'D':
+          d = dtype::complex128;
+          break;
+        case '?':
+          d = dtype::bool_;
+          break;
+        default:
+          continue;
+      }
+      cur = first ? d : promote_types(cur, d);
+      first = false;
+    }
+    return sctype2char(cur);
+  }
+
+  // ── finfo / iinfo ───────────────────────────────────────────────────
+  /**
+   * @brief Floating-point type info (np.finfo).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.finfo.html
+   */
+  template <typename T>
+  struct finfo_t
+  {
+    static_assert(std::is_floating_point_v<T>, "finfo_t: floating required");
+    T eps = std::numeric_limits<T>::epsilon();
+    T max = std::numeric_limits<T>::max();
+    T min = std::numeric_limits<T>::lowest();
+    int bits = sizeof(T) * 8;
+    int nexp = std::numeric_limits<T>::max_exponent;
+    int nmant = std::numeric_limits<T>::digits;
+  };
+
+  NP_API inline finfo_t<float> finfo_float32()
+  {
+    return {};
+  }
+  NP_API inline finfo_t<double> finfo_float64()
+  {
+    return {};
+  }
+  NP_API inline finfo_t<long double> finfo_longdouble()
+  {
+    return {};
+  }
+
+  NP_API NP_NODISCARD inline auto finfo(dtype t)
+  {
+    struct Info
+    {
+      double eps = 0, max = 0, min = 0;
+      int bits = 0;
+    } info{};
+    switch (t)
+    {
+      case dtype::float16:
+        info.eps = 0.0009765625;
+        info.bits = 16;
+        break;
+      case dtype::float32:
+        info.eps = std::numeric_limits<float>::epsilon();
+        info.max = std::numeric_limits<float>::max();
+        info.min = std::numeric_limits<float>::lowest();
+        info.bits = 32;
+        break;
+      case dtype::float64:
+        info.eps = std::numeric_limits<double>::epsilon();
+        info.max = std::numeric_limits<double>::max();
+        info.min = std::numeric_limits<double>::lowest();
+        info.bits = 64;
+        break;
+      case dtype::longdouble:
+        info.eps = std::numeric_limits<long double>::epsilon();
+        info.max = static_cast<double>(std::numeric_limits<long double>::max());
+        info.min = static_cast<double>(std::numeric_limits<long double>::lowest());
+        info.bits = static_cast<int>(sizeof(long double) * 8);
+        break;
+      default:
+        throw std::invalid_argument("finfo: not a floating dtype");
+    }
+    return info;
+  }
+
+  /**
+   * @brief Integer type info (np.iinfo).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.iinfo.html
+   */
+  template <typename T>
+  struct iinfo_t
+  {
+    static_assert(std::is_integral_v<T>, "iinfo_t: integral required");
+    T min = std::numeric_limits<T>::min();
+    T max = std::numeric_limits<T>::max();
+    int bits = sizeof(T) * 8;
+    char kind = std::is_signed_v<T> ? 'i' : 'u';
+  };
+
+  NP_API NP_NODISCARD inline auto iinfo(dtype t)
+  {
+    struct Info
+    {
+      long long min = 0, max = 0;
+      int bits = 0;
+    } info{};
+    switch (t)
+    {
+      case dtype::int8:
+        info.min = std::numeric_limits<std::int8_t>::min();
+        info.max = std::numeric_limits<std::int8_t>::max();
+        info.bits = 8;
+        break;
+      case dtype::int16:
+        info.min = std::numeric_limits<std::int16_t>::min();
+        info.max = std::numeric_limits<std::int16_t>::max();
+        info.bits = 16;
+        break;
+      case dtype::int32:
+        info.min = std::numeric_limits<std::int32_t>::min();
+        info.max = std::numeric_limits<std::int32_t>::max();
+        info.bits = 32;
+        break;
+      case dtype::int64:
+        info.min = std::numeric_limits<std::int64_t>::min();
+        info.max = std::numeric_limits<std::int64_t>::max();
+        info.bits = 64;
+        break;
+      case dtype::uint8:
+        info.min = 0;
+        info.max = std::numeric_limits<std::uint8_t>::max();
+        info.bits = 8;
+        break;
+      case dtype::uint16:
+        info.min = 0;
+        info.max = std::numeric_limits<std::uint16_t>::max();
+        info.bits = 16;
+        break;
+      case dtype::uint32:
+        info.min = 0;
+        info.max = std::numeric_limits<std::uint32_t>::max();
+        info.bits = 32;
+        break;
+      case dtype::uint64:
+        info.min = 0;
+        info.max = static_cast<long long>(std::numeric_limits<std::uint64_t>::max());
+        info.bits = 64;
+        break;
+      default:
+        throw std::invalid_argument("iinfo: not an integer dtype");
+    }
+    return info;
+  }
+
 } // namespace np
 
 #endif // NP_DTYPE_HPP

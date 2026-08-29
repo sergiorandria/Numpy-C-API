@@ -456,7 +456,63 @@ namespace np
       return {unit, 1};
     }
 
+    // ── NaT / isnat / scalar type aliases (np.datetime64 / np.timedelta64)
+    /**
+     * @brief NaT sentinel (Not a Time).
+     *
+     * NumPy uses the minimum int64 datetime64 value as NaT. We mirror it
+     * with `sys_days::min()` so `sys_days(NaT) == min` is detectable.
+     *
+     * Reference: numpy-reference/reference/generated/numpy.isnat.html
+     */
+    inline constexpr sys_days NaT = sys_days::min();
+
+    using datetime64 = sys_days;
+    using timedelta64 = std::chrono::days;
+
+    /**
+     * @brief Test for NaT (np.isnat).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.isnat.html
+     */
+    NP_API inline auto isnat(const ndarray<sys_days>& arr) -> ndarray<bool>
+    {
+      ndarray<bool> out(arr.shape);
+      for (std::size_t i = 0; i < arr.size(); ++i)
+      {
+        out.data()[i] = (arr.data()[arr._flat_logical(i)] == NaT);
+      }
+      return out;
+    }
+
+    NP_API inline auto isnat(const ndarray<std::int64_t>& arr) -> ndarray<bool>
+    {
+      ndarray<bool> out(arr.shape);
+      constexpr std::int64_t kNaT = std::numeric_limits<std::int64_t>::min();
+      for (std::size_t i = 0; i < arr.size(); ++i)
+      {
+        out.data()[i] = (arr.data()[arr._flat_logical(i)] == kNaT);
+      }
+      return out;
+    }
+
+    NP_API inline auto isnat(sys_days v) -> bool
+    {
+      return v == NaT;
+    }
+
+    NP_API inline auto isnat(std::int64_t v) -> bool
+    {
+      return v == std::numeric_limits<std::int64_t>::min();
+    }
+
   } // namespace datetime
+
+  // Top-level mirrors – `np::isnat` / `np::NaT` match `numpy.*`
+  // `datetime64` / `timedelta64` are kept inside `np::datetime` to avoid
+  // collision with `np::datetime64`/`timedelta64` dtype tags in `dtype.hpp`.
+  using datetime::isnat;
+  using datetime::NaT;
 } // namespace np
 
 #endif // NP_DATETIME_HPP

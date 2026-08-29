@@ -1493,6 +1493,108 @@ namespace np
     return out;
   }
 
+  /**
+   * @brief Cast array to new dtype (np.astype free-function wrapper).
+   *
+   * NumPy exposes `ndarray.astype(dtype)` as a method; this free
+   * function mirrors the functional form `np.astype(a, dtype)` for
+   * API parity and to support generic dispatch where the target
+   * type is a template parameter rather than a runtime `dtype`
+   * enum.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.ndarray.astype.html
+   */
+  NP_API template <typename U, typename T>
+  NP_NODISCARD auto astype(const ndarray<T>& a) -> ndarray<U>
+  {
+    return a.template astype<U>();
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD auto astype(const ndarray<T>& a, dtype dt) -> std::variant<
+      ndarray<std::int8_t>,
+      ndarray<std::int16_t>,
+      ndarray<std::int32_t>,
+      ndarray<std::int64_t>,
+      ndarray<std::uint8_t>,
+      ndarray<std::uint16_t>,
+      ndarray<std::uint32_t>,
+      ndarray<std::uint64_t>,
+      ndarray<float>,
+      ndarray<double>,
+      ndarray<long double>,
+      ndarray<std::complex<float>>,
+      ndarray<std::complex<double>>,
+      ndarray<std::complex<long double>>,
+      ndarray<bool>>
+  {
+    // Runtime-dtype form – materialises the correct C++ typed array
+    // via the existing `ndarray_from_dtype` + elementwise cast.
+    auto fallback = ndarray_from_dtype(dt, a.shape);
+    return std::visit(
+        [&](auto& out) -> std::variant<
+                           ndarray<std::int8_t>,
+                           ndarray<std::int16_t>,
+                           ndarray<std::int32_t>,
+                           ndarray<std::int64_t>,
+                           ndarray<std::uint8_t>,
+                           ndarray<std::uint16_t>,
+                           ndarray<std::uint32_t>,
+                           ndarray<std::uint64_t>,
+                           ndarray<float>,
+                           ndarray<double>,
+                           ndarray<long double>,
+                           ndarray<std::complex<float>>,
+                           ndarray<std::complex<double>>,
+                           ndarray<std::complex<long double>>,
+                           ndarray<bool>>
+        {
+          using U = typename std::decay_t<decltype(out)>::value_type;
+          out = a.template astype<U>();
+          return out;
+        },
+        fallback);
+  }
+
+  /**
+   * @brief Return an array with the same shape as `a` but filled with
+   *        `fill_value` cast to `U` (np.full_like with dtype override).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.full_like.html
+   */
+  NP_API template <typename U, typename T>
+  NP_NODISCARD auto full_like(const ndarray<T>& a, U fill_value) -> ndarray<U>
+  {
+    return ndarray<U>(a.shape, dtype_of<U>, fill_value);
+  }
+
+  /**
+   * @brief Zeros with dtype override (np.zeros_like with dtype).
+   */
+  NP_API template <typename U, typename T>
+  NP_NODISCARD auto zeros_like(const ndarray<T>& a, dtype) -> ndarray<U>
+  {
+    return ndarray<U>(a.shape, dtype_of<U>, U{0});
+  }
+
+  /**
+   * @brief Ones with dtype override (np.ones_like with dtype).
+   */
+  NP_API template <typename U, typename T>
+  NP_NODISCARD auto ones_like(const ndarray<T>& a, dtype) -> ndarray<U>
+  {
+    return ndarray<U>(a.shape, dtype_of<U>, U{1});
+  }
+
+  /**
+   * @brief Empty with dtype override (np.empty_like with dtype).
+   */
+  NP_API template <typename U, typename T>
+  NP_NODISCARD auto empty_like(const ndarray<T>& a, dtype) -> ndarray<U>
+  {
+    return ndarray<U>(a.shape, dtype_of<U>, U{});
+  }
+
 } // namespace np
 
 #endif // NP_CREATION_HPP

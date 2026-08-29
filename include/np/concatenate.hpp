@@ -422,6 +422,17 @@ namespace np
     return vstack(arrays);
   }
 
+  /**
+   * @brief Alias `np.concat` for `np.concatenate` (NumPy 2.0).
+   * Reference: numpy-reference/reference/generated/numpy.concat.html
+   */
+  template <typename T>
+  NP_API NP_NODISCARD inline auto
+  concat(const std::vector<ndarray<T>>& arrays, int axis = 0) -> ndarray<T>
+  {
+    return concatenate(arrays, axis);
+  }
+
 } // namespace np
 
 #endif // NP_CONCATENATE_HPP
