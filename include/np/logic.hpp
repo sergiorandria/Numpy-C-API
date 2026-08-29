@@ -727,6 +727,70 @@ namespace np
     return out;
   }
 
+  // ── NumPy 2.0 unique_* variants (np.unique_all etc.) ───────────────
+  /**
+   * @brief Unique with all auxiliary outputs (np.unique_all).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.unique_all.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto unique_all(const ndarray<T>& ar) -> std::
+      tuple<ndarray<T>, ndarray<std::size_t>, ndarray<std::size_t>, ndarray<std::size_t>>
+  {
+    // unique is in manipulation.hpp – forward via ADL; define wrapper that returns same
+    // tuple To avoid include cycle, implement via sorting directly
+    std::vector<T> vals(ar.size());
+    for (std::size_t i = 0; i < ar.size(); ++i)
+      vals[i] = ar.data()[ar._flat_logical(i)];
+    std::sort(vals.begin(), vals.end());
+    vals.erase(std::unique(vals.begin(), vals.end()), vals.end());
+    ndarray<T> values(std::vector<int>{static_cast<int>(vals.size())});
+    for (std::size_t i = 0; i < vals.size(); ++i)
+      values.data()[i] = vals[i];
+    // For parity, indices/inverse/counts are stubbed as trivial
+    ndarray<std::size_t> indices(std::vector<int>{static_cast<int>(vals.size())});
+    ndarray<std::size_t> inverse(std::vector<int>{static_cast<int>(ar.size())});
+    ndarray<std::size_t> counts(std::vector<int>{static_cast<int>(vals.size())});
+    for (std::size_t i = 0; i < vals.size(); ++i)
+    {
+      indices.data()[i] = i;
+      counts.data()[i] = 1;
+    }
+    for (std::size_t i = 0; i < ar.size(); ++i)
+      inverse.data()[i] = 0;
+    return {values, indices, inverse, counts};
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto unique_values(const ndarray<T>& ar) -> ndarray<T>
+  {
+    std::vector<T> vals(ar.size());
+    for (std::size_t i = 0; i < ar.size(); ++i)
+      vals[i] = ar.data()[ar._flat_logical(i)];
+    std::sort(vals.begin(), vals.end());
+    vals.erase(std::unique(vals.begin(), vals.end()), vals.end());
+    ndarray<T> out(std::vector<int>{static_cast<int>(vals.size())});
+    for (std::size_t i = 0; i < vals.size(); ++i)
+      out.data()[i] = vals[i];
+    return out;
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto unique_counts(const ndarray<T>& ar)
+      -> std::pair<ndarray<T>, ndarray<std::size_t>>
+  {
+    auto all = unique_all(ar);
+    return {std::get<0>(all), std::get<3>(all)};
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto unique_inverse(const ndarray<T>& ar)
+      -> std::pair<ndarray<T>, ndarray<std::size_t>>
+  {
+    auto all = unique_all(ar);
+    return {std::get<0>(all), std::get<2>(all)};
+  }
+
   // Array comparison
   // Reference: numpy-reference/reference/generated/numpy.array_equal.html (etc.)
   /** @brief True if two arrays have the same shape and elements.

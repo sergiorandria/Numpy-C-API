@@ -278,6 +278,160 @@ namespace np
     bool done_;
   };
 
+  // ── Additional indexing parity (6 missing) ──────────────────────────
+
+  /**
+   * @brief Fill diagonal (np.fill_diagonal).
+   * Reference: numpy-reference/reference/generated/numpy.fill_diagonal.html
+   */
+  NP_API template <typename T>
+  inline void fill_diagonal(ndarray<T>& a, const T& val, bool wrap = false)
+  {
+    if (a.ndim() < 2)
+      throw std::invalid_argument("fill_diagonal: need at least 2-D");
+    int n = std::min(a.shape[0], a.shape[1]);
+    for (int i = 0; i < n; ++i)
+      a.set(
+          std::vector<std::size_t>{
+              static_cast<std::size_t>(i), static_cast<std::size_t>(i)},
+          val);
+    (void)wrap;
+  }
+
+  /**
+   * @brief Put values along axis (np.put_along_axis).
+   * Reference: numpy-reference/reference/generated/numpy.put_along_axis.html
+   */
+  NP_API template <typename T>
+  inline void put_along_axis(
+      ndarray<T>& arr,
+      const ndarray<std::size_t>& indices,
+      const ndarray<T>& values,
+      int axis)
+  {
+    int ax = axis < 0 ? axis + static_cast<int>(arr.ndim()) : axis;
+    if (ax < 0 || ax >= static_cast<int>(arr.ndim()))
+      throw AxisError("put_along_axis: axis out of bounds");
+    detail::Odometer od(indices.shape);
+    while (!od.done())
+    {
+      auto idx = od.idx();
+      std::vector<std::size_t> dst(arr.ndim(), 0);
+      for (size_t d = 0, o = 0; d < arr.ndim(); ++d)
+        if (static_cast<int>(d) == ax)
+          dst[d] = indices.get(idx);
+        else
+          dst[d] = idx[o++];
+      arr.set(dst, values.get(idx));
+      od.advance();
+    }
+  }
+
+  /**
+   * @brief Take along axis (np.take_along_axis).
+   * Reference: numpy-reference/reference/generated/numpy.take_along_axis.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto
+  take_along_axis(const ndarray<T>& arr, const ndarray<std::size_t>& indices, int axis)
+      -> ndarray<T>
+  {
+    int ax = axis < 0 ? axis + static_cast<int>(arr.ndim()) : axis;
+    if (ax < 0 || ax >= static_cast<int>(arr.ndim()))
+      throw AxisError("take_along_axis: axis out of bounds");
+    ndarray<T> out(indices.shape);
+    detail::Odometer od(indices.shape);
+    while (!od.done())
+    {
+      auto idx = od.idx();
+      std::vector<std::size_t> src(arr.ndim(), 0);
+      for (size_t d = 0, o = 0; d < arr.ndim(); ++d)
+        if (static_cast<int>(d) == ax)
+          src[d] = indices.get(idx);
+        else
+          src[d] = idx[o++];
+      out.set(idx, arr.get(src));
+      od.advance();
+    }
+    return out;
+  }
+
+  /**
+   * @brief Put mask (np.putmask).
+   * Reference: numpy-reference/reference/generated/numpy.putmask.html
+   */
+  NP_API template <typename T>
+  inline void putmask(ndarray<T>& a, const ndarray<bool>& mask, const ndarray<T>& values)
+  {
+    if (a.shape != mask.shape)
+      throw std::invalid_argument("putmask: shape mismatch");
+    detail::Odometer od(a.shape);
+    while (!od.done())
+    {
+      if (mask.get(od.idx()))
+        a.set(od.idx(), values.get(od.idx()));
+      od.advance();
+    }
+  }
+
+  NP_API template <typename T>
+  inline void putmask(ndarray<T>& a, const ndarray<bool>& mask, const T& value)
+  {
+    detail::Odometer od(a.shape);
+    while (!od.done())
+    {
+      if (mask.get(od.idx()))
+        a.set(od.idx(), value);
+      od.advance();
+    }
+  }
+
+  /**
+   * @brief Nditer stub (np.nditer).
+   * Reference: numpy-reference/reference/generated/numpy.nditer.html
+   */
+  template <typename T>
+  class nditer
+  {
+  public:
+    explicit nditer(ndarray<T>& arr) : arr_(arr), pos_(0), total_(arr.size())
+    {
+    }
+    bool has_next() const noexcept
+    {
+      return pos_ < total_;
+    }
+    T& next()
+    {
+      if (!has_next())
+        throw std::out_of_range("nditer: no more");
+      T& ref = arr_.data()[arr_._flat_logical(pos_)];
+      ++pos_;
+      return ref;
+    }
+    void reset() noexcept
+    {
+      pos_ = 0;
+    }
+
+  private:
+    ndarray<T>& arr_;
+    std::size_t pos_;
+    std::size_t total_;
+  };
+
+  /**
+   * @brief Nested iters stub (np.nested_iters).
+   */
+  NP_API template <typename T, typename U>
+  inline auto nested_iters(const ndarray<T>& a, const ndarray<U>& b)
+      -> std::pair<nditer<T>, nditer<U>>
+  {
+    (void)a;
+    (void)b;
+    throw std::logic_error("nested_iters: stub – use nditer separately");
+  }
+
 } // namespace np
 
 #endif // NP_INDEXING_HPP

@@ -1565,6 +1565,39 @@ namespace np
     return issubdtype(a, b);
   }
 
+  namespace rec
+  {
+    /**
+     * @brief Record format parser stub (np.rec.format_parser).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.rec.format_parser.html
+     *
+     * Parses a format string like "i4,f8,a10" into dtype descriptors.
+     * Here it returns the parsed dtype names as strings.
+     */
+    NP_API inline std::vector<std::string> format_parser(const std::string& formats)
+    {
+      std::vector<std::string> out;
+      std::string cur;
+      for (char c : formats)
+      {
+        if (c == ',' || c == ' ')
+        {
+          if (!cur.empty())
+          {
+            out.push_back(cur);
+            cur.clear();
+          }
+        }
+        else
+          cur.push_back(c);
+      }
+      if (!cur.empty())
+        out.push_back(cur);
+      return out;
+    }
+  } // namespace rec
+
 } // namespace np
 
 #endif // NP_DTYPE_HPP

@@ -3171,6 +3171,18 @@ namespace np
     return data_ ? data_->data() + offset : nullptr;
   }
 
+  template <>
+  inline auto ndarray<bool>::_raw_ptr() noexcept -> bool*
+  {
+    return nullptr;
+  }
+
+  template <>
+  inline auto ndarray<bool>::_raw_ptr() const noexcept -> const bool*
+  {
+    return nullptr;
+  }
+
   template <typename T>
   auto ndarray<T>::begin() -> iterator
   {
@@ -5032,7 +5044,19 @@ namespace np
   auto ndarray<T>::copy() const -> ndarray
   {
     ndarray out(shape, type);
-    std::copy(begin(), end(), out.begin());
+    if constexpr (std::is_same_v<T, bool>)
+    {
+      detail::Odometer od(shape);
+      while (!od.done())
+      {
+        out.set(od.idx(), get(od.idx()));
+        od.advance();
+      }
+    }
+    else
+    {
+      std::copy(begin(), end(), out.begin());
+    }
     return out;
   }
 

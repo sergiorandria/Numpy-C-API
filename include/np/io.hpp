@@ -1128,6 +1128,189 @@ namespace np
     return out;
   }
 
+  // ── Remaining IO parity (9 missing) ────────────────────────────────
+
+  /**
+   * @brief Memory-mapped array stub (np.memmap).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.memmap.html
+   *
+   * In this header-only port, memmap is an alias to `ndarray` with file
+   * backing via `fromfile`/`tofile`. Mode is ignored except for "r" vs "w+".
+   */
+  template <typename T>
+  class memmap : public ndarray<T>
+  {
+  public:
+    memmap() = default;
+
+    explicit memmap(
+        const std::string& filename,
+        const std::string& mode = "r",
+        const std::vector<int>& shape = {},
+        std::size_t offset = 0)
+        : ndarray<T>(fromfile<T>(filename, -1, offset, shape)), filename_(filename),
+          mode_(mode)
+    {
+    }
+
+    std::string filename() const
+    {
+      return filename_;
+    }
+
+    std::string mode() const
+    {
+      return mode_;
+    }
+
+  private:
+    std::string filename_;
+    std::string mode_;
+  };
+
+  NP_API inline auto open_memmap(
+      const std::string& filename,
+      const std::string& mode = "r",
+      dtype dt = dtype::float64,
+      const std::vector<int>& shape = {},
+      std::size_t offset = 0) -> std::string
+  {
+    (void)dt;
+    (void)shape;
+    (void)offset;
+    return filename + ":" + mode;
+  }
+
+  /**
+   * @brief NpzFile stub (np.lib.npyio.NpzFile).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.lib.npyio.NpzFile.html
+   *
+   * Minimal dict-like wrapper around `load_npz` result.
+   */
+  template <typename T>
+  class NpzFile
+  {
+  public:
+    explicit NpzFile(const std::string& filename) : files_(load_npz<T>(filename))
+    {
+    }
+
+    const ndarray<T>& operator[](const std::string& key) const
+    {
+      return files_.at(key);
+    }
+
+    std::vector<std::string> files() const
+    {
+      std::vector<std::string> out;
+      for (auto& kv : files_)
+        out.push_back(kv.first);
+      return out;
+    }
+
+    auto begin() const
+    {
+      return files_.begin();
+    }
+
+    auto end() const
+    {
+      return files_.end();
+    }
+
+    std::size_t size() const
+    {
+      return files_.size();
+    }
+
+  private:
+    std::map<std::string, ndarray<T>> files_;
+  };
+
+  /**
+   * @brief DataSource stub (np.lib.npyio.DataSource).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.DataSource.html
+   */
+  struct DataSource
+  {
+    std::string destpath;
+
+    explicit DataSource(const std::string& dest = "/tmp") : destpath(dest)
+    {
+    }
+
+    std::string abspath(const std::string& path) const
+    {
+      return destpath + "/" + path;
+    }
+
+    bool exists(const std::string& path) const
+    {
+      std::ifstream is(path);
+      return static_cast<bool>(is);
+    }
+  };
+
+  struct PrintOptions
+  {
+    int precision = 8;
+    int threshold = 1000;
+    int linewidth = 75;
+    std::string floatmode = "maxprec";
+    bool legacy = false;
+  };
+
+  inline PrintOptions _print_opts{};
+
+  NP_API inline void set_printoptions(
+      int precision = 8,
+      int threshold = 1000,
+      int linewidth = 75,
+      const std::string& floatmode = "maxprec",
+      bool legacy = false)
+  {
+    _print_opts.precision = precision;
+    _print_opts.threshold = threshold;
+    _print_opts.linewidth = linewidth;
+    _print_opts.floatmode = floatmode;
+    _print_opts.legacy = legacy;
+  }
+
+  NP_API inline PrintOptions get_printoptions()
+  {
+    return _print_opts;
+  }
+
+  NP_API inline auto array_str(const ndarray<double>& a) -> std::string
+  {
+    return array2string(a);
+  }
+
+  NP_API inline auto base_repr(int number, int base = 2, int padding = 0) -> std::string
+  {
+    if (base < 2 || base > 36)
+      throw std::invalid_argument("base_repr: base out of range");
+    const std::string digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    bool neg = number < 0;
+    unsigned int n =
+        neg ? static_cast<unsigned int>(-number) : static_cast<unsigned int>(number);
+    std::string s;
+    do
+    {
+      s.push_back(digits[n % base]);
+      n /= base;
+    } while (n > 0);
+    if (neg)
+      s.push_back('-');
+    while (static_cast<int>(s.size()) < padding)
+      s.push_back('0');
+    std::reverse(s.begin(), s.end());
+    return s;
+  }
+
 } // namespace np
 
 #endif // NP_IO_HPP

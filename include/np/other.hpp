@@ -117,6 +117,46 @@ namespace np
   }
 
   /**
+   * @brief Show runtime (np.show_runtime).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.show_runtime.html
+   */
+  NP_API inline std::string show_runtime()
+  {
+    return show_config() + " runtime: single-threaded header-only";
+  }
+
+  /**
+   * @brief Get include path (np.get_include).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.get_include.html
+   */
+  NP_API inline std::string get_include()
+  {
+    return "include/np";
+  }
+
+  /**
+   * @brief Get buffer size (np.getbufsize).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.getbufsize.html
+   */
+  NP_API inline std::size_t getbufsize()
+  {
+    return 8192;
+  }
+
+  /**
+   * @brief Set buffer size (np.setbufsize).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.setbufsize.html
+   */
+  NP_API inline void setbufsize(std::size_t size)
+  {
+    (void)size;
+  }
+
+  /**
    * @brief Einsum path optimizer stub (np.einsum_path).
    *
    * Reference: numpy-reference/reference/generated/numpy.einsum_path.html

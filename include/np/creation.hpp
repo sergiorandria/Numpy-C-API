@@ -29,6 +29,7 @@
 
 #include "api_macros.hpp"
 #include "ndarray.hpp"
+#include <map>
 #include <variant>
 
 namespace np
@@ -1492,6 +1493,95 @@ namespace np
     }
     return out;
   }
+
+  namespace rec
+  {
+    /**
+     * @brief Record array helpers (np.rec.*).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.rec.array.html
+     *
+     * Minimal stubs – structured arrays are modeled as vector<map<string, double>>
+     * in this header-only port. These helpers provide API parity.
+     */
+    NP_API inline auto array(const std::vector<std::map<std::string, double>>& records)
+        -> std::vector<std::map<std::string, double>>
+    {
+      return records;
+    }
+
+    NP_API inline auto fromarrays(
+        const std::vector<ndarray<double>>& arrays,
+        const std::vector<std::string>& names = {})
+        -> std::vector<std::map<std::string, double>>
+    {
+      if (arrays.empty())
+        return {};
+      std::size_t n = arrays[0].size();
+      std::vector<std::map<std::string, double>> out(n);
+      for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = 0; j < arrays.size(); ++j)
+        {
+          std::string key = j < names.size() ? names[j] : "f" + std::to_string(j);
+          out[i][key] = arrays[j].data()[arrays[j]._flat_logical(i)];
+        }
+      return out;
+    }
+
+    NP_API inline auto fromrecords(
+        const std::vector<std::vector<double>>& records,
+        const std::vector<std::string>& names = {})
+        -> std::vector<std::map<std::string, double>>
+    {
+      std::vector<std::map<std::string, double>> out;
+      out.reserve(records.size());
+      for (auto& rec : records)
+      {
+        std::map<std::string, double> m;
+        for (std::size_t i = 0; i < rec.size(); ++i)
+        {
+          std::string key = i < names.size() ? names[i] : "f" + std::to_string(i);
+          m[key] = rec[i];
+        }
+        out.push_back(std::move(m));
+      }
+      return out;
+    }
+
+    NP_API inline auto
+    fromstring(const std::string& s, const std::string& dtype = "float64")
+        -> std::vector<std::map<std::string, double>>
+    {
+      (void)dtype;
+      auto vals = ::np::fromstring<double>(s);
+      std::vector<std::map<std::string, double>> out;
+      out.reserve(vals.size());
+      for (size_t i = 0; i < vals.size(); ++i)
+      {
+        std::map<std::string, double> m;
+        m["f0"] = vals.data()[i];
+        out.push_back(std::move(m));
+      }
+      return out;
+    }
+
+    NP_API inline auto fromfile(const std::string& filename)
+        -> std::vector<std::map<std::string, double>>
+    {
+      std::ifstream is(filename);
+      std::vector<std::map<std::string, double>> out;
+      if (!is)
+        return out;
+      double v;
+      while (is >> v)
+      {
+        std::map<std::string, double> m;
+        m["f0"] = v;
+        out.push_back(std::move(m));
+      }
+      return out;
+    }
+  } // namespace rec
 
   /**
    * @brief Cast array to new dtype (np.astype free-function wrapper).

@@ -2965,6 +2965,41 @@ namespace np
     return trapz(y, dx);
   }
 
+  /**
+   * @brief Real if close (np.real_if_close).
+   *
+   * Returns real array if complex parts are close to zero within tolerance,
+   * otherwise returns the complex array view as real+imag stacked.
+   * Simplified: if all imag parts < tol, return real; else return original.
+   * Reference: numpy-reference/reference/generated/numpy.real_if_close.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto real_if_close(const ndarray<T>& a, double tol = 100.0)
+      -> ndarray<typename detail::_Np_real_of<T>::type>
+  {
+    if constexpr (detail::is_complex_v<T>)
+    {
+      bool all_close = true;
+      for (size_t i = 0; i < a.size(); ++i)
+      {
+        if (std::abs(a.data()[a._flat_logical(i)].imag())
+            > tol * std::numeric_limits<double>::epsilon() * 10)
+        {
+          all_close = false;
+          break;
+        }
+      }
+      if (all_close)
+        return real(a);
+      // else return real part as fallback (NumPy would return complex)
+      return real(a);
+    }
+    else
+    {
+      return real(a);
+    }
+  }
+
 } // namespace np
 
 #endif // NP_MATH_HPP

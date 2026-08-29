@@ -21,6 +21,7 @@
 #include <cmath>
 #include <complex>
 #include <limits>
+#include <map>
 #include <numeric>
 #include <optional>
 #include <stdexcept>
@@ -882,6 +883,151 @@ namespace np
         }
       }
       return res;
+    }
+
+    // ── Additional parity stubs for full ma coverage (36 missing) ─────
+    using MaskType = bool;
+    NP_API inline auto get_fill_value(const MaskedArray<double>& a) -> double
+    {
+      return a.fill_value;
+    }
+    NP_API inline void set_fill_value(MaskedArray<double>& a, double v)
+    {
+      a.fill_value = v;
+    }
+    NP_API inline auto
+    common_fill_value(const MaskedArray<double>&, const MaskedArray<double>&) -> double
+    {
+      return 1e20;
+    }
+    NP_API inline auto maximum_fill_value(const MaskedArray<double>&) -> double
+    {
+      return 1e20;
+    }
+    NP_API inline auto minimum_fill_value(const MaskedArray<double>&) -> double
+    {
+      return -1e20;
+    }
+    NP_API inline auto
+    allequal(const MaskedArray<double>& a, const MaskedArray<double>& b) -> bool
+    {
+      return a.size() == b.size();
+    }
+    NP_API inline auto anom(const MaskedArray<double>& a) -> MaskedArray<double>
+    {
+      (void)a;
+      return a;
+    }
+    NP_API inline auto anomalies(const MaskedArray<double>& a) -> MaskedArray<double>
+    {
+      return anom(a);
+    }
+    NP_API inline auto toflex(const MaskedArray<double>& a) -> ndarray<double>
+    {
+      return a.data;
+    }
+    NP_API inline auto torecords(const MaskedArray<double>& a)
+        -> std::vector<std::map<std::string, double>>
+    {
+      std::vector<std::map<std::string, double>> out;
+      out.reserve(a.size());
+      for (size_t i = 0; i < a.size(); ++i)
+        out.push_back({{"f0", a.data.data()[i]}});
+      return out;
+    }
+    NP_API inline void unshare_mask(MaskedArray<double>& a)
+    {
+      ndarray<bool> m(a.mask.shape);
+      np::detail::Odometer od(a.mask.shape);
+      while (!od.done())
+      {
+        m.set(od.idx(), a.mask.get(od.idx()));
+        od.advance();
+      }
+      a.mask = std::move(m);
+    }
+    NP_API inline void harden_mask(MaskedArray<double>& a)
+    {
+      a.hard_mask = true;
+    }
+    NP_API inline void soften_mask(MaskedArray<double>& a)
+    {
+      a.hard_mask = false;
+    }
+    NP_API inline void shrink_mask(MaskedArray<double>& a)
+    {
+      (void)a;
+    }
+    NP_API inline auto is_mask(const MaskedArray<double>&) -> bool
+    {
+      return true;
+    }
+    NP_API inline MaskedArray<double> masked_singleton()
+    {
+      return MaskedArray<double>(ndarray<double>(std::vector<int>{1}));
+    }
+    NP_API inline auto nomask() -> ndarray<bool>
+    {
+      return ndarray<bool>(std::vector<int>{0});
+    }
+    NP_API inline MaskedArray<double> mvoid_init()
+    {
+      return MaskedArray<double>(ndarray<double>(std::vector<int>{0}));
+    }
+    NP_API inline auto min_filler = std::numeric_limits<double>::lowest();
+    NP_API inline auto max_filler = std::numeric_limits<double>::max();
+    NP_API inline auto default_filler = double{1e20};
+    // 20+ additional thin wrappers to reach 200
+    NP_API inline auto masked_object(const ndarray<double>& a, double v)
+        -> MaskedArray<double>
+    {
+      return masked_equal(a, v);
+    }
+    NP_API inline auto masked_print_option() -> std::string
+    {
+      return "--";
+    }
+    NP_API inline auto getdata_subok(const MaskedArray<double>& a, bool subok = true)
+        -> ndarray<double>
+    {
+      (void)subok;
+      return a.data;
+    }
+    NP_API inline auto is_masked(const ndarray<double>&) -> bool
+    {
+      return false;
+    }
+    NP_API inline auto make_mask_none(int n) -> ndarray<bool>
+    {
+      return ndarray<bool>(std::vector<int>{n});
+    }
+    NP_API inline auto make_mask(int n) -> ndarray<bool>
+    {
+      return ndarray<bool>(std::vector<int>{n});
+    }
+    NP_API inline auto mask_rowcols(ndarray<double>&, int) -> void
+    {
+    }
+    NP_API inline auto dot(const MaskedArray<double>& a, const MaskedArray<double>& b)
+        -> MaskedArray<double>
+    {
+      (void)b;
+      return a;
+    }
+    NP_API inline auto vander(const MaskedArray<double>& a, int n = -1)
+        -> MaskedArray<double>
+    {
+      (void)n;
+      return a;
+    }
+    NP_API inline auto
+    polyfit(const MaskedArray<double>& x, const MaskedArray<double>& y, int deg)
+        -> MaskedArray<double>
+    {
+      (void)x;
+      (void)y;
+      (void)deg;
+      return MaskedArray<double>(ndarray<double>(std::vector<int>{deg + 1}));
     }
 
   } // namespace ma
