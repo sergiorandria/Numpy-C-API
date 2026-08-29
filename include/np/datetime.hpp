@@ -73,7 +73,7 @@ namespace np
       std::array<bool, 7> weekmask{true, true, true, true, true, false, false};
       std::vector<sys_days> holidays;
 
-      busdaycalendar() = default;
+      constexpr busdaycalendar() = default;
 
       explicit busdaycalendar(
           const std::string& weekmask_str, const std::vector<sys_days>& holidays_ = {})

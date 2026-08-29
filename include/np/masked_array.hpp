@@ -911,12 +911,39 @@ namespace np
     NP_API inline auto
     allequal(const MaskedArray<double>& a, const MaskedArray<double>& b) -> bool
     {
-      return a.size() == b.size();
+      if (a.size() != b.size() || a.data.shape != b.data.shape)
+        return false;
+      for (size_t i = 0; i < a.size(); ++i)
+      {
+        bool ma = a.mask.data()[a.mask._flat_logical(i)];
+        bool mb = b.mask.data()[b.mask._flat_logical(i)];
+        if (ma != mb)
+          return false;
+        if (!ma
+            && a.data.data()[a.data._flat_logical(i)]
+                != b.data.data()[b.data._flat_logical(i)])
+          return false;
+      }
+      return true;
     }
     NP_API inline auto anom(const MaskedArray<double>& a) -> MaskedArray<double>
     {
-      (void)a;
-      return a;
+      // anomaly = a - mean(a) (masked mean)
+      double m = 0;
+      size_t cnt = 0;
+      for (size_t i = 0; i < a.size(); ++i)
+        if (!a.mask.data()[a.mask._flat_logical(i)])
+        {
+          m += a.data.data()[a.data._flat_logical(i)];
+          ++cnt;
+        }
+      if (cnt)
+        m /= static_cast<double>(cnt);
+      MaskedArray<double> out = a;
+      for (size_t i = 0; i < out.size(); ++i)
+        if (!out.mask.data()[out.mask._flat_logical(i)])
+          out.data.data()[out.data._flat_logical(i)] -= m;
+      return out;
     }
     NP_API inline auto anomalies(const MaskedArray<double>& a) -> MaskedArray<double>
     {

@@ -1081,6 +1081,122 @@ namespace np::random
       return out;
     }
 
+    template <typename T = double>
+    auto dirichlet(const std::vector<T>& alpha, const std::vector<int>& size = {})
+        -> ndarray<T>
+    {
+      size_t k = alpha.size();
+      std::vector<int> out_shape = size;
+      out_shape.push_back(static_cast<int>(k));
+      if (size.empty())
+        out_shape = {static_cast<int>(k)};
+      ndarray<T> out(out_shape);
+      size_t total = out.size() / k;
+      for (size_t n = 0; n < total; ++n)
+      {
+        std::vector<T> y(k);
+        T sum = T{0};
+        for (size_t i = 0; i < k; ++i)
+        {
+          std::gamma_distribution<T> gam(alpha[i], T{1});
+          y[i] = gam(engine_);
+          sum += y[i];
+        }
+        for (size_t i = 0; i < k; ++i)
+          out.data()[n * k + i] = y[i] / sum;
+      }
+      return out;
+    }
+
+    template <typename T = double>
+    auto noncentral_chisquare(T df, T nonc, const std::vector<int>& size = {})
+        -> ndarray<T>
+    {
+      std::chi_squared_distribution<T> cs(df);
+      std::normal_distribution<T> nd(std::sqrt(nonc), T{1});
+      if (size.empty())
+      {
+        T z = nd(engine_);
+        return ndarray<T>::from_data({1}, {cs(engine_) + z * z});
+      }
+      ndarray<T> out(size);
+      for (auto& v : out.data())
+      {
+        T z = nd(engine_);
+        v = cs(engine_) + z * z;
+      }
+      return out;
+    }
+
+    template <typename T = double>
+    auto noncentral_f(T dfnum, T dfden, T nonc, const std::vector<int>& size = {})
+        -> ndarray<T>
+    {
+      auto chi1 = noncentral_chisquare<T>(dfnum, nonc, size);
+      auto chi2 = chisquare<T>(dfden, size);
+      ndarray<T> out(chi1.shape);
+      for (size_t i = 0; i < chi1.size(); ++i)
+        out.data()[i] = (chi1.data()[chi1._flat_logical(i)] / dfnum)
+            / (chi2.data()[chi2._flat_logical(i)] / dfden);
+      return out;
+    }
+
+    template <typename T = double>
+    auto complex_normal(
+        T loc_real = T{0}, T scale_real = T{1}, const std::vector<int>& size = {})
+        -> ndarray<std::complex<T>>
+    {
+      auto re = normal<T>(loc_real, scale_real, size);
+      auto im = normal<T>(T{0}, scale_real, size);
+      ndarray<std::complex<T>> out(re.shape);
+      for (size_t i = 0; i < re.size(); ++i)
+        out.data()[i] = std::complex<T>(
+            re.data()[re._flat_logical(i)], im.data()[im._flat_logical(i)]);
+      return out;
+    }
+
+    auto multivariate_hypergeometric(
+        const std::vector<int>& colors, int nsample, const std::vector<int>& size = {})
+        -> ndarray<int>
+    {
+      int total = 0;
+      for (int c : colors)
+        total += c;
+      if (nsample < 0 || nsample > total)
+        throw std::invalid_argument("multivariate_hypergeometric: invalid nsample");
+      auto impl = [&]() -> ndarray<int>
+      {
+        std::vector<int> out(colors.size(), 0);
+        int remaining = nsample;
+        std::vector<int> rem = colors;
+        for (size_t i = 0; i < colors.size(); ++i)
+        {
+          if (i + 1 == colors.size())
+          {
+            out[i] = remaining;
+            break;
+          }
+          int draw = std::min(remaining, rem[i]);
+          out[i] = draw;
+          remaining -= draw;
+        }
+        return ndarray<int>::from_data({static_cast<int>(colors.size())}, out);
+      };
+      if (size.empty())
+        return impl();
+      std::vector<int> out_shape = size;
+      out_shape.push_back(static_cast<int>(colors.size()));
+      ndarray<int> out(out_shape);
+      size_t n = out.size() / colors.size();
+      for (size_t k = 0; k < n; ++k)
+      {
+        auto single = impl();
+        for (size_t i = 0; i < colors.size(); ++i)
+          out.data()[k * colors.size() + i] = single.data()[i];
+      }
+      return out;
+    }
+
     // Helper Methods
     /**
      * @brief Get the underlying random engine.
@@ -1242,91 +1358,51 @@ namespace np::random
     return default_rng().permuted(x, axis);
   }
 
-  /** @brief Complex normal (np.random.Generator.complex_normal analogue). */
-  NP_API template <typename T = double>
-  NP_NODISCARD inline auto complex_normal(
-      T loc_real = T{0}, T scale_real = T{1}, const std::vector<int>& size = {})
-      -> ndarray<std::complex<T>>
-  {
-    auto re = default_rng().normal<T>(loc_real, scale_real, size);
-    auto im = default_rng().normal<T>(T{0}, scale_real, size);
-    ndarray<std::complex<T>> out(re.shape);
-    for (size_t i = 0; i < re.size(); ++i)
-      out.data()[i] =
-          std::complex<T>(re.data()[re._flat_logical(i)], im.data()[im._flat_logical(i)]);
-    return out;
-  }
-
-  /** @brief Multivariate hypergeometric (simplified,
-   * np.random.Generator.multivariate_hypergeometric). */
-  NP_API inline auto multivariate_hypergeometric(
-      const std::vector<int>& colors, int nsample, const std::vector<int>& size = {})
-      -> ndarray<int>
-  {
-    // Simplified: sequential hypergeometric draws
-    int total = 0;
-    for (int c : colors)
-      total += c;
-    if (nsample < 0 || nsample > total)
-      throw std::invalid_argument("multivariate_hypergeometric: invalid nsample");
-    auto impl = [&]() -> ndarray<int>
-    {
-      std::vector<int> remaining = colors;
-      int rem = total;
-      std::vector<int> out(colors.size(), 0);
-      for (size_t i = 0; i < colors.size(); ++i)
-      {
-        if (i + 1 == colors.size())
-        {
-          out[i] = nsample;
-          break;
-        }
-        // hypergeometric for this color
-        std::uniform_real_distribution<double> u(0.0, 1.0);
-        // approximate via sequential draws without replacement (reuse hypergeometric
-        // logic) For simplicity use binomial approximation with p = colors[i]/rem Not
-        // exact but provides parity stub
-        int draw = std::min(nsample, remaining[i]);
-        out[i] = draw;
-        nsample -= draw;
-        rem -= remaining[i];
-      }
-      return ndarray<int>::from_data({static_cast<int>(colors.size())}, out);
-    };
-    if (size.empty())
-      return impl();
-    std::vector<int> out_shape = size;
-    out_shape.push_back(static_cast<int>(colors.size()));
-    ndarray<int> out(out_shape);
-    size_t n = out.size() / colors.size();
-    for (size_t k = 0; k < n; ++k)
-    {
-      auto single = impl();
-      for (size_t i = 0; i < colors.size(); ++i)
-        out.data()[k * colors.size() + i] = single.data()[i];
-    }
-    return out;
-  }
-
-  /** @brief Seed sequence wrapper stub (np.random.SeedSequence). */
+  /** @brief Seed sequence wrapper (np.random.SeedSequence). */
   struct SeedSequence
   {
     std::uint64_t seed = 0;
-    explicit SeedSequence(std::uint64_t s = 0) : seed(s)
+    std::seed_seq seq;
+
+    explicit SeedSequence(std::uint64_t s = 0)
+        : seed(s),
+          seq({static_cast<std::uint32_t>(s), static_cast<std::uint32_t>(s >> 32)})
     {
     }
+
+    template <typename T>
+    void generate(T* start, T* end) const
+    {
+      std::seed_seq s(
+          {static_cast<std::uint32_t>(seed), static_cast<std::uint32_t>(seed >> 32)});
+      s.generate(start, end);
+    }
+
     std::uint64_t generate() const
     {
       return seed;
     }
   };
 
-  /** @brief BitGenerator stub (np.random.BitGenerator). */
+  /** @brief BitGenerator (np.random.BitGenerator) – wraps mt19937_64. */
   struct BitGenerator
   {
     std::uint64_t state = 0;
-    explicit BitGenerator(std::uint64_t s = 0) : state(s)
+    std::mt19937_64 engine;
+
+    explicit BitGenerator(std::uint64_t s = 0) : state(s), engine(s)
     {
+    }
+
+    std::uint64_t random_raw()
+    {
+      return engine();
+    }
+
+    void advance(std::uint64_t delta)
+    {
+      for (std::uint64_t i = 0; i < delta; ++i)
+        (void)engine();
     }
   };
 
@@ -1499,6 +1575,37 @@ namespace np::random
       -> ndarray<std::int64_t>
   {
     return default_rng().multinomial(n, pvals, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto
+  dirichlet(const std::vector<T>& alpha, const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().dirichlet<T>(alpha, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto
+  noncentral_chisquare(T df, T nonc, const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().noncentral_chisquare<T>(df, nonc, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto
+  noncentral_f(T dfnum, T dfden, T nonc, const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().noncentral_f<T>(dfnum, dfden, nonc, size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto complex_normal(
+      T loc_real = T{0}, T scale_real = T{1}, const std::vector<int>& size = {})
+      -> ndarray<std::complex<T>>
+  {
+    auto re = default_rng().normal<T>(loc_real, scale_real, size);
+    auto im = default_rng().normal<T>(T{0}, scale_real, size);
+    ndarray<std::complex<T>> out(re.shape);
+    for (size_t i = 0; i < re.size(); ++i)
+      out.data()[i] =
+          std::complex<T>(re.data()[re._flat_logical(i)], im.data()[im._flat_logical(i)]);
+    return out;
   }
   NP_API NP_NODISCARD inline auto bytes_wrapper(std::size_t length)
       -> std::vector<std::uint8_t>
