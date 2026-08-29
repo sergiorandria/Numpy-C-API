@@ -2733,6 +2733,72 @@ namespace np::linalg
     return dot(a, b);
   }
 
+  /**
+   * @brief Matrix-vector product (numpy.linalg.matvec / numpy.matvec).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.linalg.matvec.html
+   * Also: numpy-reference/reference/generated/numpy.matvec.html
+   * Simple wrapper around matmul for the 2-D x 1-D case (M, N) @ (N,) -> (M,).
+   * Validates that a is 2-D and b is 1-D and delegates to matmul/dot, which
+   * checks inner-dimension compatibility. Stacked (n-D, n > 2) inputs are not
+   * supported in this simplified wrapper.
+   * @tparam T Element type of the matrix.
+   * @tparam U Element type of the vector.
+   * @param a Matrix (M x N), 2-D.
+   * @param b Vector (N,), 1-D.
+   * @return Vector (M,) = a @ b.
+   * @throws std::invalid_argument if a.ndim() != 2 or b.ndim() != 1,
+   *         or if inner dimensions disagree.
+   * @complexity O(M * N).
+   */
+  NP_API template <typename T, typename U>
+  NP_NODISCARD auto matvec(const ndarray<T>& a, const ndarray<U>& b)
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    if (a.ndim() != 2)
+    {
+      throw std::invalid_argument("matvec requires a 2D matrix");
+    }
+    if (b.ndim() != 1)
+    {
+      throw std::invalid_argument("matvec requires a 1D vector");
+    }
+    return matmul(a, b);
+  }
+
+  /**
+   * @brief Vector-matrix product (numpy.linalg.vecmat / numpy.vecmat).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.linalg.vecmat.html
+   * Also: numpy-reference/reference/generated/numpy.vecmat.html
+   * Simple wrapper around matmul for the 1-D x 2-D case (N,) @ (N, M) -> (M,).
+   * Validates that a is 1-D and b is 2-D and delegates to matmul/dot, which
+   * checks inner-dimension compatibility. Stacked (n-D, n > 2) inputs are not
+   * supported in this simplified wrapper.
+   * @tparam T Element type of the vector.
+   * @tparam U Element type of the matrix.
+   * @param a Vector (N,), 1-D.
+   * @param b Matrix (N, M), 2-D.
+   * @return Vector (M,) = a @ b.
+   * @throws std::invalid_argument if a.ndim() != 1 or b.ndim() != 2,
+   *         or if inner dimensions disagree.
+   * @complexity O(N * M).
+   */
+  NP_API template <typename T, typename U>
+  NP_NODISCARD auto vecmat(const ndarray<T>& a, const ndarray<U>& b)
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    if (a.ndim() != 1)
+    {
+      throw std::invalid_argument("vecmat requires a 1D vector");
+    }
+    if (b.ndim() != 2)
+    {
+      throw std::invalid_argument("vecmat requires a 2D matrix");
+    }
+    return matmul(a, b);
+  }
+
   // Raise a square 2-D array to the integer power n: n == 0 gives the
   // identity, n > 0 repeated squarings, n < 0 the inverse raised to |n|.
   // Reference: numpy-reference/reference/generated/numpy.linalg.matrix_power.html

@@ -109,7 +109,7 @@ namespace np
     }
   };
 
-  inline constexpr CClass c_{};
+  NP_API inline constexpr CClass c_{};
 
   // ── r_ – row stack / arange ──────────────────────────────────────
   /**
@@ -123,14 +123,14 @@ namespace np
     auto operator()(const std::vector<ndarray<T>>& arrays) const -> ndarray<T>
     {
       // Row-wise: concatenate along first axis
-      return concatenate(arrays, 0);
+      return concat(arrays, 0);
     }
 
     template <typename T, typename... Rest>
     auto operator()(const ndarray<T>& first, const Rest&... rest) const -> ndarray<T>
     {
       std::vector<ndarray<T>> v{first, rest...};
-      return concatenate(v, 0);
+      return concat(v, 0);
     }
 
     template <typename T = int>
@@ -140,7 +140,7 @@ namespace np
     }
   };
 
-  inline constexpr RClass r_{};
+  NP_API inline constexpr RClass r_{};
 
   // ── ix_ – open mesh ─────────────────────────────────────────────
   /**
@@ -412,6 +412,104 @@ namespace np
     void reset() noexcept
     {
       pos_ = 0;
+    }
+
+  private:
+    ndarray<T>& arr_;
+    std::size_t pos_;
+    std::size_t total_;
+  };
+
+  /**
+   * @brief Flat iterator (np.flatiter).
+   *
+   * Wraps flat (C-order) iteration over an `ndarray`, analogous to
+   * `ndarray.flat` / `np.flatiter`. Similar to `nditer` but specifically
+   * for the flattened 1-D view; indexing honors strides via
+   * `_flat_logical`.
+   *
+   * Reference: numpy-reference/reference/generated/numpy.flatiter.html
+   */
+  template <typename T>
+  class flatiter
+  {
+  public:
+    explicit flatiter(ndarray<T>& arr) : arr_(arr), pos_(0), total_(arr.size())
+    {
+    }
+
+    NP_NODISCARD bool has_next() const noexcept
+    {
+      return pos_ < total_;
+    }
+
+    T& next()
+    {
+      if (!has_next())
+        throw std::out_of_range("flatiter: no more");
+      T& ref = arr_.data()[arr_._flat_logical(pos_)];
+      ++pos_;
+      return ref;
+    }
+
+    NP_NODISCARD T& current()
+    {
+      if (pos_ >= total_)
+        throw std::out_of_range("flatiter: no current");
+      return arr_.data()[arr_._flat_logical(pos_)];
+    }
+
+    NP_NODISCARD const T& current() const
+    {
+      if (pos_ >= total_)
+        throw std::out_of_range("flatiter: no current");
+      return arr_.data()[arr_._flat_logical(pos_)];
+    }
+
+    NP_NODISCARD std::size_t index() const noexcept
+    {
+      return pos_;
+    }
+
+    NP_NODISCARD std::vector<int> coords() const
+    {
+      std::vector<int> c(arr_.ndim(), 0);
+      std::size_t rem = pos_;
+      for (int d = static_cast<int>(arr_.ndim()) - 1; d >= 0; --d)
+      {
+        int dim = arr_.shape[d];
+        if (dim != 0)
+        {
+          c[d] = static_cast<int>(rem % static_cast<std::size_t>(dim));
+          rem /= static_cast<std::size_t>(dim);
+        }
+      }
+      return c;
+    }
+
+    NP_NODISCARD ndarray<T>& base() noexcept
+    {
+      return arr_;
+    }
+
+    NP_NODISCARD const ndarray<T>& base() const noexcept
+    {
+      return arr_;
+    }
+
+    NP_NODISCARD ndarray<T> copy() const
+    {
+      return arr_.flatten();
+    }
+
+    void reset() noexcept
+    {
+      pos_ = 0;
+    }
+
+    NP_NODISCARD std::size_t size() const noexcept
+    {
+      return total_;
     }
 
   private:

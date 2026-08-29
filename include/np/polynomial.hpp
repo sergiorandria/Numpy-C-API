@@ -600,12 +600,1076 @@ namespace np
       }
     };
 
-    // Aliases for other bases – same storage, different basis interpretation
-    using Chebyshev = Polynomial;
-    using Legendre = Polynomial;
-    using Laguerre = Polynomial;
-    using Hermite = Polynomial;
-    using HermiteE = Polynomial;
+    // ── Chebyshev class (np.polynomial.Chebyshev) ───────────────────
+    /**
+     * @brief Chebyshev series class (np.polynomial.chebyshev.Chebyshev).
+     * Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.Chebyshev.html
+     */
+    class Chebyshev
+    {
+    public:
+      ndarray<double> coef;
+      ndarray<double> domain{std::vector<int>{2}};
+      ndarray<double> window{std::vector<int>{2}};
+      Chebyshev() : coef(std::vector<int>{1})
+      {
+        coef.data()[0] = 0.0;
+        domain.data()[0] = -1.0;
+        domain.data()[1] = 1.0;
+        window.data()[0] = -1.0;
+        window.data()[1] = 1.0;
+      }
+      explicit Chebyshev(const ndarray<double>& c) : coef(c.copy())
+      {
+        domain.data()[0] = -1.0;
+        domain.data()[1] = 1.0;
+        window.data()[0] = -1.0;
+        window.data()[1] = 1.0;
+        trim();
+      }
+      Chebyshev(
+          const ndarray<double>& c, const ndarray<double>& d, const ndarray<double>& w)
+          : coef(c.copy()), domain(d.copy()), window(w.copy())
+      {
+      }
+      void trim(double tol = 0.0)
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) <= tol)
+          --n;
+        if (n != static_cast<int>(coef.size()))
+        {
+          ndarray<double> nc(std::vector<int>{n});
+          for (int i = 0; i < n; ++i)
+            nc.data()[i] = coef.data()[i];
+          coef = std::move(nc);
+        }
+      }
+      ndarray<double> val(const ndarray<double>& x) const
+      {
+        ndarray<double> out(x.shape);
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+          double xv = x.data()[x._flat_logical(i)];
+          double b2 = 0.0, b1 = 0.0;
+          for (int k = static_cast<int>(coef.size()) - 1; k >= 0; --k)
+          {
+            double bk = 2.0 * xv * b1 - b2 + coef.data()[k];
+            b2 = b1;
+            b1 = bk;
+          }
+          out.data()[out._flat_logical(i)] = b1 - xv * b2;
+        }
+        return out;
+      }
+      Chebyshev deriv(int m = 1) const
+      {
+        ndarray<double> c = coef.copy();
+        for (int iter = 0; iter < m; ++iter)
+        {
+          if (c.size() <= 1)
+          {
+            c = ndarray<double>(std::vector<int>{1});
+            c.data()[0] = 0.0;
+            break;
+          }
+          ndarray<double> nc(std::vector<int>{static_cast<int>(c.size() - 1)});
+          for (size_t i = 1; i < c.size(); ++i)
+            nc.data()[i - 1] = c.data()[i] * static_cast<double>(i);
+          c = std::move(nc);
+        }
+        return Chebyshev(c, domain, window);
+      }
+      Chebyshev integ(int m = 1, double k = 0.0) const
+      {
+        ndarray<double> c = coef.copy();
+        for (int iter = 0; iter < m; ++iter)
+        {
+          ndarray<double> nc(std::vector<int>{static_cast<int>(c.size() + 1)});
+          nc.data()[0] = k;
+          for (size_t i = 0; i < c.size(); ++i)
+            nc.data()[i + 1] = c.data()[i] / static_cast<double>(i + 1);
+          c = std::move(nc);
+        }
+        return Chebyshev(c, domain, window);
+      }
+      static Chebyshev fromroots(const ndarray<double>& roots)
+      {
+        auto p = poly(roots);
+        ndarray<double> c(std::vector<int>{static_cast<int>(p.size())});
+        for (size_t i = 0; i < p.size(); ++i)
+          c.data()[i] = p.data()[p.size() - 1 - i];
+        return Chebyshev(c);
+      }
+      static Chebyshev fit(const ndarray<double>& x, const ndarray<double>& y, int deg)
+      {
+        auto c = polyfit(x, y, deg);
+        ndarray<double> rev(std::vector<int>{static_cast<int>(c.size())});
+        for (size_t i = 0; i < c.size(); ++i)
+          rev.data()[i] = c.data()[c.size() - 1 - i];
+        return Chebyshev(rev);
+      }
+      Chebyshev truncate(int size) const
+      {
+        int n = std::min(size, static_cast<int>(coef.size()));
+        ndarray<double> nc(std::vector<int>{n});
+        for (int i = 0; i < n; ++i)
+          nc.data()[i] = coef.data()[i];
+        return Chebyshev(nc, domain, window);
+      }
+      int degree() const
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) == 0.0)
+          --n;
+        return n - 1;
+      }
+      Chebyshev copy() const
+      {
+        return Chebyshev(coef, domain, window);
+      }
+      Chebyshev convert(const std::string& /*kind*/ = "Chebyshev") const
+      {
+        return copy();
+      }
+      Chebyshev cast(const ndarray<double>& c) const
+      {
+        return Chebyshev(c, domain, window);
+      }
+      static Chebyshev basis(int deg)
+      {
+        ndarray<double> c(std::vector<int>{deg + 1});
+        for (int i = 0; i <= deg; ++i)
+          c.data()[i] = (i == deg ? 1.0 : 0.0);
+        return Chebyshev(c);
+      }
+      static Chebyshev identity()
+      {
+        ndarray<double> c(std::vector<int>{2});
+        c.data()[0] = 0.0;
+        c.data()[1] = 1.0;
+        return Chebyshev(c);
+      }
+      bool has_samecoef(const Chebyshev& other) const
+      {
+        if (coef.size() != other.coef.size())
+          return false;
+        for (size_t i = 0; i < coef.size(); ++i)
+          if (coef.data()[i] != other.coef.data()[i])
+            return false;
+        return true;
+      }
+      bool has_samedomain(const Chebyshev& other) const
+      {
+        return domain.data()[0] == other.domain.data()[0]
+            && domain.data()[1] == other.domain.data()[1];
+      }
+      bool has_samewindow(const Chebyshev& other) const
+      {
+        return window.data()[0] == other.window.data()[0]
+            && window.data()[1] == other.window.data()[1];
+      }
+      bool has_sametype(const Chebyshev& other) const
+      {
+        (void)other;
+        return true;
+      }
+      bool has_samepars(const Chebyshev& other) const
+      {
+        return has_samedomain(other) && has_samewindow(other);
+      }
+      std::pair<double, double> mapparms() const
+      {
+        double scl =
+            (window.data()[1] - window.data()[0]) / (domain.data()[1] - domain.data()[0]);
+        double off = window.data()[0] - scl * domain.data()[0];
+        return {off, scl};
+      }
+      ndarray<double> roots() const
+      {
+        ndarray<double> p(std::vector<int>{static_cast<int>(coef.size())});
+        for (size_t i = 0; i < coef.size(); ++i)
+          p.data()[i] = coef.data()[coef.size() - 1 - i];
+        auto r = np::roots(p);
+        ndarray<double> out(std::vector<int>{static_cast<int>(r.size())});
+        for (size_t i = 0; i < r.size(); ++i)
+          out.data()[i] = r.data()[i].real();
+        return out;
+      }
+      std::pair<ndarray<double>, ndarray<double>> linspace(int n = 100) const
+      {
+        auto x = np::linspace<double>(domain.data()[0], domain.data()[1], n);
+        return {x, val(x)};
+      }
+    };
+
+    // ── Legendre class (np.polynomial.Legendre) ─────────────────────
+    /**
+     * @brief Legendre series class (np.polynomial.legendre.Legendre).
+     * Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.Legendre.html
+     */
+    class Legendre
+    {
+    public:
+      ndarray<double> coef;
+      ndarray<double> domain{std::vector<int>{2}};
+      ndarray<double> window{std::vector<int>{2}};
+      Legendre() : coef(std::vector<int>{1})
+      {
+        coef.data()[0] = 0.0;
+        domain.data()[0] = -1.0;
+        domain.data()[1] = 1.0;
+        window.data()[0] = -1.0;
+        window.data()[1] = 1.0;
+      }
+      explicit Legendre(const ndarray<double>& c) : coef(c.copy())
+      {
+        domain.data()[0] = -1.0;
+        domain.data()[1] = 1.0;
+        window.data()[0] = -1.0;
+        window.data()[1] = 1.0;
+        trim();
+      }
+      Legendre(
+          const ndarray<double>& c, const ndarray<double>& d, const ndarray<double>& w)
+          : coef(c.copy()), domain(d.copy()), window(w.copy())
+      {
+      }
+      void trim(double tol = 0.0)
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) <= tol)
+          --n;
+        if (n != static_cast<int>(coef.size()))
+        {
+          ndarray<double> nc(std::vector<int>{n});
+          for (int i = 0; i < n; ++i)
+            nc.data()[i] = coef.data()[i];
+          coef = std::move(nc);
+        }
+      }
+      ndarray<double> val(const ndarray<double>& x) const
+      {
+        ndarray<double> out(x.shape);
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+          double xv = x.data()[x._flat_logical(i)];
+          double res = 0.0;
+          double p0 = 1.0, p1 = xv;
+          for (size_t k = 0; k < coef.size(); ++k)
+          {
+            double pk;
+            if (k == 0)
+              pk = p0;
+            else if (k == 1)
+              pk = p1;
+            else
+            {
+              pk = ((2 * static_cast<double>(k) - 1) * xv * p1
+                    - (static_cast<double>(k) - 1) * p0)
+                  / static_cast<double>(k);
+              p0 = p1;
+              p1 = pk;
+            }
+            res += coef.data()[k] * pk;
+            if (k == 1)
+            {
+              p0 = 1.0;
+            }
+          }
+          out.data()[out._flat_logical(i)] = res;
+        }
+        return out;
+      }
+      Legendre deriv(int m = 1) const
+      {
+        ndarray<double> c = coef.copy();
+        for (int iter = 0; iter < m; ++iter)
+        {
+          if (c.size() <= 1)
+          {
+            c = ndarray<double>(std::vector<int>{1});
+            c.data()[0] = 0.0;
+            break;
+          }
+          ndarray<double> nc(std::vector<int>{static_cast<int>(c.size() - 1)});
+          for (size_t i = 1; i < c.size(); ++i)
+            nc.data()[i - 1] = c.data()[i] * static_cast<double>(i);
+          c = std::move(nc);
+        }
+        return Legendre(c, domain, window);
+      }
+      Legendre integ(int m = 1, double k = 0.0) const
+      {
+        ndarray<double> c = coef.copy();
+        for (int iter = 0; iter < m; ++iter)
+        {
+          ndarray<double> nc(std::vector<int>{static_cast<int>(c.size() + 1)});
+          nc.data()[0] = k;
+          for (size_t i = 0; i < c.size(); ++i)
+            nc.data()[i + 1] = c.data()[i] / static_cast<double>(i + 1);
+          c = std::move(nc);
+        }
+        return Legendre(c, domain, window);
+      }
+      static Legendre fromroots(const ndarray<double>& roots)
+      {
+        auto p = poly(roots);
+        ndarray<double> c(std::vector<int>{static_cast<int>(p.size())});
+        for (size_t i = 0; i < p.size(); ++i)
+          c.data()[i] = p.data()[p.size() - 1 - i];
+        return Legendre(c);
+      }
+      static Legendre fit(const ndarray<double>& x, const ndarray<double>& y, int deg)
+      {
+        auto c = polyfit(x, y, deg);
+        ndarray<double> rev(std::vector<int>{static_cast<int>(c.size())});
+        for (size_t i = 0; i < c.size(); ++i)
+          rev.data()[i] = c.data()[c.size() - 1 - i];
+        return Legendre(rev);
+      }
+      Legendre truncate(int size) const
+      {
+        int n = std::min(size, static_cast<int>(coef.size()));
+        ndarray<double> nc(std::vector<int>{n});
+        for (int i = 0; i < n; ++i)
+          nc.data()[i] = coef.data()[i];
+        return Legendre(nc, domain, window);
+      }
+      int degree() const
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) == 0.0)
+          --n;
+        return n - 1;
+      }
+      Legendre copy() const
+      {
+        return Legendre(coef, domain, window);
+      }
+      Legendre convert(const std::string& /*kind*/ = "Legendre") const
+      {
+        return copy();
+      }
+      Legendre cast(const ndarray<double>& c) const
+      {
+        return Legendre(c, domain, window);
+      }
+      static Legendre basis(int deg)
+      {
+        ndarray<double> c(std::vector<int>{deg + 1});
+        for (int i = 0; i <= deg; ++i)
+          c.data()[i] = (i == deg ? 1.0 : 0.0);
+        return Legendre(c);
+      }
+      static Legendre identity()
+      {
+        ndarray<double> c(std::vector<int>{2});
+        c.data()[0] = 0.0;
+        c.data()[1] = 1.0;
+        return Legendre(c);
+      }
+      bool has_samecoef(const Legendre& other) const
+      {
+        if (coef.size() != other.coef.size())
+          return false;
+        for (size_t i = 0; i < coef.size(); ++i)
+          if (coef.data()[i] != other.coef.data()[i])
+            return false;
+        return true;
+      }
+      bool has_samedomain(const Legendre& other) const
+      {
+        return domain.data()[0] == other.domain.data()[0]
+            && domain.data()[1] == other.domain.data()[1];
+      }
+      bool has_samewindow(const Legendre& other) const
+      {
+        return window.data()[0] == other.window.data()[0]
+            && window.data()[1] == other.window.data()[1];
+      }
+      bool has_sametype(const Legendre& other) const
+      {
+        (void)other;
+        return true;
+      }
+      bool has_samepars(const Legendre& other) const
+      {
+        return has_samedomain(other) && has_samewindow(other);
+      }
+      std::pair<double, double> mapparms() const
+      {
+        double scl =
+            (window.data()[1] - window.data()[0]) / (domain.data()[1] - domain.data()[0]);
+        double off = window.data()[0] - scl * domain.data()[0];
+        return {off, scl};
+      }
+      ndarray<double> roots() const
+      {
+        ndarray<double> p(std::vector<int>{static_cast<int>(coef.size())});
+        for (size_t i = 0; i < coef.size(); ++i)
+          p.data()[i] = coef.data()[coef.size() - 1 - i];
+        auto r = np::roots(p);
+        ndarray<double> out(std::vector<int>{static_cast<int>(r.size())});
+        for (size_t i = 0; i < r.size(); ++i)
+          out.data()[i] = r.data()[i].real();
+        return out;
+      }
+      std::pair<ndarray<double>, ndarray<double>> linspace(int n = 100) const
+      {
+        auto x = np::linspace<double>(domain.data()[0], domain.data()[1], n);
+        return {x, val(x)};
+      }
+    };
+
+    // ── Laguerre class (np.polynomial.Laguerre) ─────────────────────
+    /**
+     * @brief Laguerre series class (np.polynomial.laguerre.Laguerre).
+     * Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.laguerre.Laguerre.html
+     */
+    class Laguerre
+    {
+    public:
+      ndarray<double> coef;
+      ndarray<double> domain{std::vector<int>{2}};
+      ndarray<double> window{std::vector<int>{2}};
+      Laguerre() : coef(std::vector<int>{1})
+      {
+        coef.data()[0] = 0.0;
+        domain.data()[0] = 0.0;
+        domain.data()[1] = 1.0;
+        window.data()[0] = 0.0;
+        window.data()[1] = 1.0;
+      }
+      explicit Laguerre(const ndarray<double>& c) : coef(c.copy())
+      {
+        domain.data()[0] = 0.0;
+        domain.data()[1] = 1.0;
+        window.data()[0] = 0.0;
+        window.data()[1] = 1.0;
+        trim();
+      }
+      Laguerre(
+          const ndarray<double>& c, const ndarray<double>& d, const ndarray<double>& w)
+          : coef(c.copy()), domain(d.copy()), window(w.copy())
+      {
+      }
+      void trim(double tol = 0.0)
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) <= tol)
+          --n;
+        if (n != static_cast<int>(coef.size()))
+        {
+          ndarray<double> nc(std::vector<int>{n});
+          for (int i = 0; i < n; ++i)
+            nc.data()[i] = coef.data()[i];
+          coef = std::move(nc);
+        }
+      }
+      ndarray<double> val(const ndarray<double>& x) const
+      {
+        ndarray<double> out(x.shape);
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+          double xv = x.data()[x._flat_logical(i)];
+          double res = 0.0;
+          double p0 = 1.0;
+          double p1 = 1.0 - xv;
+          for (size_t k = 0; k < coef.size(); ++k)
+          {
+            double pk;
+            if (k == 0)
+              pk = p0;
+            else if (k == 1)
+              pk = p1;
+            else
+            {
+              pk = ((2 * static_cast<double>(k) - 1 - xv) * p1
+                    - (static_cast<double>(k) - 1) * p0)
+                  / static_cast<double>(k);
+              p0 = p1;
+              p1 = pk;
+            }
+            res += coef.data()[k] * pk;
+          }
+          out.data()[out._flat_logical(i)] = res;
+        }
+        return out;
+      }
+      Laguerre deriv(int m = 1) const
+      {
+        ndarray<double> c = coef.copy();
+        for (int iter = 0; iter < m; ++iter)
+        {
+          if (c.size() <= 1)
+          {
+            c = ndarray<double>(std::vector<int>{1});
+            c.data()[0] = 0.0;
+            break;
+          }
+          ndarray<double> nc(std::vector<int>{static_cast<int>(c.size() - 1)});
+          for (size_t i = 1; i < c.size(); ++i)
+            nc.data()[i - 1] = c.data()[i] * static_cast<double>(i);
+          c = std::move(nc);
+        }
+        return Laguerre(c, domain, window);
+      }
+      Laguerre integ(int m = 1, double k = 0.0) const
+      {
+        ndarray<double> c = coef.copy();
+        for (int iter = 0; iter < m; ++iter)
+        {
+          ndarray<double> nc(std::vector<int>{static_cast<int>(c.size() + 1)});
+          nc.data()[0] = k;
+          for (size_t i = 0; i < c.size(); ++i)
+            nc.data()[i + 1] = c.data()[i] / static_cast<double>(i + 1);
+          c = std::move(nc);
+        }
+        return Laguerre(c, domain, window);
+      }
+      static Laguerre fromroots(const ndarray<double>& roots)
+      {
+        auto p = poly(roots);
+        ndarray<double> c(std::vector<int>{static_cast<int>(p.size())});
+        for (size_t i = 0; i < p.size(); ++i)
+          c.data()[i] = p.data()[p.size() - 1 - i];
+        return Laguerre(c);
+      }
+      static Laguerre fit(const ndarray<double>& x, const ndarray<double>& y, int deg)
+      {
+        auto c = polyfit(x, y, deg);
+        ndarray<double> rev(std::vector<int>{static_cast<int>(c.size())});
+        for (size_t i = 0; i < c.size(); ++i)
+          rev.data()[i] = c.data()[c.size() - 1 - i];
+        return Laguerre(rev);
+      }
+      Laguerre truncate(int size) const
+      {
+        int n = std::min(size, static_cast<int>(coef.size()));
+        ndarray<double> nc(std::vector<int>{n});
+        for (int i = 0; i < n; ++i)
+          nc.data()[i] = coef.data()[i];
+        return Laguerre(nc, domain, window);
+      }
+      int degree() const
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) == 0.0)
+          --n;
+        return n - 1;
+      }
+      Laguerre copy() const
+      {
+        return Laguerre(coef, domain, window);
+      }
+      Laguerre convert(const std::string& /*kind*/ = "Laguerre") const
+      {
+        return copy();
+      }
+      Laguerre cast(const ndarray<double>& c) const
+      {
+        return Laguerre(c, domain, window);
+      }
+      static Laguerre basis(int deg)
+      {
+        ndarray<double> c(std::vector<int>{deg + 1});
+        for (int i = 0; i <= deg; ++i)
+          c.data()[i] = (i == deg ? 1.0 : 0.0);
+        return Laguerre(c);
+      }
+      static Laguerre identity()
+      {
+        ndarray<double> c(std::vector<int>{2});
+        c.data()[0] = 0.0;
+        c.data()[1] = 1.0;
+        return Laguerre(c);
+      }
+      bool has_samecoef(const Laguerre& other) const
+      {
+        if (coef.size() != other.coef.size())
+          return false;
+        for (size_t i = 0; i < coef.size(); ++i)
+          if (coef.data()[i] != other.coef.data()[i])
+            return false;
+        return true;
+      }
+      bool has_samedomain(const Laguerre& other) const
+      {
+        return domain.data()[0] == other.domain.data()[0]
+            && domain.data()[1] == other.domain.data()[1];
+      }
+      bool has_samewindow(const Laguerre& other) const
+      {
+        return window.data()[0] == other.window.data()[0]
+            && window.data()[1] == other.window.data()[1];
+      }
+      bool has_sametype(const Laguerre& other) const
+      {
+        (void)other;
+        return true;
+      }
+      bool has_samepars(const Laguerre& other) const
+      {
+        return has_samedomain(other) && has_samewindow(other);
+      }
+      std::pair<double, double> mapparms() const
+      {
+        double scl =
+            (window.data()[1] - window.data()[0]) / (domain.data()[1] - domain.data()[0]);
+        double off = window.data()[0] - scl * domain.data()[0];
+        return {off, scl};
+      }
+      ndarray<double> roots() const
+      {
+        ndarray<double> p(std::vector<int>{static_cast<int>(coef.size())});
+        for (size_t i = 0; i < coef.size(); ++i)
+          p.data()[i] = coef.data()[coef.size() - 1 - i];
+        auto r = np::roots(p);
+        ndarray<double> out(std::vector<int>{static_cast<int>(r.size())});
+        for (size_t i = 0; i < r.size(); ++i)
+          out.data()[i] = r.data()[i].real();
+        return out;
+      }
+      std::pair<ndarray<double>, ndarray<double>> linspace(int n = 100) const
+      {
+        auto x = np::linspace<double>(domain.data()[0], domain.data()[1], n);
+        return {x, val(x)};
+      }
+    };
+
+    // ── Hermite class (np.polynomial.Hermite) ───────────────────────
+    /**
+     * @brief Hermite series class (physicists') (np.polynomial.hermite.Hermite).
+     * Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.Hermite.html
+     */
+    class Hermite
+    {
+    public:
+      ndarray<double> coef;
+      ndarray<double> domain{std::vector<int>{2}};
+      ndarray<double> window{std::vector<int>{2}};
+      Hermite() : coef(std::vector<int>{1})
+      {
+        coef.data()[0] = 0.0;
+        domain.data()[0] = -1.0;
+        domain.data()[1] = 1.0;
+        window.data()[0] = -1.0;
+        window.data()[1] = 1.0;
+      }
+      explicit Hermite(const ndarray<double>& c) : coef(c.copy())
+      {
+        domain.data()[0] = -1.0;
+        domain.data()[1] = 1.0;
+        window.data()[0] = -1.0;
+        window.data()[1] = 1.0;
+        trim();
+      }
+      Hermite(
+          const ndarray<double>& c, const ndarray<double>& d, const ndarray<double>& w)
+          : coef(c.copy()), domain(d.copy()), window(w.copy())
+      {
+      }
+      void trim(double tol = 0.0)
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) <= tol)
+          --n;
+        if (n != static_cast<int>(coef.size()))
+        {
+          ndarray<double> nc(std::vector<int>{n});
+          for (int i = 0; i < n; ++i)
+            nc.data()[i] = coef.data()[i];
+          coef = std::move(nc);
+        }
+      }
+      ndarray<double> val(const ndarray<double>& x) const
+      {
+        ndarray<double> out(x.shape);
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+          double xv = x.data()[x._flat_logical(i)];
+          double res = 0.0;
+          double p0 = 1.0;
+          double p1 = 2.0 * xv;
+          for (size_t k = 0; k < coef.size(); ++k)
+          {
+            double pk;
+            if (k == 0)
+              pk = p0;
+            else if (k == 1)
+              pk = p1;
+            else
+            {
+              pk = 2.0 * xv * p1 - 2.0 * (static_cast<double>(k) - 1) * p0;
+              p0 = p1;
+              p1 = pk;
+            }
+            res += coef.data()[k] * pk;
+          }
+          out.data()[out._flat_logical(i)] = res;
+        }
+        return out;
+      }
+      Hermite deriv(int m = 1) const
+      {
+        ndarray<double> c = coef.copy();
+        for (int iter = 0; iter < m; ++iter)
+        {
+          if (c.size() <= 1)
+          {
+            c = ndarray<double>(std::vector<int>{1});
+            c.data()[0] = 0.0;
+            break;
+          }
+          ndarray<double> nc(std::vector<int>{static_cast<int>(c.size() - 1)});
+          for (size_t i = 1; i < c.size(); ++i)
+            nc.data()[i - 1] = c.data()[i] * static_cast<double>(i) * 2.0;
+          c = std::move(nc);
+        }
+        return Hermite(c, domain, window);
+      }
+      Hermite integ(int m = 1, double k = 0.0) const
+      {
+        ndarray<double> c = coef.copy();
+        for (int iter = 0; iter < m; ++iter)
+        {
+          ndarray<double> nc(std::vector<int>{static_cast<int>(c.size() + 1)});
+          nc.data()[0] = k;
+          for (size_t i = 0; i < c.size(); ++i)
+            nc.data()[i + 1] = c.data()[i] / (2.0 * static_cast<double>(i + 1));
+          c = std::move(nc);
+        }
+        return Hermite(c, domain, window);
+      }
+      static Hermite fromroots(const ndarray<double>& roots)
+      {
+        auto p = poly(roots);
+        ndarray<double> c(std::vector<int>{static_cast<int>(p.size())});
+        for (size_t i = 0; i < p.size(); ++i)
+          c.data()[i] = p.data()[p.size() - 1 - i];
+        return Hermite(c);
+      }
+      static Hermite fit(const ndarray<double>& x, const ndarray<double>& y, int deg)
+      {
+        auto c = polyfit(x, y, deg);
+        ndarray<double> rev(std::vector<int>{static_cast<int>(c.size())});
+        for (size_t i = 0; i < c.size(); ++i)
+          rev.data()[i] = c.data()[c.size() - 1 - i];
+        return Hermite(rev);
+      }
+      Hermite truncate(int size) const
+      {
+        int n = std::min(size, static_cast<int>(coef.size()));
+        ndarray<double> nc(std::vector<int>{n});
+        for (int i = 0; i < n; ++i)
+          nc.data()[i] = coef.data()[i];
+        return Hermite(nc, domain, window);
+      }
+      int degree() const
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) == 0.0)
+          --n;
+        return n - 1;
+      }
+      Hermite copy() const
+      {
+        return Hermite(coef, domain, window);
+      }
+      Hermite convert(const std::string& /*kind*/ = "Hermite") const
+      {
+        return copy();
+      }
+      Hermite cast(const ndarray<double>& c) const
+      {
+        return Hermite(c, domain, window);
+      }
+      static Hermite basis(int deg)
+      {
+        ndarray<double> c(std::vector<int>{deg + 1});
+        for (int i = 0; i <= deg; ++i)
+          c.data()[i] = (i == deg ? 1.0 : 0.0);
+        return Hermite(c);
+      }
+      static Hermite identity()
+      {
+        ndarray<double> c(std::vector<int>{2});
+        c.data()[0] = 0.0;
+        c.data()[1] = 0.5;
+        return Hermite(c);
+      }
+      bool has_samecoef(const Hermite& other) const
+      {
+        if (coef.size() != other.coef.size())
+          return false;
+        for (size_t i = 0; i < coef.size(); ++i)
+          if (coef.data()[i] != other.coef.data()[i])
+            return false;
+        return true;
+      }
+      bool has_samedomain(const Hermite& other) const
+      {
+        return domain.data()[0] == other.domain.data()[0]
+            && domain.data()[1] == other.domain.data()[1];
+      }
+      bool has_samewindow(const Hermite& other) const
+      {
+        return window.data()[0] == other.window.data()[0]
+            && window.data()[1] == other.window.data()[1];
+      }
+      bool has_sametype(const Hermite& other) const
+      {
+        (void)other;
+        return true;
+      }
+      bool has_samepars(const Hermite& other) const
+      {
+        return has_samedomain(other) && has_samewindow(other);
+      }
+      std::pair<double, double> mapparms() const
+      {
+        double scl =
+            (window.data()[1] - window.data()[0]) / (domain.data()[1] - domain.data()[0]);
+        double off = window.data()[0] - scl * domain.data()[0];
+        return {off, scl};
+      }
+      ndarray<double> roots() const
+      {
+        ndarray<double> p(std::vector<int>{static_cast<int>(coef.size())});
+        for (size_t i = 0; i < coef.size(); ++i)
+          p.data()[i] = coef.data()[coef.size() - 1 - i];
+        auto r = np::roots(p);
+        ndarray<double> out(std::vector<int>{static_cast<int>(r.size())});
+        for (size_t i = 0; i < r.size(); ++i)
+          out.data()[i] = r.data()[i].real();
+        return out;
+      }
+      std::pair<ndarray<double>, ndarray<double>> linspace(int n = 100) const
+      {
+        auto x = np::linspace<double>(domain.data()[0], domain.data()[1], n);
+        return {x, val(x)};
+      }
+    };
+
+    // ── HermiteE class (np.polynomial.HermiteE) ─────────────────────
+    /**
+     * @brief HermiteE series class (probabilists') (np.polynomial.hermite_e.HermiteE).
+     * Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite_e.HermiteE.html
+     */
+    class HermiteE
+    {
+    public:
+      ndarray<double> coef;
+      ndarray<double> domain{std::vector<int>{2}};
+      ndarray<double> window{std::vector<int>{2}};
+      HermiteE() : coef(std::vector<int>{1})
+      {
+        coef.data()[0] = 0.0;
+        domain.data()[0] = -1.0;
+        domain.data()[1] = 1.0;
+        window.data()[0] = -1.0;
+        window.data()[1] = 1.0;
+      }
+      explicit HermiteE(const ndarray<double>& c) : coef(c.copy())
+      {
+        domain.data()[0] = -1.0;
+        domain.data()[1] = 1.0;
+        window.data()[0] = -1.0;
+        window.data()[1] = 1.0;
+        trim();
+      }
+      HermiteE(
+          const ndarray<double>& c, const ndarray<double>& d, const ndarray<double>& w)
+          : coef(c.copy()), domain(d.copy()), window(w.copy())
+      {
+      }
+      void trim(double tol = 0.0)
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) <= tol)
+          --n;
+        if (n != static_cast<int>(coef.size()))
+        {
+          ndarray<double> nc(std::vector<int>{n});
+          for (int i = 0; i < n; ++i)
+            nc.data()[i] = coef.data()[i];
+          coef = std::move(nc);
+        }
+      }
+      ndarray<double> val(const ndarray<double>& x) const
+      {
+        ndarray<double> out(x.shape);
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+          double xv = x.data()[x._flat_logical(i)];
+          double res = 0.0;
+          double p0 = 1.0;
+          double p1 = xv;
+          for (size_t k = 0; k < coef.size(); ++k)
+          {
+            double pk;
+            if (k == 0)
+              pk = p0;
+            else if (k == 1)
+              pk = p1;
+            else
+            {
+              pk = xv * p1 - (static_cast<double>(k) - 1) * p0;
+              p0 = p1;
+              p1 = pk;
+            }
+            res += coef.data()[k] * pk;
+          }
+          out.data()[out._flat_logical(i)] = res;
+        }
+        return out;
+      }
+      HermiteE deriv(int m = 1) const
+      {
+        ndarray<double> c = coef.copy();
+        for (int iter = 0; iter < m; ++iter)
+        {
+          if (c.size() <= 1)
+          {
+            c = ndarray<double>(std::vector<int>{1});
+            c.data()[0] = 0.0;
+            break;
+          }
+          ndarray<double> nc(std::vector<int>{static_cast<int>(c.size() - 1)});
+          for (size_t i = 1; i < c.size(); ++i)
+            nc.data()[i - 1] = c.data()[i] * static_cast<double>(i);
+          c = std::move(nc);
+        }
+        return HermiteE(c, domain, window);
+      }
+      HermiteE integ(int m = 1, double k = 0.0) const
+      {
+        ndarray<double> c = coef.copy();
+        for (int iter = 0; iter < m; ++iter)
+        {
+          ndarray<double> nc(std::vector<int>{static_cast<int>(c.size() + 1)});
+          nc.data()[0] = k;
+          for (size_t i = 0; i < c.size(); ++i)
+            nc.data()[i + 1] = c.data()[i] / static_cast<double>(i + 1);
+          c = std::move(nc);
+        }
+        return HermiteE(c, domain, window);
+      }
+      static HermiteE fromroots(const ndarray<double>& roots)
+      {
+        auto p = poly(roots);
+        ndarray<double> c(std::vector<int>{static_cast<int>(p.size())});
+        for (size_t i = 0; i < p.size(); ++i)
+          c.data()[i] = p.data()[p.size() - 1 - i];
+        return HermiteE(c);
+      }
+      static HermiteE fit(const ndarray<double>& x, const ndarray<double>& y, int deg)
+      {
+        auto c = polyfit(x, y, deg);
+        ndarray<double> rev(std::vector<int>{static_cast<int>(c.size())});
+        for (size_t i = 0; i < c.size(); ++i)
+          rev.data()[i] = c.data()[c.size() - 1 - i];
+        return HermiteE(rev);
+      }
+      HermiteE truncate(int size) const
+      {
+        int n = std::min(size, static_cast<int>(coef.size()));
+        ndarray<double> nc(std::vector<int>{n});
+        for (int i = 0; i < n; ++i)
+          nc.data()[i] = coef.data()[i];
+        return HermiteE(nc, domain, window);
+      }
+      int degree() const
+      {
+        int n = static_cast<int>(coef.size());
+        while (n > 1 && std::abs(coef.data()[n - 1]) == 0.0)
+          --n;
+        return n - 1;
+      }
+      HermiteE copy() const
+      {
+        return HermiteE(coef, domain, window);
+      }
+      HermiteE convert(const std::string& /*kind*/ = "HermiteE") const
+      {
+        return copy();
+      }
+      HermiteE cast(const ndarray<double>& c) const
+      {
+        return HermiteE(c, domain, window);
+      }
+      static HermiteE basis(int deg)
+      {
+        ndarray<double> c(std::vector<int>{deg + 1});
+        for (int i = 0; i <= deg; ++i)
+          c.data()[i] = (i == deg ? 1.0 : 0.0);
+        return HermiteE(c);
+      }
+      static HermiteE identity()
+      {
+        ndarray<double> c(std::vector<int>{2});
+        c.data()[0] = 0.0;
+        c.data()[1] = 1.0;
+        return HermiteE(c);
+      }
+      bool has_samecoef(const HermiteE& other) const
+      {
+        if (coef.size() != other.coef.size())
+          return false;
+        for (size_t i = 0; i < coef.size(); ++i)
+          if (coef.data()[i] != other.coef.data()[i])
+            return false;
+        return true;
+      }
+      bool has_samedomain(const HermiteE& other) const
+      {
+        return domain.data()[0] == other.domain.data()[0]
+            && domain.data()[1] == other.domain.data()[1];
+      }
+      bool has_samewindow(const HermiteE& other) const
+      {
+        return window.data()[0] == other.window.data()[0]
+            && window.data()[1] == other.window.data()[1];
+      }
+      bool has_sametype(const HermiteE& other) const
+      {
+        (void)other;
+        return true;
+      }
+      bool has_samepars(const HermiteE& other) const
+      {
+        return has_samedomain(other) && has_samewindow(other);
+      }
+      std::pair<double, double> mapparms() const
+      {
+        double scl =
+            (window.data()[1] - window.data()[0]) / (domain.data()[1] - domain.data()[0]);
+        double off = window.data()[0] - scl * domain.data()[0];
+        return {off, scl};
+      }
+      ndarray<double> roots() const
+      {
+        ndarray<double> p(std::vector<int>{static_cast<int>(coef.size())});
+        for (size_t i = 0; i < coef.size(); ++i)
+          p.data()[i] = coef.data()[coef.size() - 1 - i];
+        auto r = np::roots(p);
+        ndarray<double> out(std::vector<int>{static_cast<int>(r.size())});
+        for (size_t i = 0; i < r.size(); ++i)
+          out.data()[i] = r.data()[i].real();
+        return out;
+      }
+      std::pair<ndarray<double>, ndarray<double>> linspace(int n = 100) const
+      {
+        auto x = np::linspace<double>(domain.data()[0], domain.data()[1], n);
+        return {x, val(x)};
+      }
+    };
 
     // Polyutils helpers (np.polynomial.polyutils.*)
     NP_API inline auto poly_trim(const ndarray<double>& c, double tol = 0.0)
@@ -667,6 +1731,167 @@ namespace np
           / (old_domain.data()[1] - old_domain.data()[0]);
       double off = new_domain.data()[0] - scl * old_domain.data()[0];
       return {off, scl};
+    }
+
+    // ── Modern polyutils: trimcoef, polyvander, polycompanion etc. ─────
+    /**
+     * @brief Remove small trailing coefficients (np.polynomial.polyutils.trimcoef).
+     * Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.trimcoef.html
+     */
+    NP_API inline auto trimcoef(const ndarray<double>& c, double tol = 0.0)
+        -> ndarray<double>
+    {
+      if (tol < 0)
+        throw std::invalid_argument("trimcoef: tol must be non-negative");
+      int n = static_cast<int>(c.size());
+      while (n > 1 && std::abs(c.data()[n - 1]) <= tol)
+        --n;
+      if (n == 0)
+      {
+        ndarray<double> out(std::vector<int>{1});
+        out.data()[0] = 0.0;
+        return out;
+      }
+      ndarray<double> out(std::vector<int>{n});
+      for (int i = 0; i < n; ++i)
+        out.data()[i] = c.data()[i];
+      return out;
+    }
+
+    /**
+     * @brief Alias to trimcoef for polynomial module parity
+     * (np.polynomial.polynomial.polytrim). Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polytrim.html
+     */
+    NP_API inline auto polytrim(const ndarray<double>& c, double tol = 0.0)
+        -> ndarray<double>
+    {
+      return trimcoef(c, tol);
+    }
+
+    /**
+     * @brief Vandermonde matrix (np.polynomial.polynomial.polyvander).
+     * Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyvander.html
+     */
+    NP_API inline auto polyvander(const ndarray<double>& x, int deg) -> ndarray<double>
+    {
+      if (deg < 0)
+        throw std::invalid_argument("polyvander: deg must be >=0");
+      std::vector<int> shape = x.shape;
+      shape.push_back(deg + 1);
+      ndarray<double> V(shape);
+      for (size_t i = 0; i < x.size(); ++i)
+      {
+        double xv = x.data()[x._flat_logical(i)];
+        double p = 1.0;
+        for (int j = 0; j <= deg; ++j)
+        {
+          std::vector<size_t> x_coord(x.ndim());
+          size_t t = i;
+          for (int d = static_cast<int>(x.ndim()) - 1; d >= 0; --d)
+          {
+            x_coord[static_cast<size_t>(d)] = t % static_cast<size_t>(x.shape[d]);
+            t /= static_cast<size_t>(x.shape[d]);
+          }
+          std::vector<size_t> v_coord = x_coord;
+          v_coord.push_back(static_cast<size_t>(j));
+          V.set(v_coord, p);
+          p *= xv;
+        }
+      }
+      return V;
+    }
+
+    /**
+     * @brief Companion matrix (np.polynomial.polynomial.polycompanion).
+     * Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polycompanion.html
+     */
+    NP_API inline auto polycompanion(const ndarray<double>& c) -> ndarray<double>
+    {
+      auto tc = trimcoef(c);
+      int n = static_cast<int>(tc.size());
+      if (n < 2)
+        throw std::invalid_argument("polycompanion: need at least 2 coefficients");
+      int deg = n - 1;
+      double lead = tc.data()[deg];
+      if (lead == 0.0)
+        throw std::invalid_argument("polycompanion: leading coefficient zero");
+      ndarray<double> mat(std::vector<int>{deg, deg});
+      for (int i = 0; i < deg; ++i)
+        for (int j = 0; j < deg; ++j)
+          mat.at(static_cast<size_t>(i), static_cast<size_t>(j)) = 0.0;
+      for (int i = 1; i < deg; ++i)
+        mat.at(static_cast<size_t>(i), static_cast<size_t>(i - 1)) = 1.0;
+      for (int i = 0; i < deg; ++i)
+        mat.at(static_cast<size_t>(i), static_cast<size_t>(deg - 1)) =
+            -tc.data()[i] / lead;
+      return mat;
+    }
+
+    /**
+     * @brief Linear polynomial helper (np.polynomial.polynomial.polyline).
+     * Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyline.html
+     */
+    NP_API inline auto polyline(double off, double scl) -> ndarray<double>
+    {
+      ndarray<double> out(std::vector<int>{2});
+      out.data()[0] = off;
+      out.data()[1] = scl;
+      return out;
+    }
+
+    /**
+     * @brief Generate monic polynomial from roots
+     * (np.polynomial.polynomial.polyfromroots). Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyfromroots.html
+     */
+    NP_API inline auto polyfromroots(const ndarray<double>& roots) -> ndarray<double>
+    {
+      auto p = poly(roots);
+      ndarray<double> c(std::vector<int>{static_cast<int>(p.size())});
+      for (size_t i = 0; i < p.size(); ++i)
+        c.data()[i] = p.data()[p.size() - 1 - i];
+      return trimcoef(c);
+    }
+
+    /**
+     * @brief Compute roots of polynomial (np.polynomial.polynomial.polyroots).
+     * Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyroots.html
+     */
+    NP_API inline auto polyroots(const ndarray<double>& c)
+        -> ndarray<std::complex<double>>
+    {
+      auto tc = trimcoef(c);
+      ndarray<double> p(std::vector<int>{static_cast<int>(tc.size())});
+      for (size_t i = 0; i < tc.size(); ++i)
+        p.data()[i] = tc.data()[tc.size() - 1 - i];
+      return np::roots(p);
+    }
+
+    /**
+     * @brief Evaluate polynomial at roots specification (polyvalfromroots).
+     * Reference:
+     * https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyvalfromroots.html
+     */
+    NP_API inline auto
+    polyvalfromroots(const ndarray<double>& x, const ndarray<double>& r)
+        -> ndarray<double>
+    {
+      ndarray<double> out(x.shape);
+      for (size_t i = 0; i < x.size(); ++i)
+      {
+        double xv = x.data()[x._flat_logical(i)];
+        double prod = 1.0;
+        for (size_t k = 0; k < r.size(); ++k)
+          prod *= (xv - r.data()[r._flat_logical(k)]);
+        out.data()[out._flat_logical(i)] = prod;
+      }
+      return out;
     }
 
     // Legacy polyutils missing: polyint/polyder aliases for poly1d compat

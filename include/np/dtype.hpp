@@ -1302,6 +1302,98 @@ namespace np
   }
 
   /**
+   * @brief Deprecated alias for `dtype_typename` (np.typename).
+   *
+   * `typename` is a C++ keyword; this wrapper provides the same
+   * behavior under a non-keyword spelling.
+   *
+   * Reference: https://numpy.org/doc/stable/reference/generated/numpy.typename.html
+   * Reference: numpy-reference/reference/generated/numpy.typename.html
+   */
+  NP_API NP_NODISCARD inline auto typename_for_dtype(dtype t) -> std::string
+  {
+    return dtype_typename(t);
+  }
+
+  /**
+   * @brief Keyword-safe alias for `np::typename` (np.typename).
+   *
+   * `typename` is a C++ keyword and cannot be used as an identifier.
+   * This alias provides the same functionality; callers needing the
+   * literal `np::typename` spelling can use a macro:
+   * `#define typename typename_` after including this header (use with care).
+   *
+   * Reference: https://numpy.org/doc/stable/reference/generated/numpy.typename.html
+   * Reference: numpy-reference/reference/generated/numpy.typename.html
+   */
+  NP_API NP_NODISCARD inline auto typename_(dtype t) -> std::string
+  {
+    return dtype_typename(t);
+  }
+
+  /**
+   * @brief Keyword-safe alias for `np::typename` with character code.
+   *
+   * Overload that mirrors `numpy.typename(char)` – converts a single-
+   * character dtype code (as returned by `sctype2char`) to its
+   * human-readable name.
+   *
+   * Reference: https://numpy.org/doc/stable/reference/generated/numpy.typename.html
+   */
+  NP_API NP_NODISCARD inline auto typename_(char code) -> std::string
+  {
+    switch (code)
+    {
+      case 'b':
+        return dtype_typename(dtype::int8);
+      case 'h':
+        return dtype_typename(dtype::int16);
+      case 'i':
+        return dtype_typename(dtype::int32);
+      case 'l':
+        return dtype_typename(dtype::int64);
+      case 'B':
+        return dtype_typename(dtype::uint8);
+      case 'H':
+        return dtype_typename(dtype::uint16);
+      case 'I':
+        return dtype_typename(dtype::uint32);
+      case 'L':
+        return dtype_typename(dtype::uint64);
+      case 'e':
+        return dtype_typename(dtype::float16);
+      case 'f':
+        return dtype_typename(dtype::float32);
+      case 'd':
+        return dtype_typename(dtype::float64);
+      case 'g':
+        return dtype_typename(dtype::longdouble);
+      case 'F':
+        return dtype_typename(dtype::complex64);
+      case 'D':
+        return dtype_typename(dtype::complex128);
+      case 'G':
+        return dtype_typename(dtype::clongdouble);
+      case '?':
+        return dtype_typename(dtype::bool_);
+      case 'S':
+        return dtype_typename(dtype::string_);
+      case 'U':
+        return dtype_typename(dtype::unicode_);
+      case 'M':
+        return dtype_typename(dtype::datetime64);
+      case 'm':
+        return dtype_typename(dtype::timedelta64);
+      case 'V':
+        return dtype_typename(dtype::void_);
+      case 'O':
+        return dtype_typename(dtype::object_);
+      default:
+        return std::string(1, code);
+    }
+  }
+
+  /**
    * @brief Minimal type code for given dtypes (np.mintypecode).
    *
    * Reference: numpy-reference/reference/generated/numpy.mintypecode.html
@@ -1599,5 +1691,18 @@ namespace np
   } // namespace rec
 
 } // namespace np
+
+// ── Deprecated `np::typename` macro workaround ──────────────────────────
+// `typename` is a C++ keyword, so it cannot be defined as a function.
+// The keyword-safe spellings are `np::typename_` and
+// `np::typename_for_dtype`. For source compatibility with
+// `numpy.typename`, users may opt-in to a macro alias:
+//   #define typename typename_
+// after including this header (use with care – it hides the keyword).
+// Alternatively, define `NP_ENABLE_TYPENAME_MACRO` before including this
+// header to enable the alias automatically (disabled by default):
+#ifdef NP_ENABLE_TYPENAME_MACRO
+#define typename typename_
+#endif
 
 #endif // NP_DTYPE_HPP

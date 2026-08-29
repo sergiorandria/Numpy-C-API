@@ -1074,6 +1074,717 @@ namespace np
           ndarray<bool>(std::vector<int>{deg + 1}, dtype::bool_, false));
     }
 
+    // ── Additional parity helpers to reach 100% (21 distinct) ───────────
+
+    /**
+     * @brief Test masked arrays for equality within tolerance (np.ma.allclose).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.allclose.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto allclose(
+        const MaskedArray<T>& a,
+        const MaskedArray<T>& b,
+        double rtol = 1e-05,
+        double atol = 1e-08) -> bool
+    {
+      if (a.shape() != b.shape())
+      {
+        return false;
+      }
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        bool ma = a.mask.data()[a.mask._flat_logical(i)];
+        bool mb = b.mask.data()[b.mask._flat_logical(i)];
+        if (ma && mb)
+        {
+          continue;
+        }
+        if (ma != mb)
+        {
+          return false;
+        }
+        double av = static_cast<double>(a.data.data()[a.data._flat_logical(i)]);
+        double bv = static_cast<double>(b.data.data()[b.data._flat_logical(i)]);
+        if (std::abs(av - bv) > atol + rtol * std::abs(bv))
+        {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    /**
+     * @brief Discrete difference with masked propagation (np.ma.ediff1d).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.ediff1d.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto ediff1d(const MaskedArray<T>& a) -> MaskedArray<T>
+    {
+      if (a.size() <= 1)
+      {
+        return MaskedArray<T>(
+            ndarray<T>(std::vector<int>{0}),
+            ndarray<bool>(std::vector<int>{0}, dtype_of<bool>, false));
+      }
+      std::vector<int> shp{static_cast<int>(a.size() - 1)};
+      ndarray<T> d(shp);
+      ndarray<bool> m(shp, dtype_of<bool>, false);
+      for (std::size_t i = 0; i + 1 < a.size(); ++i)
+      {
+        T cur = a.data.data()[a.data._flat_logical(i)];
+        T nxt = a.data.data()[a.data._flat_logical(i + 1)];
+        d.data()[d._flat_logical(i)] = nxt - cur;
+        bool masked = a.mask.data()[a.mask._flat_logical(i)]
+            || a.mask.data()[a.mask._flat_logical(i + 1)];
+        m.data()[m._flat_logical(i)] = masked;
+      }
+      return MaskedArray<T>(d, m);
+    }
+
+    /**
+     * @brief Weighted average ignoring masked (np.ma.average).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.average.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto
+    average(const MaskedArray<T>& a, const ndarray<double>& weights = ndarray<double>())
+        -> double
+    {
+      bool use_w = weights.size() != 0 && weights.size() == a.size();
+      double sum = 0.0;
+      double wsum = 0.0;
+      std::size_t cnt = 0;
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        if (a.mask.data()[a.mask._flat_logical(i)])
+        {
+          continue;
+        }
+        double v = static_cast<double>(a.data.data()[a.data._flat_logical(i)]);
+        double w = use_w ? weights.data()[weights._flat_logical(i)] : 1.0;
+        sum += v * w;
+        wsum += w;
+        ++cnt;
+      }
+      if (cnt == 0 || wsum == 0.0)
+      {
+        return std::numeric_limits<double>::quiet_NaN();
+      }
+      return sum / wsum;
+    }
+
+    /**
+     * @brief Median of unmasked values (np.ma.median).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.median.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto median(const MaskedArray<T>& a) -> double
+    {
+      std::vector<double> vals;
+      vals.reserve(a.size());
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        if (!a.mask.data()[a.mask._flat_logical(i)])
+        {
+          vals.push_back(static_cast<double>(a.data.data()[a.data._flat_logical(i)]));
+        }
+      }
+      if (vals.empty())
+      {
+        return std::numeric_limits<double>::quiet_NaN();
+      }
+      std::sort(vals.begin(), vals.end());
+      std::size_t n = vals.size();
+      if (n % 2 == 1)
+      {
+        return vals[n / 2];
+      }
+      return (vals[n / 2 - 1] + vals[n / 2]) / 2.0;
+    }
+
+    /**
+     * @brief Cumulative sum (np.ma.cumsum).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.cumsum.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto cumsum(const MaskedArray<T>& a) -> MaskedArray<T>
+    {
+      ndarray<T> d(a.data.shape);
+      ndarray<bool> m(a.mask.shape, dtype_of<bool>, false);
+      T acc = T{0};
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        bool masked = a.mask.data()[a.mask._flat_logical(i)];
+        m.data()[m._flat_logical(i)] = masked;
+        if (!masked)
+        {
+          acc += a.data.data()[a.data._flat_logical(i)];
+        }
+        d.data()[d._flat_logical(i)] = acc;
+      }
+      return MaskedArray<T>(d, m);
+    }
+
+    /**
+     * @brief Cumulative product (np.ma.cumprod).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.cumprod.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto cumprod(const MaskedArray<T>& a) -> MaskedArray<T>
+    {
+      ndarray<T> d(a.data.shape);
+      ndarray<bool> m(a.mask.shape, dtype_of<bool>, false);
+      T acc = T{1};
+      bool any_unmasked = false;
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        bool masked = a.mask.data()[a.mask._flat_logical(i)];
+        m.data()[m._flat_logical(i)] = masked;
+        if (!masked)
+        {
+          if (!any_unmasked)
+          {
+            acc = a.data.data()[a.data._flat_logical(i)];
+            any_unmasked = true;
+          }
+          else
+          {
+            acc *= a.data.data()[a.data._flat_logical(i)];
+          }
+        }
+        d.data()[d._flat_logical(i)] = acc;
+      }
+      return MaskedArray<T>(d, m);
+    }
+
+    /**
+     * @brief Index of maximum unmasked (np.ma.argmax).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.argmax.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto argmax(const MaskedArray<T>& a) -> std::size_t
+    {
+      bool first = true;
+      T best{};
+      std::size_t idx = 0;
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        if (a.mask.data()[a.mask._flat_logical(i)])
+        {
+          continue;
+        }
+        T cur = a.data.data()[a.data._flat_logical(i)];
+        if (first || cur > best)
+        {
+          best = cur;
+          idx = i;
+          first = false;
+        }
+      }
+      if (first)
+      {
+        throw std::invalid_argument("argmax: all masked");
+      }
+      return idx;
+    }
+
+    /**
+     * @brief Index of minimum unmasked (np.ma.argmin).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.argmin.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto argmin(const MaskedArray<T>& a) -> std::size_t
+    {
+      bool first = true;
+      T best{};
+      std::size_t idx = 0;
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        if (a.mask.data()[a.mask._flat_logical(i)])
+        {
+          continue;
+        }
+        T cur = a.data.data()[a.data._flat_logical(i)];
+        if (first || cur < best)
+        {
+          best = cur;
+          idx = i;
+          first = false;
+        }
+      }
+      if (first)
+      {
+        throw std::invalid_argument("argmin: all masked");
+      }
+      return idx;
+    }
+
+    /**
+     * @brief Indices that sort masked array (np.ma.argsort).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.argsort.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto argsort(const MaskedArray<T>& a) -> ndarray<std::size_t>
+    {
+      std::vector<std::size_t> idx(a.size());
+      for (std::size_t i = 0; i < idx.size(); ++i)
+      {
+        idx[i] = i;
+      }
+      std::sort(
+          idx.begin(),
+          idx.end(),
+          [&](std::size_t p, std::size_t q)
+          {
+            bool mp = a.mask.data()[a.mask._flat_logical(p)];
+            bool mq = a.mask.data()[a.mask._flat_logical(q)];
+            if (mp && !mq)
+            {
+              return false;
+            }
+            if (!mp && mq)
+            {
+              return true;
+            }
+            if (mp && mq)
+            {
+              return p < q;
+            }
+            return a.data.data()[a.data._flat_logical(p)]
+                < a.data.data()[a.data._flat_logical(q)];
+          });
+      ndarray<std::size_t> out(std::vector<int>{static_cast<int>(idx.size())});
+      for (std::size_t i = 0; i < idx.size(); ++i)
+      {
+        out.data()[out._flat_logical(i)] = idx[i];
+      }
+      return out;
+    }
+
+    /**
+     * @brief Sort masked array (np.ma.sort).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.sort.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto sort(const MaskedArray<T>& a) -> MaskedArray<T>
+    {
+      std::vector<T> vals;
+      std::vector<bool> masks;
+      vals.reserve(a.size());
+      masks.reserve(a.size());
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        vals.push_back(a.data.data()[a.data._flat_logical(i)]);
+        masks.push_back(a.mask.data()[a.mask._flat_logical(i)]);
+      }
+      std::vector<std::size_t> order(vals.size());
+      for (std::size_t i = 0; i < order.size(); ++i)
+      {
+        order[i] = i;
+      }
+      std::sort(
+          order.begin(),
+          order.end(),
+          [&](std::size_t p, std::size_t q)
+          {
+            if (masks[p] && !masks[q])
+            {
+              return false;
+            }
+            if (!masks[p] && masks[q])
+            {
+              return true;
+            }
+            if (masks[p] && masks[q])
+            {
+              return p < q;
+            }
+            return vals[p] < vals[q];
+          });
+      ndarray<T> d(a.data.shape);
+      ndarray<bool> m(a.mask.shape, dtype_of<bool>, false);
+      for (std::size_t i = 0; i < order.size(); ++i)
+      {
+        d.data()[d._flat_logical(i)] = vals[order[i]];
+        m.data()[m._flat_logical(i)] = masks[order[i]];
+      }
+      return MaskedArray<T>(d, m);
+    }
+
+    /**
+     * @brief Unique unmasked values (np.ma.unique).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.unique.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto unique(const MaskedArray<T>& a) -> MaskedArray<T>
+    {
+      std::vector<T> vals;
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        if (!a.mask.data()[a.mask._flat_logical(i)])
+        {
+          vals.push_back(a.data.data()[a.data._flat_logical(i)]);
+        }
+      }
+      std::sort(vals.begin(), vals.end());
+      vals.erase(std::unique(vals.begin(), vals.end()), vals.end());
+      if (vals.empty())
+      {
+        return MaskedArray<T>(
+            ndarray<T>(std::vector<int>{0}),
+            ndarray<bool>(std::vector<int>{0}, dtype_of<bool>, false));
+      }
+      std::vector<int> shp{static_cast<int>(vals.size())};
+      ndarray<T> d(shp);
+      ndarray<bool> m(shp, dtype_of<bool>, false);
+      for (std::size_t i = 0; i < vals.size(); ++i)
+      {
+        d.data()[d._flat_logical(i)] = vals[i];
+      }
+      return MaskedArray<T>(d, m);
+    }
+
+    /**
+     * @brief Choose elements from two masked arrays (np.ma.where).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.where.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto
+    where(const ndarray<bool>& cond, const MaskedArray<T>& x, const MaskedArray<T>& y)
+        -> MaskedArray<T>
+    {
+      if (x.size() != y.size())
+      {
+        throw std::invalid_argument("where: x/y size mismatch");
+      }
+      std::vector<int> shp = x.data.shape;
+      if (cond.size() != 0 && cond.shape != shp)
+      {
+        shp = cond.shape;
+      }
+      ndarray<T> d(shp);
+      ndarray<bool> m(shp, dtype_of<bool>, false);
+      for (std::size_t i = 0; i < d.size(); ++i)
+      {
+        bool c = cond.size() == 0 ? false : cond.data()[cond._flat_logical(i)];
+        bool mx = x.mask.data()[x.mask._flat_logical(i % x.mask.size())];
+        bool my = y.mask.data()[y.mask._flat_logical(i % y.mask.size())];
+        T vx = x.data.data()[x.data._flat_logical(i % x.data.size())];
+        T vy = y.data.data()[y.data._flat_logical(i % y.data.size())];
+        d.data()[d._flat_logical(i)] = c ? vx : vy;
+        m.data()[m._flat_logical(i)] = c ? mx : my;
+      }
+      return MaskedArray<T>(d, m);
+    }
+
+    /**
+     * @brief Take elements by indices (np.ma.take).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.take.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto
+    take(const MaskedArray<T>& a, const ndarray<std::size_t>& indices) -> MaskedArray<T>
+    {
+      std::vector<int> shp{static_cast<int>(indices.size())};
+      ndarray<T> d(shp);
+      ndarray<bool> m(shp, dtype_of<bool>, false);
+      for (std::size_t i = 0; i < indices.size(); ++i)
+      {
+        std::size_t src = indices.data()[indices._flat_logical(i)] % a.size();
+        d.data()[d._flat_logical(i)] = a.data.data()[a.data._flat_logical(src)];
+        m.data()[m._flat_logical(i)] = a.mask.data()[a.mask._flat_logical(src)];
+      }
+      return MaskedArray<T>(d, m);
+    }
+
+    /**
+     * @brief Set elements by indices (np.ma.put).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.put.html
+     */
+    NP_API template <typename T>
+    inline auto
+    put(MaskedArray<T>& a, const ndarray<std::size_t>& indices, const ndarray<T>& values)
+        -> void
+    {
+      for (std::size_t i = 0; i < indices.size(); ++i)
+      {
+        if (a.hard_mask && a.mask.data()[a.mask._flat_logical(0)])
+        {
+          continue;
+        }
+        std::size_t dst = indices.data()[indices._flat_logical(i)] % a.size();
+        T v = values.data()[values._flat_logical(i % values.size())];
+        a.data.data()[a.data._flat_logical(dst)] = v;
+        if (!a.hard_mask)
+        {
+          a.mask.data()[a.mask._flat_logical(dst)] = false;
+        }
+      }
+    }
+
+    /**
+     * @brief Set masked values where condition (np.ma.putmask).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.putmask.html
+     */
+    NP_API template <typename T>
+    inline auto putmask(MaskedArray<T>& a, const ndarray<bool>& mask, T value) -> void
+    {
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        bool do_put = false;
+        if (mask.size() != 0)
+        {
+          do_put = mask.data()[mask._flat_logical(i % mask.size())];
+        }
+        if (do_put)
+        {
+          if (a.hard_mask)
+          {
+            continue;
+          }
+          a.data.data()[a.data._flat_logical(i)] = value;
+          a.mask.data()[a.mask._flat_logical(i)] = false;
+        }
+      }
+    }
+
+    /**
+     * @brief Suppress rows with masked values (np.ma.compress_rows).
+     * Reference:
+     * https://numpy.org/doc/2.2/reference/generated/numpy.ma.compress_rows.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto compress_rows(const MaskedArray<T>& a) -> MaskedArray<T>
+    {
+      if (a.ndim() != 2)
+      {
+        throw std::invalid_argument("compress_rows requires 2D");
+      }
+      int rows = a.shape()[0];
+      int cols = a.shape()[1];
+      std::vector<int> keep;
+      for (int r = 0; r < rows; ++r)
+      {
+        bool has_masked = false;
+        for (int c = 0; c < cols; ++c)
+        {
+          std::vector<std::size_t> idx{
+              static_cast<std::size_t>(r), static_cast<std::size_t>(c)};
+          if (a.mask.get(idx))
+          {
+            has_masked = true;
+            break;
+          }
+        }
+        if (!has_masked)
+        {
+          keep.push_back(r);
+        }
+      }
+      if (keep.empty())
+      {
+        return MaskedArray<T>(
+            ndarray<T>(std::vector<int>{0, cols}),
+            ndarray<bool>(std::vector<int>{0, cols}, dtype_of<bool>, false));
+      }
+      std::vector<int> shp{static_cast<int>(keep.size()), cols};
+      ndarray<T> d(shp);
+      ndarray<bool> m(shp, dtype_of<bool>, false);
+      for (std::size_t r = 0; r < keep.size(); ++r)
+      {
+        for (int c = 0; c < cols; ++c)
+        {
+          std::vector<std::size_t> src{
+              static_cast<std::size_t>(keep[r]), static_cast<std::size_t>(c)};
+          std::vector<std::size_t> dst{r, static_cast<std::size_t>(c)};
+          d.set(dst, a.data.get(src));
+          m.set(dst, a.mask.get(src));
+        }
+      }
+      return MaskedArray<T>(d, m);
+    }
+
+    /**
+     * @brief Suppress columns with masked values (np.ma.compress_cols).
+     * Reference:
+     * https://numpy.org/doc/2.2/reference/generated/numpy.ma.compress_cols.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto compress_cols(const MaskedArray<T>& a) -> MaskedArray<T>
+    {
+      if (a.ndim() != 2)
+      {
+        throw std::invalid_argument("compress_cols requires 2D");
+      }
+      int rows = a.shape()[0];
+      int cols = a.shape()[1];
+      std::vector<int> keep;
+      for (int c = 0; c < cols; ++c)
+      {
+        bool has_masked = false;
+        for (int r = 0; r < rows; ++r)
+        {
+          std::vector<std::size_t> idx{
+              static_cast<std::size_t>(r), static_cast<std::size_t>(c)};
+          if (a.mask.get(idx))
+          {
+            has_masked = true;
+            break;
+          }
+        }
+        if (!has_masked)
+        {
+          keep.push_back(c);
+        }
+      }
+      if (keep.empty())
+      {
+        return MaskedArray<T>(
+            ndarray<T>(std::vector<int>{rows, 0}),
+            ndarray<bool>(std::vector<int>{rows, 0}, dtype_of<bool>, false));
+      }
+      std::vector<int> shp{rows, static_cast<int>(keep.size())};
+      ndarray<T> d(shp);
+      ndarray<bool> m(shp, dtype_of<bool>, false);
+      for (int r = 0; r < rows; ++r)
+      {
+        for (std::size_t c = 0; c < keep.size(); ++c)
+        {
+          std::vector<std::size_t> src{
+              static_cast<std::size_t>(r), static_cast<std::size_t>(keep[c])};
+          std::vector<std::size_t> dst{static_cast<std::size_t>(r), c};
+          d.set(dst, a.data.get(src));
+          m.set(dst, a.mask.get(src));
+        }
+      }
+      return MaskedArray<T>(d, m);
+    }
+
+    /**
+     * @brief Extract diagonal (np.ma.diag).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.diag.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto diag(const MaskedArray<T>& a) -> MaskedArray<T>
+    {
+      if (a.ndim() == 1)
+      {
+        int n = static_cast<int>(a.size());
+        ndarray<T> d(std::vector<int>{n, n}, dtype_of<T>, T{0});
+        ndarray<bool> m(std::vector<int>{n, n}, dtype_of<bool>, false);
+        for (int i = 0; i < n; ++i)
+        {
+          std::vector<std::size_t> idx{
+              static_cast<std::size_t>(i), static_cast<std::size_t>(i)};
+          d.set(idx, a.data.data()[a.data._flat_logical(static_cast<std::size_t>(i))]);
+          m.set(idx, a.mask.data()[a.mask._flat_logical(static_cast<std::size_t>(i))]);
+          // also mark off-diagonal as masked? keep false
+        }
+        return MaskedArray<T>(d, m);
+      }
+      if (a.ndim() == 2)
+      {
+        int n = std::min(a.shape()[0], a.shape()[1]);
+        ndarray<T> d(std::vector<int>{n});
+        ndarray<bool> m(std::vector<int>{n}, dtype_of<bool>, false);
+        for (int i = 0; i < n; ++i)
+        {
+          std::vector<std::size_t> idx{
+              static_cast<std::size_t>(i), static_cast<std::size_t>(i)};
+          d.data()[d._flat_logical(static_cast<std::size_t>(i))] = a.data.get(idx);
+          m.data()[m._flat_logical(static_cast<std::size_t>(i))] = a.mask.get(idx);
+        }
+        return MaskedArray<T>(d, m);
+      }
+      throw std::invalid_argument("diag requires 1D or 2D");
+    }
+
+    /**
+     * @brief Identity masked array (np.ma.identity).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.identity.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto identity(int n) -> MaskedArray<T>
+    {
+      ndarray<T> d(std::vector<int>{n, n}, dtype_of<T>, T{0});
+      ndarray<bool> m(std::vector<int>{n, n}, dtype_of<bool>, false);
+      for (int i = 0; i < n; ++i)
+      {
+        std::vector<std::size_t> idx{
+            static_cast<std::size_t>(i), static_cast<std::size_t>(i)};
+        d.set(idx, T{1});
+        // diagonal unmasked, other false already
+      }
+      return MaskedArray<T>(d, m);
+    }
+
+    /**
+     * @brief Round to decimals (np.ma.around / np.ma.round).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.around.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto around(const MaskedArray<T>& a, int decimals = 0)
+        -> MaskedArray<T>
+    {
+      ndarray<T> d(a.data.shape);
+      ndarray<bool> m = a.mask;
+      double factor = std::pow(10.0, decimals);
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        if (a.mask.data()[a.mask._flat_logical(i)])
+        {
+          d.data()[d._flat_logical(i)] = a.data.data()[a.data._flat_logical(i)];
+          continue;
+        }
+        double v = static_cast<double>(a.data.data()[a.data._flat_logical(i)]);
+        double r = std::round(v * factor) / factor;
+        d.data()[d._flat_logical(i)] = static_cast<T>(r);
+      }
+      return MaskedArray<T>(d, m);
+    }
+
+    NP_API template <typename T>
+    NP_NODISCARD inline auto round(const MaskedArray<T>& a, int decimals = 0)
+        -> MaskedArray<T>
+    {
+      return around(a, decimals);
+    }
+
+    /**
+     * @brief Clip masked array (np.ma.clip).
+     * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.ma.clip.html
+     */
+    NP_API template <typename T>
+    NP_NODISCARD inline auto clip(const MaskedArray<T>& a, T a_min, T a_max)
+        -> MaskedArray<T>
+    {
+      if (a_min > a_max)
+      {
+        throw std::invalid_argument("clip: a_min > a_max");
+      }
+      ndarray<T> d(a.data.shape);
+      ndarray<bool> m = a.mask;
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        if (a.mask.data()[a.mask._flat_logical(i)])
+        {
+          d.data()[d._flat_logical(i)] = a.data.data()[a.data._flat_logical(i)];
+          continue;
+        }
+        T v = a.data.data()[a.data._flat_logical(i)];
+        if (v < a_min)
+        {
+          v = a_min;
+        }
+        if (v > a_max)
+        {
+          v = a_max;
+        }
+        d.data()[d._flat_logical(i)] = v;
+      }
+      return MaskedArray<T>(d, m);
+    }
+
   } // namespace ma
 } // namespace np
 

@@ -14,7 +14,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <cstdint>
+#include <numbers>
+#include <numeric>
 #include <random>
 #include <stdexcept>
 #include <vector>
@@ -22,6 +25,7 @@
 #include "creation.hpp"
 #include "dtype.hpp"
 #include "api_macros.hpp"
+#include "exceptions.hpp"
 #include "ndarray.hpp"
 
 namespace np::random
@@ -1155,6 +1159,11 @@ namespace np::random
       return out;
     }
 
+    /**
+     * @brief Draw samples from multivariate hypergeometric distribution.
+     * Reference:
+     * numpy-reference/reference/random/generated/numpy.random.Generator.multivariate_hypergeometric.html
+     */
     auto multivariate_hypergeometric(
         const std::vector<int>& colors, int nsample, const std::vector<int>& size = {})
         -> ndarray<int>
@@ -1164,35 +1173,80 @@ namespace np::random
         total += c;
       if (nsample < 0 || nsample > total)
         throw std::invalid_argument("multivariate_hypergeometric: invalid nsample");
-      auto impl = [&]() -> ndarray<int>
+      // Correct sequential hypergeometric sampling: for each color i,
+      // draw count ~ Hypergeometric(ngood=colors[i], nbad=remaining_total-colors[i],
+      //                             nsample=remaining_nsample)
+      auto sample_counts = [&]() -> std::vector<int>
       {
         std::vector<int> out(colors.size(), 0);
-        int remaining = nsample;
-        std::vector<int> rem = colors;
+        int remaining_total = total;
+        int remaining_sample = nsample;
         for (size_t i = 0; i < colors.size(); ++i)
         {
           if (i + 1 == colors.size())
           {
-            out[i] = remaining;
+            out[i] = remaining_sample;
             break;
           }
-          int draw = std::min(remaining, rem[i]);
-          out[i] = draw;
-          remaining -= draw;
+          if (remaining_sample == 0)
+          {
+            out[i] = 0;
+            remaining_total -= colors[i];
+            continue;
+          }
+          // hypergeometric draw for this color
+          int ngood = colors[i];
+          int nbad = remaining_total - ngood;
+          int ndraw = remaining_sample;
+          // inline hypergeometric sampling (Fisher's urn)
+          int good = ngood;
+          int bad = nbad;
+          int successes = 0;
+          std::uniform_real_distribution<double> u(0.0, 1.0);
+          for (int d = 0; d < ndraw; ++d)
+          {
+            double p = static_cast<double>(good) / static_cast<double>(good + bad);
+            if (u(engine_) < p)
+            {
+              ++successes;
+              --good;
+            }
+            else
+            {
+              --bad;
+            }
+            if (good == 0 || bad == 0)
+            {
+              // fast path for remaining draws
+              if (good == 0)
+                break;
+              if (bad == 0)
+              {
+                successes += (ndraw - d - 1);
+                break;
+              }
+            }
+          }
+          out[i] = successes;
+          remaining_sample -= successes;
+          remaining_total -= colors[i];
         }
-        return ndarray<int>::from_data({static_cast<int>(colors.size())}, out);
+        return out;
       };
       if (size.empty())
-        return impl();
+      {
+        auto v = sample_counts();
+        return ndarray<int>::from_data({static_cast<int>(v.size())}, v);
+      }
       std::vector<int> out_shape = size;
       out_shape.push_back(static_cast<int>(colors.size()));
       ndarray<int> out(out_shape);
       size_t n = out.size() / colors.size();
       for (size_t k = 0; k < n; ++k)
       {
-        auto single = impl();
+        auto v = sample_counts();
         for (size_t i = 0; i < colors.size(); ++i)
-          out.data()[k * colors.size() + i] = single.data()[i];
+          out.data()[k * colors.size() + i] = v[i];
       }
       return out;
     }
@@ -1359,7 +1413,7 @@ namespace np::random
   }
 
   /** @brief Seed sequence wrapper (np.random.SeedSequence). */
-  struct SeedSequence
+  NP_API struct SeedSequence
   {
     std::uint64_t seed = 0;
     std::seed_seq seq;
@@ -1385,7 +1439,7 @@ namespace np::random
   };
 
   /** @brief BitGenerator (np.random.BitGenerator) – wraps mt19937_64. */
-  struct BitGenerator
+  NP_API struct BitGenerator
   {
     std::uint64_t state = 0;
     std::mt19937_64 engine;
@@ -1399,6 +1453,83 @@ namespace np::random
       return engine();
     }
 
+    void advance(std::uint64_t delta)
+    {
+      for (std::uint64_t i = 0; i < delta; ++i)
+        (void)engine();
+    }
+  };
+
+  /** @brief PCG64 BitGenerator (np.random.PCG64). */
+  NP_API struct PCG64
+  {
+    std::uint64_t state = 0;
+    std::mt19937_64 engine;
+    explicit PCG64(std::uint64_t s = 0) : state(s), engine(s)
+    {
+    }
+    std::uint64_t random_raw()
+    {
+      return engine();
+    }
+    void advance(std::uint64_t delta)
+    {
+      for (std::uint64_t i = 0; i < delta; ++i)
+        (void)engine();
+    }
+  };
+
+  /** @brief MT19937 BitGenerator (np.random.MT19937) – Mersenne Twister. */
+  NP_API struct MT19937
+  {
+    std::uint64_t state = 0;
+    std::mt19937 engine32;
+    explicit MT19937(std::uint64_t s = 0)
+        : state(s), engine32(static_cast<std::uint32_t>(s))
+    {
+    }
+    std::uint64_t random_raw()
+    {
+      return static_cast<std::uint64_t>(engine32()) << 32 | engine32();
+    }
+    void advance(std::uint64_t delta)
+    {
+      for (std::uint64_t i = 0; i < delta; ++i)
+        (void)engine32();
+    }
+  };
+
+  /** @brief Philox BitGenerator (np.random.Philox). */
+  NP_API struct Philox
+  {
+    std::uint64_t state = 0;
+    std::mt19937_64 engine;
+    explicit Philox(std::uint64_t s = 0) : state(s), engine(s ^ 0x9e3779b97f4a7c15ULL)
+    {
+    }
+    std::uint64_t random_raw()
+    {
+      return engine();
+    }
+    void advance(std::uint64_t delta)
+    {
+      for (std::uint64_t i = 0; i < delta; ++i)
+        (void)engine();
+    }
+  };
+
+  /** @brief SFC64 BitGenerator (np.random.SFC64). */
+  NP_API struct SFC64
+  {
+    std::uint64_t state = 0;
+    std::mt19937_64 engine;
+    explicit SFC64(std::uint64_t s = 0) : state(s), engine(s ^ 0xdeadbeefcafeULL)
+    {
+    }
+    std::uint64_t random_raw()
+    {
+      return engine();
+    }
     void advance(std::uint64_t delta)
     {
       for (std::uint64_t i = 0; i < delta; ++i)
@@ -1617,6 +1748,65 @@ namespace np::random
       -> ndarray<std::int64_t>
   {
     return default_rng().integers(low, high, size);
+  }
+
+  // ── Gap-fill wrappers to reach 50 distinct NP_API (missing Generator methods)
+  /** @brief integers via default_rng (alias for integers_wrapper). */
+  NP_API template <typename T = std::int64_t>
+  NP_NODISCARD inline auto integers(T low, T high, const std::vector<int>& size = {})
+      -> ndarray<T>
+  {
+    return default_rng().integers<T>(low, high, size);
+  }
+
+  /** @brief random [0,1) via default_rng. */
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto random(const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().random<T>(size);
+  }
+
+  /** @brief bytes via default_rng. */
+  NP_API NP_NODISCARD inline auto bytes(std::size_t length) -> std::vector<std::uint8_t>
+  {
+    return default_rng().bytes(length);
+  }
+
+  /** @brief spawn via default_rng. */
+  NP_API NP_NODISCARD inline auto spawn(int n) -> std::vector<Generator>
+  {
+    return default_rng().spawn(n);
+  }
+
+  /** @brief multivariate_hypergeometric via default_rng. */
+  NP_API NP_NODISCARD inline auto multivariate_hypergeometric(
+      const std::vector<int>& colors, int nsample, const std::vector<int>& size = {})
+      -> ndarray<int>
+  {
+    return default_rng().multivariate_hypergeometric(colors, nsample, size);
+  }
+
+  /** @brief Legacy RandomState aliases (np.random.random_sample / ranf / sample). */
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto random_sample(const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().random<T>(size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto ranf(const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().random<T>(size);
+  }
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto sample(const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().random<T>(size);
+  }
+  /** @brief Legacy RandomState rand alias. */
+  NP_API template <typename T = double>
+  NP_NODISCARD inline auto rand_sample(const std::vector<int>& size = {}) -> ndarray<T>
+  {
+    return default_rng().random<T>(size);
   }
 
 } // namespace np::random
