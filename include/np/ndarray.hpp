@@ -3115,9 +3115,16 @@ namespace np
   template <typename T>
   bool ndarray<T>::is_contiguous() const noexcept
   {
-    if (strides != _c_strides(shape) || offset != 0)
-    {
+    if (offset != 0) [[unlikely]]
       return false;
+    if (strides.size() != shape.size()) [[unlikely]]
+      return false;
+    std::size_t exp = 1;
+    for (std::size_t i = shape.size(); i-- > 0;)
+    {
+      if (strides[i] != exp) [[unlikely]]
+        return false;
+      exp *= static_cast<std::size_t>(shape[i]);
     }
     return !data_ || data_->size() >= _numel();
   }
@@ -3307,29 +3314,49 @@ namespace np
   template <typename T>
   auto ndarray<T>::at(std::size_t i) -> reference
   {
-    if (shape.size() != 1)
+    if (shape.size() != 1) [[unlikely]]
     {
       throw std::invalid_argument("at() requires a 1D array");
     }
-    if (i >= static_cast<std::size_t>(shape[0]))
+    if (i >= static_cast<std::size_t>(shape[0])) [[unlikely]]
     {
       throw std::out_of_range("index out of bounds");
     }
-    return (*data_)[offset + i * strides[0]];
+    if constexpr (std::is_same_v<T, bool>)
+    {
+      return (*data_)[offset + i * strides[0]];
+    }
+    else
+    {
+      T* __restrict d = data_->data();
+      return d[offset + i * strides[0]];
+    }
   }
 
   template <typename T>
   auto ndarray<T>::at(std::size_t i) const -> const T&
   {
-    if (shape.size() != 1)
+    if (shape.size() != 1) [[unlikely]]
     {
       throw std::invalid_argument("at() requires a 1D array");
     }
-    if (i >= static_cast<std::size_t>(shape[0]))
+    if (i >= static_cast<std::size_t>(shape[0])) [[unlikely]]
     {
       throw std::out_of_range("index out of bounds");
     }
-    return (*data_)[offset + i * strides[0]];
+    if constexpr (std::is_same_v<T, bool>)
+    {
+      // vector<bool> uses proxy; return via operator[] proxy stored in static
+      // thread_local To return const T& we must return reference to static; but for bool,
+      // value is bit For at() const returning const bool&, we return via (*data_)[idx]
+      // which is proxy convertible Use workaround: return (*data_)[idx] via const_cast
+      return (*data_)[offset + i * strides[0]];
+    }
+    else
+    {
+      const T* __restrict d = data_->data();
+      return d[offset + i * strides[0]];
+    }
   }
 
   template <typename T>
@@ -3389,31 +3416,47 @@ namespace np
   template <typename T>
   auto ndarray<T>::at(std::size_t i, std::size_t j) -> reference
   {
-    if (shape.size() != 2)
+    if (shape.size() != 2) [[unlikely]]
     {
       throw std::invalid_argument("at(i, j) requires a 2D array");
     }
     if (i >= static_cast<std::size_t>(shape[0])
-        || j >= static_cast<std::size_t>(shape[1]))
+        || j >= static_cast<std::size_t>(shape[1])) [[unlikely]]
     {
       throw std::out_of_range("index out of bounds");
     }
-    return (*data_)[offset + i * strides[0] + j * strides[1]];
+    if constexpr (std::is_same_v<T, bool>)
+    {
+      return (*data_)[offset + i * strides[0] + j * strides[1]];
+    }
+    else
+    {
+      T* __restrict d = data_->data();
+      return d[offset + i * strides[0] + j * strides[1]];
+    }
   }
 
   template <typename T>
   auto ndarray<T>::at(std::size_t i, std::size_t j) const -> const T&
   {
-    if (shape.size() != 2)
+    if (shape.size() != 2) [[unlikely]]
     {
       throw std::invalid_argument("at(i, j) requires a 2D array");
     }
     if (i >= static_cast<std::size_t>(shape[0])
-        || j >= static_cast<std::size_t>(shape[1]))
+        || j >= static_cast<std::size_t>(shape[1])) [[unlikely]]
     {
       throw std::out_of_range("index out of bounds");
     }
-    return (*data_)[offset + i * strides[0] + j * strides[1]];
+    if constexpr (std::is_same_v<T, bool>)
+    {
+      return (*data_)[offset + i * strides[0] + j * strides[1]];
+    }
+    else
+    {
+      const T* __restrict d = data_->data();
+      return d[offset + i * strides[0] + j * strides[1]];
+    }
   }
 
   // Internals
@@ -3478,18 +3521,20 @@ namespace np
   template <typename T>
   auto ndarray<T>::_flat_logical(std::size_t i) const noexcept -> std::size_t
   {
-    if (shape.empty() || i == 0)
-    {
+    if (shape.empty() || i == 0) [[unlikely]]
       return offset;
-    }
-    std::vector<std::size_t> idx = _shape_u();
+    if (is_contiguous()) [[likely]]
+      return offset + i;
+    // Non-contiguous: compute flat without allocating vector
     std::size_t rem = i;
+    std::size_t flat = offset;
     for (std::size_t d = shape.size(); d-- > 0;)
     {
-      idx[d] = rem % static_cast<std::size_t>(shape[d]);
+      std::size_t coord = rem % static_cast<std::size_t>(shape[d]);
       rem /= static_cast<std::size_t>(shape[d]);
+      flat += coord * strides[d];
     }
-    return _flat(idx);
+    return flat;
   }
 
   template <typename T>
@@ -3524,15 +3569,21 @@ namespace np
   template <typename Fn>
   void ndarray<T>::_for_each_logical(Fn&& fn) const
   {
-    if (!data_)
-    {
+    if (!data_) [[unlikely]]
       return;
-    }
-    if (is_contiguous())
+    if (is_contiguous()) [[likely]]
     {
-      for (const auto& v : *data_)
+      if constexpr (std::is_same_v<T, bool>)
       {
-        fn(v);
+        for (const auto& v : *data_)
+          fn(v);
+      }
+      else
+      {
+        const T* __restrict p = data_->data();
+        std::size_t n = _numel();
+        for (std::size_t i = 0; i < n; ++i)
+          fn(p[i]);
       }
       return;
     }
