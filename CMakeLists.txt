@@ -39,16 +39,35 @@ if(NP_ENABLE_SIMD)
             endif()
         endif()
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)")
-        # ARM64 architecture - NEON is standard
+        # ARM64 architecture - NEON is standard, SVE optional
         if(NOT MSVC)
-            add_compile_options(-march=armv8-a)
+            if(NP_ENABLE_SVE)
+                add_compile_options(-march=armv8-a+sve -msve-vector-bits=scalable)
+            else()
+                add_compile_options(-march=armv8-a)
+            endif()
         endif()
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
         # ARM32 architecture
         if(NOT MSVC)
             add_compile_options(-mfpu=neon -mfloat-abi=hard)
         endif()
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(riscv64|riscv32)")
+        if(NOT MSVC AND NP_ENABLE_RVV)
+            add_compile_options(-march=rv64gcv -mabi=lp64d)
+        endif()
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(wasm32|wasm64)")
+        if(NOT MSVC AND NP_ENABLE_WASM_SIMD)
+            add_compile_options(-msimd128)
+        endif()
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(ppc64|powerpc64)")
+        if(NOT MSVC AND NP_ENABLE_VSX)
+            add_compile_options(-mcpu=power9 -mvsx)
+        endif()
     endif()
+endif()
+if(NP_ENABLE_PQC)
+    add_compile_definitions(NP_ENABLE_PQC=1)
 endif()
 
 option(NP_COMPILED_UNITS
@@ -56,6 +75,12 @@ option(NP_COMPILED_UNITS
        ON)
 
 option(NP_USE_THREADING "Enable threadpool for sorting/searching/loops (NP_THREADPOOL)" OFF)
+
+option(NP_ENABLE_PQC "Enable post-quantum constant-time hardening (pqc.hpp)" ON)
+option(NP_ENABLE_RVV "Enable RISC-V Vector (RVV 1.0) when targeting riscv64" OFF)
+option(NP_ENABLE_WASM_SIMD "Enable WASM SIMD128 when targeting wasm32/wasm64" OFF)
+option(NP_ENABLE_SVE "Enable ARM SVE/SVE2 when targeting aarch64" OFF)
+option(NP_ENABLE_VSX "Enable POWER VSX when targeting powerpc64" OFF)
 
 # ── Compilation optimization ──────────────────────────────────────────
 # Tuned for powerful multi-core machines; all options are OFF by default

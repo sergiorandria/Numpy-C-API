@@ -1172,13 +1172,15 @@ namespace np
         mul_f32_neon(a, b, out, n);
 #elif defined(NP_SIMD_SVE)
         // SVE/RVV/WASM/VSX fallback to scalar for mul (or add kernel if available)
-        for (std::size_t i = 0; i < n; ++i) out[i] = a[i] * b[i];
+        for (std::size_t i = 0; i < n; ++i)
+          out[i] = a[i] * b[i];
 #elif defined(NP_SIMD_RVV)
         mul_f32_rvv(a, b, out, n);
 #elif defined(NP_SIMD_WASM)
         mul_f32_wasm(a, b, out, n);
 #elif defined(NP_SIMD_VSX)
-        for (std::size_t i = 0; i < n; ++i) out[i] = a[i] * b[i];
+        for (std::size_t i = 0; i < n; ++i)
+          out[i] = a[i] * b[i];
 #else
         for (std::size_t i = 0; i < n; ++i)
         {
@@ -1228,10 +1230,12 @@ namespace np
         return sum_f32_sse(data, n);
 #elif defined(NP_SIMD_NEON)
         return sum_f32_neon(data, n);
-#elif defined(NP_SIMD_SVE) || defined(NP_SIMD_RVV) || defined(NP_SIMD_WASM) || defined(NP_SIMD_VSX)
+#elif defined(NP_SIMD_SVE) || defined(NP_SIMD_RVV) || defined(NP_SIMD_WASM)              \
+    || defined(NP_SIMD_VSX)
         {
           T sum = T{0};
-          for (std::size_t i = 0; i < n; ++i) sum += data[i];
+          for (std::size_t i = 0; i < n; ++i)
+            sum += data[i];
           return sum;
         }
 #else
@@ -1285,8 +1289,10 @@ namespace np
         sub_f32_sse(a, b, out, n);
 #elif defined(NP_SIMD_NEON)
         sub_f32_neon(a, b, out, n);
-#elif defined(NP_SIMD_WASM) || defined(NP_SIMD_SVE) || defined(NP_SIMD_RVV) || defined(NP_SIMD_VSX)
-        for (std::size_t i = 0; i < n; ++i) out[i] = a[i] - b[i];
+#elif defined(NP_SIMD_WASM) || defined(NP_SIMD_SVE) || defined(NP_SIMD_RVV)              \
+    || defined(NP_SIMD_VSX)
+        for (std::size_t i = 0; i < n; ++i)
+          out[i] = a[i] - b[i];
 #else
         for (std::size_t i = 0; i < n; ++i)
         {
@@ -1334,8 +1340,10 @@ namespace np
         div_f32_sse(a, b, out, n);
 #elif defined(NP_SIMD_NEON)
         div_f32_neon(a, b, out, n);
-#elif defined(NP_SIMD_WASM) || defined(NP_SIMD_SVE) || defined(NP_SIMD_RVV) || defined(NP_SIMD_VSX)
-        for (std::size_t i = 0; i < n; ++i) out[i] = a[i] / b[i];
+#elif defined(NP_SIMD_WASM) || defined(NP_SIMD_SVE) || defined(NP_SIMD_RVV)              \
+    || defined(NP_SIMD_VSX)
+        for (std::size_t i = 0; i < n; ++i)
+          out[i] = a[i] / b[i];
 #else
         for (std::size_t i = 0; i < n; ++i)
         {
