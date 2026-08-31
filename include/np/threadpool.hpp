@@ -32,6 +32,7 @@
 #include <deque>
 #include <functional>
 #include <future>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -235,20 +236,30 @@ namespace np
       };
 
       /**
-       * @brief Lock-free Chase-Lev deque – internal __np impl.
-       * Uses `memory_order` for top/bottom. For correctness on
-       * `std::function` (non-trivial), the buffer is still protected
-       * by a mutex for the actual deque ops, but top/bottom are
-       * lock-free atomics – this gives the scalability benefit while
-       * remaining safe for non-trivial types. Toggle with
-       * `NP_THREADPOOL_LOCKFREE`.
+       * @brief True lock-free Chase-Lev deque — internal __np impl.
+       *
+       * Circular ring buffer with monotonically increasing `top_`/`bottom_`
+       * (Chase-Lev, SPMC variant). Owner pushes/pops at `bottom` with
+       * `release`/`relaxed`; thieves steal from `top` via `CAS seq_cst`.
+       * The buffer `circ_` is power-of-two sized; `mask_ = cap_ - 1`.
+       * `push_bottom` serialises concurrent enqueues via `grow_m_` (MP
+       * producers: `ThreadPool::enqueue` round-robins but any thread may
+       * push to the same queue). `pop_bottom`/`steal` are lock-free
+       * apart from the rare `grow` path. Correct for
+       * `std::function<void()>` because each slot is `optional<T>` and
+       * ownership is transferred only after a successful `top` CAS or a
+       * winning `pop` race on the last element.
+       *
+       * Reference: Chase-Lev (SPAA 2005) + Le et al. correction for weak
+       * memory (PPoPP 2013).
        */
       template <typename T>
       class __np_deque_lockfree
       {
       public:
-        __np_deque_lockfree() : top_(0), bottom_(0)
+        __np_deque_lockfree() : top_(0), bottom_(0), cap_(1024)
         {
+          circ_.resize(cap_);
         }
 
         __np_deque_lockfree(const __np_deque_lockfree&) = delete;
@@ -256,75 +267,107 @@ namespace np
 
         void __np_push_bottom(T v)
         {
+          std::lock_guard<std::mutex> lk(grow_m_);
+          const std::size_t b = bottom_.load(std::memory_order_relaxed);
+          const std::size_t t = top_.load(std::memory_order_acquire);
+          if (b - t >= cap_ - 1)
           {
-            std::lock_guard<std::mutex> lk(m_);
-            dq_.push_back(std::move(v));
+            grow(b, t);
           }
-          bottom_.fetch_add(1, std::memory_order_release);
+          circ_[b & mask()] = std::move(v);
+          bottom_.store(b + 1, std::memory_order_release);
         }
 
         NP_NODISCARD std::optional<T> __np_pop_bottom()
         {
-          std::optional<T> ret;
+          std::size_t b = bottom_.load(std::memory_order_relaxed);
+          if (b == 0)
           {
-            std::lock_guard<std::mutex> lk(m_);
-            if (dq_.empty())
-            {
-              return std::nullopt;
-            }
-            ret = std::move(dq_.back());
-            dq_.pop_back();
+            return std::nullopt;
           }
-          bottom_.fetch_sub(1, std::memory_order_acq_rel);
-          // Top is only modified by steal, but keep consistent
-          return ret;
+          b -= 1;
+          bottom_.store(b, std::memory_order_relaxed);
+          std::atomic_thread_fence(std::memory_order_seq_cst);
+          const std::size_t t = top_.load(std::memory_order_relaxed);
+          if (t <= b)
+          {
+            std::optional<T> ret = std::move(circ_[b & mask()]);
+            circ_[b & mask()].reset();
+            if (t == b)
+            {
+              std::size_t expected = t;
+              if (!top_.compare_exchange_strong(
+                      expected, t + 1, std::memory_order_seq_cst,
+                      std::memory_order_relaxed))
+              {
+                ret.reset();
+              }
+              bottom_.store(t + 1, std::memory_order_relaxed);
+            }
+            return ret;
+          }
+          bottom_.store(t, std::memory_order_relaxed);
+          return std::nullopt;
         }
 
         NP_NODISCARD std::optional<T> __np_steal()
         {
-          std::optional<T> ret;
+          std::size_t t = top_.load(std::memory_order_acquire);
+          std::atomic_thread_fence(std::memory_order_seq_cst);
+          const std::size_t b = bottom_.load(std::memory_order_acquire);
+          if (t < b)
           {
-            std::lock_guard<std::mutex> lk(m_);
-            if (dq_.empty())
+            std::size_t expected = t;
+            if (top_.compare_exchange_strong(
+                    expected, t + 1, std::memory_order_seq_cst,
+                    std::memory_order_relaxed))
             {
-              return std::nullopt;
+              std::optional<T> ret = std::move(circ_[t & mask()]);
+              circ_[t & mask()].reset();
+              return ret;
             }
-            ret = std::move(dq_.front());
-            dq_.pop_front();
           }
-          top_.fetch_add(1, std::memory_order_acq_rel);
-          return ret;
+          return std::nullopt;
         }
 
         NP_NODISCARD bool __np_empty() const
         {
-          // Lock-free check via atomics
           const std::size_t t = top_.load(std::memory_order_acquire);
           const std::size_t b = bottom_.load(std::memory_order_acquire);
-          if (t != b)
-          {
-            return false;
-          }
-          std::lock_guard<std::mutex> lk(m_);
-          return dq_.empty();
+          return t >= b;
         }
 
         NP_NODISCARD std::size_t __np_size() const
         {
           const std::size_t t = top_.load(std::memory_order_acquire);
           const std::size_t b = bottom_.load(std::memory_order_acquire);
-          // Fallback to deque size for accuracy
-          std::lock_guard<std::mutex> lk(m_);
-          (void)t;
-          (void)b;
-          return dq_.size();
+          return b > t ? b - t : 0;
         }
 
       private:
-        mutable std::mutex m_;
-        std::deque<T> dq_;
+        NP_NODISCARD std::size_t mask() const noexcept
+        {
+          return cap_ - 1;
+        }
+
+        void grow(std::size_t b, std::size_t t)
+        {
+          const std::size_t old_cap = cap_;
+          const std::size_t new_cap = old_cap * 2;
+          std::vector<std::optional<T>> new_circ(new_cap);
+          for (std::size_t i = t; i < b; ++i)
+          {
+            new_circ[i & (new_cap - 1)] = std::move(circ_[i & (old_cap - 1)]);
+          }
+          circ_.swap(new_circ);
+          cap_ = new_cap;
+        }
+
         std::atomic<std::size_t> top_{0};
         std::atomic<std::size_t> bottom_{0};
+        std::size_t cap_;
+        std::vector<std::optional<T>> circ_;
+        std::mutex grow_m_;
       };
 
     } // namespace __np
@@ -619,6 +662,7 @@ namespace np
       std::vector<std::unique_ptr<detail::WorkStealingDeque<Task>>> queues;
       std::atomic<bool> done{false};
       std::atomic<std::size_t> next_queue{0};
+      std::atomic<std::size_t> inflight{0};
       std::mutex cv_m;
       std::condition_variable cv;
     };
@@ -738,6 +782,7 @@ namespace np
       const std::size_t idx =
           self->__np_impl->next_queue.fetch_add(1, std::memory_order_relaxed)
           % self->__np_impl->queues.size();
+      self->__np_impl->inflight.fetch_add(1, std::memory_order_release);
       self->__np_impl->queues[idx]->push_bottom(std::move(t));
       {
         std::lock_guard<std::mutex> lk(self->__np_impl->cv_m);
@@ -751,6 +796,7 @@ namespace np
       const std::size_t idx =
           self->__np_impl->next_queue.fetch_add(1, std::memory_order_relaxed)
           % self->__np_impl->queues.size();
+      self->__np_impl->inflight.fetch_add(1, std::memory_order_release);
       self->__np_impl->queues[idx]->push_bottom(std::move(t));
       {
         std::lock_guard<std::mutex> lk(self->__np_impl->cv_m);
@@ -762,22 +808,24 @@ namespace np
     {
       while (true)
       {
-        bool empty = true;
-        for (auto& q : self->__np_impl->queues)
+        if (self->__np_impl->inflight.load(std::memory_order_acquire) == 0)
         {
-          if (!q->empty())
+          bool empty = true;
+          for (auto& q : self->__np_impl->queues)
           {
-            empty = false;
+            if (!q->empty())
+            {
+              empty = false;
+              break;
+            }
+          }
+          if (empty)
+          {
             break;
           }
         }
-        if (empty)
-        {
-          break;
-        }
         std::this_thread::yield();
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     NP_HIDDEN static void __np_wait_lockfree(ThreadPool* self)
@@ -870,6 +918,7 @@ namespace np
           catch (...)
           {
           }
+          self->__np_impl->inflight.fetch_sub(1, std::memory_order_acq_rel);
           continue;
         }
         for (int s = 0; s < kSpinIters; ++s)
@@ -902,6 +951,7 @@ namespace np
           catch (...)
           {
           }
+          self->__np_impl->inflight.fetch_sub(1, std::memory_order_acq_rel);
           continue;
         }
         std::unique_lock<std::mutex> lk(self->__np_impl->cv_m);
@@ -954,26 +1004,30 @@ namespace np
         chunk = std::max<std::size_t>(1, n / (__np_impl->queues.size() * 4));
       }
       const std::size_t num_chunks = (n + chunk - 1) / chunk;
-      std::atomic<std::size_t> remaining{num_chunks};
+      using Decayed = std::decay_t<Func>;
+      auto func_ptr = std::make_shared<Decayed>(std::forward<Func>(func));
+      auto remaining = std::make_shared<std::atomic<std::size_t>>(num_chunks);
       for (std::size_t c = 0; c < num_chunks; ++c)
       {
         const std::size_t s = begin + c * chunk;
         const std::size_t e = std::min(end, s + chunk);
-        Task t = [&func, s, e, &remaining]()
+        Task t = [func_ptr, s, e, remaining]()
         {
+          Decayed& f = *func_ptr;
           for (std::size_t i = s; i < e; ++i)
           {
-            func(i);
+            f(i);
           }
-          remaining.fetch_sub(1, std::memory_order_acq_rel);
+          remaining->fetch_sub(1, std::memory_order_acq_rel);
         };
         __np_enqueue_ptr(this, std::move(t));
       }
-      while (remaining.load(std::memory_order_acquire) != 0)
+      while (remaining->load(std::memory_order_acquire) != 0)
       {
         if (auto job = __np_try_steal_any_ptr(this))
         {
           (*job)();
+          self->__np_impl->inflight.fetch_sub(1, std::memory_order_acq_rel);
         }
         else
         {
