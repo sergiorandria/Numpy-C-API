@@ -983,6 +983,105 @@ namespace np
 
 #endif // NP_SIMD_NEON
 
+    // WASM SIMD128 (wasm_simd128.h) – 128-bit baseline
+#ifdef NP_SIMD_WASM
+    inline void add_f32_wasm(const float* a, const float* b, float* out, std::size_t n)
+    {
+      std::size_t i = 0;
+      const std::size_t vec_end = n - (n % 4);
+      for (; i < vec_end; i += 4)
+      {
+        v128_t va = wasm_v128_load(a + i);
+        v128_t vb = wasm_v128_load(b + i);
+        v128_t vout = wasm_f32x4_add(va, vb);
+        wasm_v128_store(out + i, vout);
+      }
+      for (; i < n; ++i)
+        out[i] = a[i] + b[i];
+    }
+    inline void mul_f32_wasm(const float* a, const float* b, float* out, std::size_t n)
+    {
+      std::size_t i = 0;
+      const std::size_t vec_end = n - (n % 4);
+      for (; i < vec_end; i += 4)
+      {
+        v128_t va = wasm_v128_load(a + i);
+        v128_t vb = wasm_v128_load(b + i);
+        v128_t vout = wasm_f32x4_mul(va, vb);
+        wasm_v128_store(out + i, vout);
+      }
+      for (; i < n; ++i)
+        out[i] = a[i] * b[i];
+    }
+#endif
+
+    // RISC-V Vector (RVV 1.0) – VLEN agnostic, fallback to scalar if not available
+#ifdef NP_SIMD_RVV
+    inline void add_f32_rvv(const float* a, const float* b, float* out, std::size_t n)
+    {
+      std::size_t vl;
+      std::size_t i = 0;
+      for (; i < n; i += vl)
+      {
+        vl = __riscv_vsetvl_e32m8(n - i);
+        vfloat32m8_t va = __riscv_vle32_v_f32m8(a + i, vl);
+        vfloat32m8_t vb = __riscv_vle32_v_f32m8(b + i, vl);
+        vfloat32m8_t vc = __riscv_vfadd_vv_f32m8(va, vb, vl);
+        __riscv_vse32_v_f32m8(out + i, vc, vl);
+      }
+    }
+    inline void mul_f32_rvv(const float* a, const float* b, float* out, std::size_t n)
+    {
+      std::size_t vl;
+      std::size_t i = 0;
+      for (; i < n; i += vl)
+      {
+        vl = __riscv_vsetvl_e32m8(n - i);
+        vfloat32m8_t va = __riscv_vle32_v_f32m8(a + i, vl);
+        vfloat32m8_t vb = __riscv_vle32_v_f32m8(b + i, vl);
+        vfloat32m8_t vc = __riscv_vfmul_vv_f32m8(va, vb, vl);
+        __riscv_vse32_v_f32m8(out + i, vc, vl);
+      }
+    }
+#endif
+
+    // ARM SVE – variable vector length
+#ifdef NP_SIMD_SVE
+    inline void add_f32_sve(const float* a, const float* b, float* out, std::size_t n)
+    {
+      std::size_t i = 0;
+      svbool_t pg = svptrue_b32();
+      std::size_t vl = svcntw();
+      for (; i + vl <= n; i += vl)
+      {
+        svfloat32_t va = svld1(pg, a + i);
+        svfloat32_t vb = svld1(pg, b + i);
+        svfloat32_t vc = svadd_f32_z(pg, va, vb);
+        svst1(pg, out + i, vc);
+      }
+      for (; i < n; ++i)
+        out[i] = a[i] + b[i];
+    }
+#endif
+
+    // POWER VSX / Altivec
+#ifdef NP_SIMD_VSX
+    inline void add_f32_vsx(const float* a, const float* b, float* out, std::size_t n)
+    {
+      std::size_t i = 0;
+      const std::size_t vec_end = n - (n % 4);
+      for (; i < vec_end; i += 4)
+      {
+        vector float va = vec_xl(0, a + i);
+        vector float vb = vec_xl(0, b + i);
+        vector float vc = vec_add(va, vb);
+        vec_xst(vc, 0, out + i);
+      }
+      for (; i < n; ++i)
+        out[i] = a[i] + b[i];
+    }
+#endif
+
     // Generic Dispatch Functions (Runtime Selection)
     /**
      * @brief Vectorized addition with automatic dispatch.
@@ -1015,6 +1114,14 @@ namespace np
         add_f32_sse(a, b, out, n);
 #elif defined(NP_SIMD_NEON)
         add_f32_neon(a, b, out, n);
+#elif defined(NP_SIMD_SVE)
+        add_f32_sve(a, b, out, n);
+#elif defined(NP_SIMD_RVV)
+        add_f32_rvv(a, b, out, n);
+#elif defined(NP_SIMD_WASM)
+        add_f32_wasm(a, b, out, n);
+#elif defined(NP_SIMD_VSX)
+        add_f32_vsx(a, b, out, n);
 #else
         for (std::size_t i = 0; i < n; ++i)
         {
@@ -1063,6 +1170,15 @@ namespace np
         mul_f32_sse(a, b, out, n);
 #elif defined(NP_SIMD_NEON)
         mul_f32_neon(a, b, out, n);
+#elif defined(NP_SIMD_SVE)
+        // SVE/RVV/WASM/VSX fallback to scalar for mul (or add kernel if available)
+        for (std::size_t i = 0; i < n; ++i) out[i] = a[i] * b[i];
+#elif defined(NP_SIMD_RVV)
+        mul_f32_rvv(a, b, out, n);
+#elif defined(NP_SIMD_WASM)
+        mul_f32_wasm(a, b, out, n);
+#elif defined(NP_SIMD_VSX)
+        for (std::size_t i = 0; i < n; ++i) out[i] = a[i] * b[i];
 #else
         for (std::size_t i = 0; i < n; ++i)
         {
@@ -1112,6 +1228,12 @@ namespace np
         return sum_f32_sse(data, n);
 #elif defined(NP_SIMD_NEON)
         return sum_f32_neon(data, n);
+#elif defined(NP_SIMD_SVE) || defined(NP_SIMD_RVV) || defined(NP_SIMD_WASM) || defined(NP_SIMD_VSX)
+        {
+          T sum = T{0};
+          for (std::size_t i = 0; i < n; ++i) sum += data[i];
+          return sum;
+        }
 #else
         T sum = T{0};
         for (std::size_t i = 0; i < n; ++i)
@@ -1163,6 +1285,8 @@ namespace np
         sub_f32_sse(a, b, out, n);
 #elif defined(NP_SIMD_NEON)
         sub_f32_neon(a, b, out, n);
+#elif defined(NP_SIMD_WASM) || defined(NP_SIMD_SVE) || defined(NP_SIMD_RVV) || defined(NP_SIMD_VSX)
+        for (std::size_t i = 0; i < n; ++i) out[i] = a[i] - b[i];
 #else
         for (std::size_t i = 0; i < n; ++i)
         {
@@ -1210,6 +1334,8 @@ namespace np
         div_f32_sse(a, b, out, n);
 #elif defined(NP_SIMD_NEON)
         div_f32_neon(a, b, out, n);
+#elif defined(NP_SIMD_WASM) || defined(NP_SIMD_SVE) || defined(NP_SIMD_RVV) || defined(NP_SIMD_VSX)
+        for (std::size_t i = 0; i < n; ++i) out[i] = a[i] / b[i];
 #else
         for (std::size_t i = 0; i < n; ++i)
         {
