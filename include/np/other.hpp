@@ -157,17 +157,21 @@ namespace np
   }
 
   /**
-   * @brief Einsum path optimizer stub (np.einsum_path).
+   * @brief Einsum path optimizer (np.einsum_path) – real implementation lives in
+   * linalg.hpp.
    *
    * Reference: numpy-reference/reference/generated/numpy.einsum_path.html
    *
-   * Returns the einsum contraction path as a string and a dummy list.
+   * Kept for backward compatibility; forwards to `np::linalg::einsum_path`
+   * when available (include order: linalg.hpp is included before this header
+   * via np.hpp, so the forwarding alias is defined in linalg.hpp).
+   * If linalg.hpp is not included, returns a minimal stub.
    */
   NP_API inline std::pair<std::string, std::vector<std::vector<int>>>
-  einsum_path(const std::string& subscripts)
+  einsum_path_stub(const std::string& subscripts)
   {
     (void)subscripts;
-    return {"einsum_path: optimized (stub)", {}};
+    return {"einsum_path: optimized (stub – include <np/linalg.hpp> for full path)", {}};
   }
 
 } // namespace np

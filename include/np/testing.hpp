@@ -18,7 +18,9 @@
 #include <chrono>
 #include <cmath>
 #include <complex>
+#include <filesystem>
 #include <functional>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <regex>
@@ -106,9 +108,15 @@ namespace np
      * Reference: numpy-reference/reference/generated/numpy.testing.assert_equal.html
      */
     NP_API template <typename T, typename U>
-    inline void
-    assert_equal(const T& actual, const U& desired, const std::string& err_msg = "")
+    inline void assert_equal(
+        const T& actual,
+        const U& desired,
+        const std::string& err_msg = "",
+        bool verbose = true,
+        bool strict = false)
     {
+      (void)verbose;
+      (void)strict;
       if (!(actual == desired))
       {
         std::string m = err_msg.empty()
@@ -122,16 +130,25 @@ namespace np
     inline void assert_equal(
         const ndarray<T>& actual,
         const ndarray<T>& desired,
-        const std::string& err_msg = "")
+        const std::string& err_msg = "",
+        bool verbose = true,
+        bool strict = false)
     {
+      (void)verbose;
+      (void)strict;
       if (actual.shape != desired.shape)
       {
         detail::fail(err_msg.empty() ? "shape mismatch" : err_msg);
       }
+      const bool a_contig = actual.is_contiguous();
+      const bool d_contig = desired.is_contiguous();
+      const T* ap = a_contig ? actual.data().data() : nullptr;
+      const T* dp = d_contig ? desired.data().data() : nullptr;
       for (std::size_t i = 0; i < actual.size(); ++i)
       {
-        if (!(actual.data()[actual._flat_logical(i)]
-              == desired.data()[desired._flat_logical(i)]))
+        T av = a_contig ? ap[i] : actual.data()[actual._flat_logical(i)];
+        T dv = d_contig ? dp[i] : desired.data()[desired._flat_logical(i)];
+        if (!(av == dv))
         {
           detail::fail(
               err_msg.empty() ? "array_equal failed at " + std::to_string(i) : err_msg);
@@ -150,8 +167,10 @@ namespace np
         const T& actual,
         const U& desired,
         int decimal = 6,
-        const std::string& err_msg = "")
+        const std::string& err_msg = "",
+        bool verbose = true)
     {
+      (void)verbose;
       if (!detail::almost_equal_scalar(actual, desired, decimal))
       {
         detail::fail(err_msg.empty() ? "almost_equal failed" : err_msg);
@@ -163,18 +182,23 @@ namespace np
         const ndarray<T>& actual,
         const ndarray<T>& desired,
         int decimal = 6,
-        const std::string& err_msg = "")
+        const std::string& err_msg = "",
+        bool verbose = true)
     {
+      (void)verbose;
       if (actual.shape != desired.shape)
       {
         detail::fail("shape mismatch");
       }
+      const bool a_contig = actual.is_contiguous();
+      const bool d_contig = desired.is_contiguous();
+      const T* ap = a_contig ? actual.data().data() : nullptr;
+      const T* dp = d_contig ? desired.data().data() : nullptr;
       for (std::size_t i = 0; i < actual.size(); ++i)
       {
-        if (!detail::almost_equal_scalar(
-                actual.data()[actual._flat_logical(i)],
-                desired.data()[desired._flat_logical(i)],
-                decimal))
+        T av = a_contig ? ap[i] : actual.data()[actual._flat_logical(i)];
+        T dv = d_contig ? dp[i] : desired.data()[desired._flat_logical(i)];
+        if (!detail::almost_equal_scalar(av, dv, decimal))
         {
           detail::fail(
               err_msg.empty() ? "array almost_equal failed at " + std::to_string(i)
@@ -191,8 +215,10 @@ namespace np
         const T& actual,
         const T& desired,
         int significant = 7,
-        const std::string& err_msg = "")
+        const std::string& err_msg = "",
+        bool verbose = true)
     {
+      (void)verbose;
       double tol = std::pow(10.0, -significant);
       double diff = std::abs(static_cast<double>(actual) - static_cast<double>(desired));
       double scale = std::max(
@@ -221,9 +247,11 @@ namespace np
     inline void assert_array_equal(
         const ndarray<T>& actual,
         const ndarray<T>& desired,
-        const std::string& err_msg = "")
+        const std::string& err_msg = "",
+        bool verbose = true,
+        bool strict = false)
     {
-      assert_equal(actual, desired, err_msg);
+      assert_equal(actual, desired, err_msg, verbose, strict);
     }
 
     /**
@@ -237,9 +265,10 @@ namespace np
         const ndarray<T>& actual,
         const ndarray<T>& desired,
         int decimal = 6,
-        const std::string& err_msg = "")
+        const std::string& err_msg = "",
+        bool verbose = true)
     {
-      assert_almost_equal(actual, desired, decimal, err_msg);
+      assert_almost_equal(actual, desired, decimal, err_msg, verbose);
     }
 
     /**
@@ -249,15 +278,27 @@ namespace np
      */
     NP_API template <typename T>
     inline void assert_array_less(
-        const ndarray<T>& x, const ndarray<T>& y, const std::string& err_msg = "")
+        const ndarray<T>& x,
+        const ndarray<T>& y,
+        const std::string& err_msg = "",
+        bool verbose = true,
+        bool strict = false)
     {
+      (void)verbose;
+      (void)strict;
       if (x.shape != y.shape)
       {
         detail::fail("shape mismatch");
       }
+      const bool xc = x.is_contiguous();
+      const bool yc = y.is_contiguous();
+      const T* xp = xc ? x.data().data() : nullptr;
+      const T* yp = yc ? y.data().data() : nullptr;
       for (std::size_t i = 0; i < x.size(); ++i)
       {
-        if (!(x.data()[x._flat_logical(i)] < y.data()[y._flat_logical(i)]))
+        T xv = xc ? xp[i] : x.data()[x._flat_logical(i)];
+        T yv = yc ? yp[i] : y.data()[y._flat_logical(i)];
+        if (!(xv < yv))
         {
           detail::fail(
               err_msg.empty() ? "array_less failed at " + std::to_string(i) : err_msg);
@@ -276,16 +317,31 @@ namespace np
         const ndarray<T>& desired,
         double rtol = 1e-7,
         double atol = 0,
-        const std::string& err_msg = "")
+        bool equal_nan = true,
+        const std::string& err_msg = "",
+        bool verbose = true,
+        bool strict = false)
     {
+      (void)verbose;
+      (void)strict;
       if (actual.shape != desired.shape)
       {
         detail::fail("shape mismatch");
       }
+      const bool ac = actual.is_contiguous();
+      const bool dc = desired.is_contiguous();
+      const T* ap = ac ? actual.data().data() : nullptr;
+      const T* dp = dc ? desired.data().data() : nullptr;
       for (std::size_t i = 0; i < actual.size(); ++i)
       {
-        double a = static_cast<double>(actual.data()[actual._flat_logical(i)]);
-        double b = static_cast<double>(desired.data()[desired._flat_logical(i)]);
+        double a =
+            static_cast<double>(ac ? ap[i] : actual.data()[actual._flat_logical(i)]);
+        double b =
+            static_cast<double>(dc ? dp[i] : desired.data()[desired._flat_logical(i)]);
+        if (equal_nan && std::isnan(a) && std::isnan(b))
+        {
+          continue;
+        }
         if (!detail::allclose_scalar(a, b, rtol, atol))
         {
           detail::fail(
@@ -300,10 +356,19 @@ namespace np
         U desired,
         double rtol = 1e-7,
         double atol = 0,
-        const std::string& err_msg = "")
+        bool equal_nan = true,
+        const std::string& err_msg = "",
+        bool verbose = true,
+        bool strict = false)
     {
+      (void)verbose;
+      (void)strict;
       double a = static_cast<double>(actual);
       double b = static_cast<double>(desired);
+      if (equal_nan && std::isnan(a) && std::isnan(b))
+      {
+        return;
+      }
       if (!detail::allclose_scalar(a, b, rtol, atol))
       {
         detail::fail(err_msg.empty() ? "allclose scalar failed" : err_msg);
@@ -413,10 +478,40 @@ namespace np
       {
         detail::fail("shape mismatch");
       }
+      const bool xc = x.is_contiguous();
+      const bool yc = y.is_contiguous();
+      const double* xp = xc ? x.data().data() : nullptr;
+      const double* yp = yc ? y.data().data() : nullptr;
       for (std::size_t i = 0; i < x.size(); ++i)
       {
-        double a = x.data()[x._flat_logical(i)];
-        double b = y.data()[y._flat_logical(i)];
+        double a = xc ? xp[i] : x.data()[x._flat_logical(i)];
+        double b = yc ? yp[i] : y.data()[y._flat_logical(i)];
+        double diff = std::abs(a - b);
+        double ulp =
+            std::numeric_limits<double>::epsilon() * std::max(std::abs(a), std::abs(b));
+        if (diff > nulp * ulp)
+        {
+          detail::fail("nulp failed at " + std::to_string(i));
+        }
+      }
+    }
+
+    NP_API template <typename T>
+    inline void
+    assert_array_almost_equal_nulp(const ndarray<T>& x, const ndarray<T>& y, int nulp = 1)
+    {
+      if (x.shape != y.shape)
+      {
+        detail::fail("shape mismatch");
+      }
+      const bool xc = x.is_contiguous();
+      const bool yc = y.is_contiguous();
+      const T* xp = xc ? x.data().data() : nullptr;
+      const T* yp = yc ? y.data().data() : nullptr;
+      for (std::size_t i = 0; i < x.size(); ++i)
+      {
+        double a = static_cast<double>(xc ? xp[i] : x.data()[x._flat_logical(i)]);
+        double b = static_cast<double>(yc ? yp[i] : y.data()[y._flat_logical(i)]);
         double diff = std::abs(a - b);
         double ulp =
             std::numeric_limits<double>::epsilon() * std::max(std::abs(a), std::abs(b));
@@ -431,6 +526,209 @@ namespace np
         const ndarray<double>& a, const ndarray<double>& b, int maxulp = 1)
     {
       assert_array_almost_equal_nulp(a, b, maxulp);
+    }
+
+    NP_API template <typename T>
+    inline void assert_array_max_ulp(
+        const ndarray<T>& a,
+        const ndarray<T>& b,
+        int maxulp = 1,
+        dtype dt = dtype::float64)
+    {
+      (void)dt;
+      if (a.shape != b.shape)
+      {
+        detail::fail("shape mismatch");
+      }
+      // Delegate to nulp check with appropriate epsilon per dtype
+      for (std::size_t i = 0; i < a.size(); ++i)
+      {
+        double av = static_cast<double>(a.data()[a._flat_logical(i)]);
+        double bv = static_cast<double>(b.data()[b._flat_logical(i)]);
+        double diff = std::abs(av - bv);
+        double ulp =
+            std::numeric_limits<double>::epsilon() * std::max(std::abs(av), std::abs(bv));
+        if (diff > maxulp * ulp)
+        {
+          detail::fail("max_ulp failed at " + std::to_string(i));
+        }
+      }
+    }
+
+    /**
+     * @brief Build error message (np.testing.build_err_msg).
+     *
+     * Reference: numpy-reference/reference/generated/numpy.testing.build_err_msg.html
+     */
+    NP_API inline std::string build_err_msg(
+        const std::vector<std::string>& arrays,
+        const std::string& err_msg,
+        const std::string& header = "Items are not equal:",
+        bool verbose = true,
+        const std::pair<std::string, std::string>& names = {"ACTUAL", "DESIRED"},
+        int precision = 8)
+    {
+      std::ostringstream oss;
+      oss << header << "\n";
+      if (!err_msg.empty())
+      {
+        oss << err_msg << "\n";
+      }
+      if (verbose)
+      {
+        for (std::size_t i = 0; i < arrays.size(); ++i)
+        {
+          const std::string& nm = i == 0 ? names.first : names.second;
+          oss << nm << ": " << arrays[i] << "\n";
+        }
+        oss << std::setprecision(precision);
+      }
+      return oss.str();
+    }
+
+    NP_API template <typename T>
+    inline std::string build_err_msg(
+        const std::vector<ndarray<T>>& arrays,
+        const std::string& err_msg,
+        const std::string& header = "Items are not equal:",
+        bool verbose = true,
+        const std::pair<std::string, std::string>& names = {"ACTUAL", "DESIRED"},
+        int precision = 8)
+    {
+      std::vector<std::string> strs;
+      strs.reserve(arrays.size());
+      for (auto& arr : arrays)
+      {
+        std::ostringstream oss;
+        oss << "shape=[";
+        for (std::size_t i = 0; i < arr.shape.size(); ++i)
+        {
+          if (i)
+            oss << ",";
+          oss << arr.shape[i];
+        }
+        oss << "] size=" << arr.size();
+        strs.push_back(oss.str());
+      }
+      return build_err_msg(strs, err_msg, header, verbose, names, precision);
+    }
+
+    /**
+     * @brief Generic array comparison (np.testing.assert_array_compare).
+     *
+     * Reference:
+     * numpy-reference/reference/generated/numpy.testing.assert_array_compare.html
+     */
+    NP_API template <typename Comp, typename T>
+    inline void assert_array_compare(
+        Comp comparison,
+        const ndarray<T>& x,
+        const ndarray<T>& y,
+        const std::string& err_msg = "",
+        bool verbose = true,
+        const std::string& header = "",
+        int precision = 6,
+        bool equal_nan = true,
+        bool equal_inf = true,
+        bool strict = false,
+        const std::pair<std::string, std::string>& names = {"ACTUAL", "DESIRED"})
+    {
+      (void)header;
+      (void)precision;
+      (void)equal_inf;
+      (void)strict;
+      (void)names;
+      if (x.shape != y.shape)
+      {
+        std::string hdr = header.empty() ? "shapes mismatch" : header;
+        std::string msg = err_msg.empty() ? build_err_msg(
+                                                std::vector<ndarray<T>>{x, y},
+                                                "shape mismatch",
+                                                hdr,
+                                                verbose,
+                                                names,
+                                                precision)
+                                          : err_msg;
+        detail::fail(msg);
+      }
+      const bool x_contig = x.is_contiguous();
+      const bool y_contig = y.is_contiguous();
+      const T* xp = x_contig ? x.data().data() : nullptr;
+      const T* yp = y_contig ? y.data().data() : nullptr;
+      for (std::size_t i = 0; i < x.size(); ++i)
+      {
+        T a = x_contig ? xp[i] : x.data()[x._flat_logical(i)];
+        T b = y_contig ? yp[i] : y.data()[y._flat_logical(i)];
+        bool both_nan = false;
+        if constexpr (std::is_floating_point_v<T>)
+        {
+          both_nan = std::isnan(a) && std::isnan(b);
+        }
+        if (both_nan && equal_nan)
+        {
+          continue;
+        }
+        bool ok = false;
+        try
+        {
+          ok = static_cast<bool>(comparison(a, b));
+        }
+        catch (...)
+        {
+          ok = false;
+        }
+        if (!ok)
+        {
+          std::string msg = err_msg.empty()
+              ? build_err_msg(
+                    std::vector<ndarray<T>>{x, y},
+                    "comparison failed at " + std::to_string(i),
+                    header.empty() ? "Arrays are not equal:" : header,
+                    verbose,
+                    names,
+                    precision)
+              : err_msg;
+          detail::fail(msg);
+        }
+      }
+    }
+
+    NP_API template <typename Comp, typename T, typename U>
+    inline void assert_array_compare(
+        Comp comparison,
+        T x,
+        U y,
+        const std::string& err_msg = "",
+        bool verbose = true,
+        const std::string& header = "",
+        int precision = 6,
+        bool equal_nan = true,
+        bool equal_inf = true,
+        bool strict = false,
+        const std::pair<std::string, std::string>& names = {"ACTUAL", "DESIRED"})
+    {
+      (void)verbose;
+      (void)header;
+      (void)precision;
+      (void)equal_nan;
+      (void)equal_inf;
+      (void)strict;
+      (void)names;
+      bool both_nan = false;
+      if constexpr (std::is_floating_point_v<T> && std::is_floating_point_v<U>)
+      {
+        both_nan =
+            std::isnan(static_cast<double>(x)) && std::isnan(static_cast<double>(y));
+      }
+      if (both_nan && equal_nan)
+      {
+        return;
+      }
+      bool ok = static_cast<bool>(comparison(x, y));
+      if (!ok)
+      {
+        detail::fail(err_msg.empty() ? "scalar comparison failed" : err_msg);
+      }
     }
 
     /**
@@ -608,12 +906,15 @@ namespace np
     NP_API struct clear_and_catch_warnings
     {
       bool record;
+      std::vector<std::string> modules;
       std::vector<std::string> log;
 
-      explicit clear_and_catch_warnings(bool record_ = true) : record(record_)
+      explicit clear_and_catch_warnings(
+          bool record_ = false, const std::vector<std::string>& modules_ = {})
+          : record(record_), modules(modules_)
       {
         std::cout << "[clear_and_catch_warnings] enter record=" << std::boolalpha
-                  << record << "\n";
+                  << record << " modules=" << modules.size() << "\n";
         if (record)
         {
           log.reserve(4);
@@ -671,6 +972,24 @@ namespace np
       return elapsed.count();
     }
 
+    NP_API inline double
+    measure(const std::string& code_str, int times = 1, const std::string& label = "")
+    {
+      (void)code_str;
+      if (times <= 0)
+      {
+        detail::fail("measure: times must be > 0");
+      }
+      auto start = std::chrono::high_resolution_clock::now();
+      // In C++ code_str cannot be executed; treat as no-op timing
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> elapsed = end - start;
+      std::cout << "[measure] code_str length=" << code_str.size()
+                << " label=" << (label.empty() ? "<anon>" : label)
+                << " elapsed=" << elapsed.count() << "s\n";
+      return elapsed.count();
+    }
+
     /**
      * @brief Run doctests found in file (np.testing.rundocs).
      *
@@ -707,12 +1026,15 @@ namespace np
     NP_API struct suppress_warnings
     {
       std::string forwarding_rule;
+      bool warn_enabled;
       std::vector<std::string> suppressed;
 
-      explicit suppress_warnings(const std::string& forwarding_rule_ = "always")
-          : forwarding_rule(forwarding_rule_)
+      explicit suppress_warnings(
+          const std::string& forwarding_rule_ = "always", bool warn_ = true)
+          : forwarding_rule(forwarding_rule_), warn_enabled(warn_)
       {
-        std::cout << "[suppress_warnings] enter rule=" << forwarding_rule << "\n";
+        std::cout << "[suppress_warnings] enter rule=" << forwarding_rule
+                  << " warn=" << std::boolalpha << warn_enabled << "\n";
         if (forwarding_rule.empty())
         {
           detail::fail("suppress_warnings: empty forwarding_rule");
@@ -735,6 +1057,71 @@ namespace np
         return suppressed.size();
       }
     };
+
+    // ── Additional parity helpers (jiffies, memusage, tempdir, etc.) ──
+
+    NP_API inline int verbose = 0;
+
+    NP_API inline bool break_cycles()
+    {
+      std::cout << "[break_cycles] (no GC in C++)\n";
+      return false;
+    }
+
+    NP_API inline long jiffies()
+    {
+      auto now = std::chrono::steady_clock::now().time_since_epoch();
+      return static_cast<long>(
+          std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
+    }
+
+    NP_API inline long memusage(const std::string& proc = "self")
+    {
+      (void)proc;
+      return 0;
+    }
+
+    NP_API inline std::string tempdir(const std::string& suffix = "")
+    {
+      std::string base = std::filesystem::temp_directory_path().string();
+      if (!suffix.empty())
+      {
+        base += "/" + suffix;
+      }
+      return base;
+    }
+
+    NP_API inline std::string temppath(const std::string& suffix = "")
+    {
+      return tempdir(suffix) + "/tmpfile";
+    }
+
+    NP_API inline bool check_support_sve()
+    {
+      return false;
+    }
+
+    NP_API inline void
+    runstring(const std::string& code, const std::string& filename = "")
+    {
+      (void)code;
+      (void)filename;
+      std::cout << "[runstring] (no-op)\n";
+    }
+
+    NP_API template <typename F, typename... Args>
+    inline void run_threaded(F&& func, Args&&... args)
+    {
+      std::invoke(std::forward<F>(func), std::forward<Args>(args)...);
+    }
+
+    NP_API inline bool test(const std::string& label = "", bool verbose_ = false)
+    {
+      (void)label;
+      (void)verbose_;
+      std::cout << "[np.testing.test] (no-op)\n";
+      return true;
+    }
 
     /**
      * @brief Testing custom array containers overrides (np.testing.overrides).

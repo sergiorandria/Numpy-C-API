@@ -76,9 +76,11 @@ namespace np::random
 
       std::uniform_int_distribution<T> dist(low, high - 1);
       ndarray<T> result(size, dtype_of<T>);
-      for (auto it = result.begin(); it != result.end(); ++it)
+      T* __restrict dst = result.data().data();
+      std::size_t n = result.size();
+      for (std::size_t i = 0; i < n; ++i)
       {
-        *it = dist(engine_);
+        dst[i] = dist(engine_);
       }
       return result;
     }
@@ -93,7 +95,7 @@ namespace np::random
     {
       static_assert(std::is_floating_point_v<T>, "T must be floating point");
 
-      if (size.empty())
+      if (size.empty()) [[unlikely]]
       {
         std::uniform_real_distribution<T> dist(T{0}, T{1});
         return ndarray<T>::from_data({1}, {dist(engine_)});
@@ -101,13 +103,11 @@ namespace np::random
 
       std::uniform_real_distribution<T> dist(T{0}, T{1});
       ndarray<T> result(size, dtype_of<T>);
-
-#ifdef _NP_KERNEL_PERFORMANCE_LOOP_UNROLL
-#pragma unroll loop
-#endif // _NP_KERNEL_PERFORMANCE_LOOP_UNROLL
-      for (auto it = result.begin(); it != result.end(); ++it)
+      T* __restrict dst = result.data().data();
+      std::size_t n = result.size();
+      for (std::size_t i = 0; i < n; ++i)
       {
-        *it = dist(engine_);
+        dst[i] = dist(engine_);
       }
       return result;
     }
@@ -160,16 +160,26 @@ namespace np::random
     template <typename T>
     void shuffle(ndarray<T>& x)
     {
-      if (x.ndim() == 1)
+      if (x.ndim() == 1) [[likely]]
       {
-        std::shuffle(x.data().begin(), x.data().end(), engine_);
+        if (x.is_contiguous()) [[likely]]
+        {
+          T* __restrict p = x.data().data();
+          std::shuffle(p, p + x.size(), engine_);
+        }
+        else
+        {
+          std::shuffle(x.data().begin(), x.data().end(), engine_);
+        }
       }
       else
       {
         // Shuffle along first axis
         const std::size_t n0 = static_cast<std::size_t>(x.shape[0]);
-        std::vector<std::size_t> indices(n0);
-        std::iota(indices.begin(), indices.end(), 0);
+        std::vector<std::size_t> indices;
+        indices.reserve(n0);
+        for (std::size_t i = 0; i < n0; ++i)
+          indices.push_back(i);
         std::shuffle(indices.begin(), indices.end(), engine_);
 
         // Create permuted copy
@@ -1278,21 +1288,20 @@ namespace np::random
     auto _fill_distribution(Engine& rng, Dist& dist, const std::vector<int>& size)
         -> ndarray<TargetType>
     {
-      if (size.empty())
+      if (size.empty()) [[unlikely]]
       {
         return ndarray<TargetType>::from_data({1}, {(dist(rng))});
       }
 
       std::size_t total_elements = 1;
       for (int d : size)
-      {
         total_elements *= static_cast<std::size_t>(d);
-      }
 
       ndarray<TargetType> result(size, dtype_of<TargetType>);
+      TargetType* __restrict dst = result.data().data();
       for (std::size_t i = 0; i < total_elements; ++i)
       {
-        result[i] = static_cast<TargetType>(dist(rng));
+        dst[i] = static_cast<TargetType>(dist(rng));
       }
       return result;
     }
