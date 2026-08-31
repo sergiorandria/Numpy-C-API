@@ -1634,6 +1634,66 @@ namespace np::linalg
         throw std::invalid_argument(
             "'fro' and 'nuc' norms are not defined for 1D arrays");
       }
+      if (x.is_contiguous()) [[likely]]
+      {
+        const T* __restrict ptr = x.data().data();
+        const std::size_t len = x.size();
+        switch (ord)
+        {
+          case NormOrd::None:
+          case NormOrd::Two:
+          {
+            R acc{};
+            for (std::size_t i = 0; i < len; ++i)
+            {
+              const R v = static_cast<R>(ptr[i]);
+              acc += v * v;
+            }
+            return std::sqrt(acc);
+          }
+          case NormOrd::One:
+          {
+            R acc{};
+            for (std::size_t i = 0; i < len; ++i)
+              acc += std::abs(static_cast<R>(ptr[i]));
+            return acc;
+          }
+          case NormOrd::Inf:
+          {
+            R best{};
+            for (std::size_t i = 0; i < len; ++i)
+              best = std::max(best, std::abs(static_cast<R>(ptr[i])));
+            return best;
+          }
+          case NormOrd::NegInf:
+          {
+            R best = std::numeric_limits<R>::infinity();
+            for (std::size_t i = 0; i < len; ++i)
+              best = std::min(best, std::abs(static_cast<R>(ptr[i])));
+            return best == std::numeric_limits<R>::infinity() ? R{0} : best;
+          }
+          case NormOrd::NegOne:
+          {
+            R acc{};
+            for (std::size_t i = 0; i < len; ++i)
+              acc += R{1} / std::abs(static_cast<R>(ptr[i]));
+            return acc == R{0} ? R{0} : R{1} / acc;
+          }
+          case NormOrd::NegTwo:
+          {
+            R acc{};
+            for (std::size_t i = 0; i < len; ++i)
+            {
+              const R v = std::abs(static_cast<R>(ptr[i]));
+              acc += R{1} / (v * v);
+            }
+            return acc == R{0} ? R{0} : R{1} / std::sqrt(acc);
+          }
+          case NormOrd::Fro:
+          case NormOrd::Nuc:
+            break;
+        }
+      }
       const std::size_t len = x.size();
       switch (ord)
       {
@@ -2670,6 +2730,72 @@ namespace np::linalg
     const std::size_t k = static_cast<std::size_t>(ashape[1]);
     const std::size_t cols = static_cast<std::size_t>(bshape[1]);
     ndarray<R> out(std::vector<int>{static_cast<int>(rows), static_cast<int>(cols)});
+    // Micro-opt: fast contiguous direct pointer (avoid a.get()/b.get() stride calc)
+    if (a.is_contiguous() && b.is_contiguous()) [[likely]]
+    {
+      const T* __restrict ad = a.data().data();
+      const U* __restrict bd = b.data().data();
+      R* __restrict od = out.data().data();
+      constexpr std::size_t BLOCK = 32;
+      if (rows * cols * k > 32768 && rows > BLOCK && cols > BLOCK && k > BLOCK)
+      {
+        std::fill(od, od + rows * cols, R{});
+        for (std::size_t ii = 0; ii < rows; ii += BLOCK)
+        {
+          for (std::size_t jj = 0; jj < cols; jj += BLOCK)
+          {
+            for (std::size_t pp = 0; pp < k; pp += BLOCK)
+            {
+              std::size_t i_max = std::min(ii + BLOCK, rows);
+              std::size_t j_max = std::min(jj + BLOCK, cols);
+              std::size_t p_max = std::min(pp + BLOCK, k);
+              for (std::size_t i = ii; i < i_max; ++i)
+              {
+                for (std::size_t p = pp; p < p_max; ++p)
+                {
+                  R av = static_cast<R>(ad[i * k + p]);
+                  for (std::size_t j = jj; j < j_max; ++j)
+                  {
+                    od[i * cols + j] += av * static_cast<R>(bd[p * cols + j]);
+                  }
+                }
+              }
+            }
+          }
+        }
+        return out;
+      }
+#ifdef NP_USE_THREADING
+      if (rows * cols > 4096)
+      {
+        ::np::ThreadPool::global().parallel_for(
+            0,
+            rows,
+            [&](std::size_t i)
+            {
+              for (std::size_t j = 0; j < cols; ++j)
+              {
+                R acc{};
+                for (std::size_t p = 0; p < k; ++p)
+                  acc += static_cast<R>(ad[i * k + p]) * static_cast<R>(bd[p * cols + j]);
+                od[i * cols + j] = acc;
+              }
+            });
+        return out;
+      }
+#endif
+      for (std::size_t i = 0; i < rows; ++i)
+      {
+        for (std::size_t j = 0; j < cols; ++j)
+        {
+          R acc{};
+          for (std::size_t p = 0; p < k; ++p)
+            acc += static_cast<R>(ad[i * k + p]) * static_cast<R>(bd[p * cols + j]);
+          od[i * cols + j] = acc;
+        }
+      }
+      return out;
+    }
 #ifdef NP_USE_THREADING
     if (rows * cols > 4096)
     {
@@ -3341,9 +3467,59 @@ namespace np::linalg
     };
     const int a1 = norm_axis(axis, nd1);
     const int a2 = norm_axis(axis, nd2);
-    if (x1.shape[a1] != 3 || x2.shape[a2] != 3)
+    const int sza1 = x1.shape[a1];
+    const int sza2 = x2.shape[a2];
+    const bool is2 = (sza1 == 2 && sza2 == 2);
+    const bool is3 = (sza1 == 3 && sza2 == 3);
+    if (!is2 && !is3)
     {
-      throw std::invalid_argument("cross: the vectors must have 3 elements");
+      throw std::invalid_argument("cross: the vectors must have 2 or 3 elements");
+    }
+    if (is2)
+    {
+      // 2-element: scalar cross
+      std::vector<int> s1a;
+      std::vector<int> s2a;
+      for (int d = 0; d < static_cast<int>(nd1); ++d)
+        if (d != a1)
+          s1a.push_back(x1.shape[d]);
+      for (int d = 0; d < static_cast<int>(nd2); ++d)
+        if (d != a2)
+          s2a.push_back(x2.shape[d]);
+      std::vector<int> bshape2 = np::detail::broadcast_shapes(s1a, s2a);
+      ndarray<R> out2(bshape2);
+      const std::size_t off1c = bshape2.size() - s1a.size();
+      const std::size_t off2c = bshape2.size() - s2a.size();
+      np::detail::Odometer od2(bshape2);
+      while (!od2.done())
+      {
+        const auto& oi = od2.idx();
+        std::vector<std::size_t> i1(nd1, 0), i2(nd2, 0);
+        for (std::size_t i = 0; i < s1a.size(); ++i)
+        {
+          std::size_t d = i < static_cast<std::size_t>(a1) ? i : i + 1;
+          i1[d] = oi[off1c + i];
+        }
+        for (std::size_t i = 0; i < s2a.size(); ++i)
+        {
+          std::size_t d = i < static_cast<std::size_t>(a2) ? i : i + 1;
+          i2[d] = oi[off2c + i];
+        }
+        auto r1 = [&](int e)
+        {
+          i1[static_cast<std::size_t>(a1)] = static_cast<std::size_t>(e);
+          return static_cast<R>(x1.data()[x1._flat(i1)]);
+        };
+        auto r2 = [&](int e)
+        {
+          i2[static_cast<std::size_t>(a2)] = static_cast<std::size_t>(e);
+          return static_cast<R>(x2.data()[x2._flat(i2)]);
+        };
+        R c = r1(0) * r2(1) - r1(1) * r2(0);
+        out2.data()[np::detail::flat_index(oi, out2.strides, 0)] = c;
+        od2.advance();
+      }
+      return out2;
     }
     std::vector<int> s1;
     std::vector<int> s2;
@@ -3662,10 +3838,12 @@ namespace np::linalg
     std::fill(out.data().begin(), out.data().end(), T{0});
     // collect all labels sorted for iteration
     std::vector<char> all_labels;
+    all_labels.reserve(label_size.size());
     for (auto& kv : label_size)
       all_labels.push_back(kv.first);
     std::sort(all_labels.begin(), all_labels.end());
     std::vector<int> all_shape;
+    all_shape.reserve(all_labels.size());
     for (char c : all_labels)
       all_shape.push_back(label_size[c]);
     // map label -> position in all_labels
@@ -3728,7 +3906,195 @@ namespace np::linalg
     return einsum(subscripts, std::vector<ndarray<T>>{a, b});
   }
 
+  // ── norm with axis / keepdims ─────────────────────────────────────
+  NP_API template <typename T>
+    requires(!np::detail::is_complex_v<T>)
+  NP_NODISCARD auto norm(
+      const ndarray<T>& x,
+      NormOrd ord,
+      const std::vector<int>& axis,
+      bool keepdims = false) -> ndarray<real_t<T>>
+  {
+    using R = real_t<T>;
+    if (axis.empty())
+    {
+      ndarray<R> s(std::vector<int>{});
+      s.data()[0] = norm(x, ord);
+      if (keepdims)
+      {
+        std::vector<int> kd(x.ndim(), 1);
+        return ndarray<R>(kd);
+      }
+      return s;
+    }
+    double p = 2.0;
+    if (ord == NormOrd::One)
+      p = 1.0;
+    else if (ord == NormOrd::Inf)
+      p = std::numeric_limits<double>::infinity();
+    else if (ord == NormOrd::NegInf)
+      p = -std::numeric_limits<double>::infinity();
+    else if (ord == NormOrd::Fro)
+      p = 2.0;
+    return vector_norm(x, axis, keepdims, p);
+  }
+
+  NP_API template <typename T>
+    requires(!np::detail::is_complex_v<T>)
+  NP_NODISCARD auto
+  norm(const ndarray<T>& x, const std::vector<int>& axis, bool keepdims = false)
+      -> ndarray<real_t<T>>
+  {
+    return norm(x, NormOrd::None, axis, keepdims);
+  }
+
+  // ── einsum_path ───────────────────────────────────────────────────
+  struct EinsumPath
+  {
+    std::string path;
+    std::vector<std::vector<int>> steps;
+  };
+
+  NP_API inline auto einsum_path(const std::string& subscripts, bool optimize = true)
+      -> std::pair<std::string, std::vector<std::vector<int>>>
+  {
+    auto arrow = subscripts.find("->");
+    std::string left =
+        arrow == std::string::npos ? subscripts : subscripts.substr(0, arrow);
+    std::vector<std::string> in_subs;
+    std::string cur;
+    for (char c : left)
+    {
+      if (c == ',')
+      {
+        in_subs.push_back(cur);
+        cur.clear();
+      }
+      else if (c != ' ')
+        cur.push_back(c);
+    }
+    in_subs.push_back(cur);
+    std::size_t n = in_subs.size();
+    EinsumPath out;
+    if (n <= 1 || !optimize)
+    {
+      out.path = "einsum_path: " + subscripts + " (no optimization)";
+      return {out.path, out.steps};
+    }
+    std::vector<int> order;
+    for (std::size_t i = 0; i < n; ++i)
+      order.push_back(static_cast<int>(i));
+    if (n <= 4)
+    {
+      std::vector<std::vector<int>> best_steps;
+      std::size_t best_cost = std::numeric_limits<std::size_t>::max();
+      std::vector<int> perm = order;
+      do
+      {
+        std::vector<std::string> subs;
+        for (int idx : perm)
+          subs.push_back(in_subs[static_cast<std::size_t>(idx)]);
+        std::size_t cost = 0;
+        std::string cur_sub = subs[0];
+        for (std::size_t k = 1; k < subs.size(); ++k)
+        {
+          std::set<char> u(cur_sub.begin(), cur_sub.end());
+          u.insert(subs[k].begin(), subs[k].end());
+          cost += u.size();
+          std::string merged;
+          std::set<char> seen;
+          for (char c : cur_sub)
+            if (subs[k].find(c) == std::string::npos && seen.insert(c).second)
+              merged.push_back(c);
+          for (char c : subs[k])
+            if (cur_sub.find(c) == std::string::npos && seen.insert(c).second)
+              merged.push_back(c);
+          cur_sub = merged;
+        }
+        if (cost < best_cost)
+        {
+          best_cost = cost;
+          best_steps.clear();
+          for (std::size_t k = 1; k < perm.size(); ++k)
+            best_steps.push_back({perm[k - 1], perm[k]});
+        }
+      } while (std::next_permutation(perm.begin(), perm.end()));
+      out.steps = best_steps;
+    }
+    else
+    {
+      for (std::size_t i = 1; i < n; ++i)
+        out.steps.push_back({static_cast<int>(i - 1), static_cast<int>(i)});
+    }
+    std::string ps = "einsum_path: " + subscripts + " -> steps ";
+    for (auto& st : out.steps)
+      ps += "(" + std::to_string(st[0]) + "," + std::to_string(st[1]) + ") ";
+    out.path = ps;
+    return {out.path, out.steps};
+  }
+
+  NP_API inline auto
+  einsum_path(const std::string& subscripts, const std::vector<std::string>&)
+      -> std::pair<std::string, std::vector<std::vector<int>>>
+  {
+    return einsum_path(subscripts, true);
+  }
+
 } // namespace np::linalg
+
+// ── Top-level np:: aliases ──────────────────────────────────────────
+namespace np
+{
+
+  NP_API template <typename T, typename U>
+  NP_NODISCARD inline auto matvec(const ndarray<T>& a, const ndarray<U>& b)
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    return linalg::matvec(a, b);
+  }
+
+  NP_API template <typename T, typename U>
+  NP_NODISCARD inline auto vecmat(const ndarray<T>& a, const ndarray<U>& b)
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    return linalg::vecmat(a, b);
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto
+  einsum(const std::string& subscripts, const std::vector<ndarray<T>>& ops) -> ndarray<T>
+  {
+    return linalg::einsum(subscripts, ops);
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto einsum(const std::string& subscripts, const ndarray<T>& a)
+      -> ndarray<T>
+  {
+    return linalg::einsum(subscripts, a);
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto
+  einsum(const std::string& subscripts, const ndarray<T>& a, const ndarray<T>& b)
+      -> ndarray<T>
+  {
+    return linalg::einsum(subscripts, a, b);
+  }
+
+  NP_API inline auto einsum_path(const std::string& s)
+      -> std::pair<std::string, std::vector<std::vector<int>>>
+  {
+    return linalg::einsum_path(s);
+  }
+
+  NP_API inline auto einsum_path(const std::string& s, bool opt)
+      -> std::pair<std::string, std::vector<std::vector<int>>>
+  {
+    return linalg::einsum_path(s, opt);
+  }
+
+} // namespace np
 
 #endif // NP_LINALG_HPP
 

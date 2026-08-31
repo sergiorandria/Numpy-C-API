@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstddef>
 #include <map>
+#include <cstring>
 #include <set>
 #include <stdexcept>
 #include <vector>
@@ -725,6 +726,7 @@ namespace np
       }
 
       int section_size = n / sections;
+      result.reserve(static_cast<std::size_t>(sections));
       for (int i = 0; i < sections; ++i)
       {
         std::vector<int> new_shape = arr.shape;
@@ -770,11 +772,13 @@ namespace np
     else
     {
       // Split at indices
-      std::vector<int> split_points = {0};
+      std::vector<int> split_points;
+      split_points.reserve(indices_or_sections.size() + 2);
+      split_points.push_back(0);
       split_points.insert(
           split_points.end(), indices_or_sections.begin(), indices_or_sections.end());
       split_points.push_back(n);
-
+      result.reserve(split_points.size() - 1);
       for (std::size_t i = 0; i < split_points.size() - 1; ++i)
       {
         int start = split_points[i];
@@ -863,6 +867,19 @@ namespace np
     }
 
     return split(arr, split_points, axis);
+  }
+
+  /**
+   * @brief Split array at explicit indices (np.array_split with indices).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.array_split.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto
+  array_split(const ndarray<T>& arr, const std::vector<int>& indices, int axis = 0)
+      -> std::vector<ndarray<T>>
+  {
+    return split(arr, indices, axis);
   }
 
   /**
@@ -1593,8 +1610,8 @@ namespace np
   NP_API template <typename T>
   NP_NODISCARD auto atleast_2d(const ndarray<T>& arr) -> ndarray<T>
   {
-    if (arr.ndim() >= 2)
-      return arr.copy();
+    if (arr.ndim() >= 2) [[likely]]
+      return arr; // zero-copy view (shared_ptr), was arr.copy()
     if (arr.ndim() == 1)
     {
       return arr.reshape(std::vector<int>{1, static_cast<int>(arr.size())});
@@ -1613,8 +1630,8 @@ namespace np
   NP_API template <typename T>
   NP_NODISCARD auto atleast_3d(const ndarray<T>& arr) -> ndarray<T>
   {
-    if (arr.ndim() >= 3)
-      return arr.copy();
+    if (arr.ndim() >= 3) [[likely]]
+      return arr; // zero-copy
     if (arr.ndim() == 2)
     {
       return arr.reshape(std::vector<int>{arr.shape[0], arr.shape[1], 1});
@@ -1807,6 +1824,22 @@ namespace np
     return out;
   }
 
+  /** @brief 1-D block – horizontal concatenation (np.block([a,b])).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.block.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD auto block(const std::vector<ndarray<T>>& blocks) -> ndarray<T>
+  {
+    if (blocks.empty())
+    {
+      throw std::invalid_argument("block: need at least one block");
+    }
+    // Defer to concatenate along last axis (horizontal for 1-D/2-D)
+    int axis = blocks[0].ndim() == 0 ? 0 : static_cast<int>(blocks[0].ndim() - 1);
+    return concat(blocks, axis);
+  }
+
   /** @brief Broadcast arrays to common shape (np.broadcast_arrays). */
   NP_API template <typename T>
   NP_NODISCARD auto broadcast_arrays(const std::vector<ndarray<T>>& arrays)
@@ -1953,6 +1986,22 @@ namespace np
       const ndarray<T>& src,
       const std::optional<ndarray<bool>>& where = std::nullopt)
   {
+    // Fast path: contiguous same-shape without mask → memcpy
+    if (!where.has_value() && src.shape == dst.shape)
+    {
+      if (src.is_contiguous() && dst.is_contiguous() && src.size() == dst.size())
+      {
+        // Direct block copy, no per-element Odometer
+        const T* __restrict s = src.data().data();
+        T* __restrict d = dst.data().data();
+        // Use memmove for overlapping views, memcpy otherwise
+        if (s != d)
+        {
+          std::memcpy(d, s, src.size() * sizeof(T));
+        }
+        return;
+      }
+    }
     // Broadcast src to dst shape if needed
     ndarray<T> bsrc;
     if (src.shape == dst.shape)
@@ -1965,6 +2014,13 @@ namespace np
     }
     if (!where.has_value())
     {
+      if (bsrc.is_contiguous() && dst.is_contiguous())
+      {
+        const T* __restrict s = bsrc.data().data();
+        T* __restrict d = dst.data().data();
+        std::memcpy(d, s, bsrc.size() * sizeof(T));
+        return;
+      }
       detail::Odometer od(dst.shape);
       while (!od.done())
       {

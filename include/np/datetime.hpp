@@ -15,10 +15,12 @@
 #ifndef NP_DATETIME_HPP
 #define NP_DATETIME_HPP
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "api_macros.hpp"
@@ -98,34 +100,41 @@ namespace np
 
     NP_API inline auto _weekday(sys_days d) -> int
     {
-      // Monday=0 ... Sunday=6
-      std::chrono::weekday wd{d};
-      return static_cast<int>(wd.c_encoding() == 7 ? 6 : wd.c_encoding() - 1);
-      // Simpler: use std::chrono::weekday::c_encoding gives 0=Sun ...6=Sat
-      // Convert: Mon=0 ... Sun=6
+      // Fast: 1970-01-01 was Thursday (3 when Mon=0). Use days count mod 7.
+      // Avoid std::chrono::weekday construction (heavy).
+      int days = static_cast<int>(d.time_since_epoch().count());
+      int wd = (days + 3) % 7;
+      if (wd < 0)
+        wd += 7;
+      return wd; // Mon=0
     }
 
     NP_API inline auto _is_holiday(sys_days d, const std::vector<sys_days>& hol) -> bool
     {
-      return std::find(hol.begin(), hol.end(), d) != hol.end();
+      if (hol.empty()) [[likely]]
+        return false;
+      // Linear for small, binary for sorted large (hol typically < 64)
+      if (hol.size() < 32)
+      {
+        for (auto h : hol)
+          if (h == d)
+            return true;
+        return false;
+      }
+      // Assume sorted for larger; use binary_search if sorted else fall back
+      return std::binary_search(hol.begin(), hol.end(), d);
     }
 
     NP_API inline auto _is_busday(
         sys_days d, const std::array<bool, 7>& weekmask, const std::vector<sys_days>& hol)
         -> bool
     {
-      int wd = 0;
-      {
-        std::chrono::weekday w{d};
-        unsigned c = w.c_encoding(); // 0=Sun
-        // Map to Mon=0
-        wd = (c == 0) ? 6 : static_cast<int>(c) - 1;
-      }
-      if (!weekmask[static_cast<std::size_t>(wd)])
+      int wd = _weekday(d);
+      if (!weekmask[static_cast<std::size_t>(wd)]) [[unlikely]]
       {
         return false;
       }
-      if (_is_holiday(d, hol))
+      if (_is_holiday(d, hol)) [[unlikely]]
       {
         return false;
       }
@@ -162,6 +171,17 @@ namespace np
         }
       }
       ndarray<bool> out(dates.shape);
+      if (dates.is_contiguous()) [[likely]]
+      {
+        const sys_days* __restrict s = dates.data().data();
+        std::size_t n = dates.size();
+        auto& ovec = out.data();
+        for (std::size_t i = 0; i < n; ++i)
+        {
+          ovec[i] = _is_busday(s[i], mask, hol);
+        }
+        return out;
+      }
       for (std::size_t i = 0; i < dates.size(); ++i)
       {
         sys_days d = dates.data()[dates._flat_logical(i)];
@@ -184,6 +204,17 @@ namespace np
         tmp.data()[i] = sys_days{std::chrono::days{v}};
       }
       return is_busday(tmp, weekmask, holidays, busdaycal);
+    }
+
+    NP_API inline auto is_busday(
+        sys_days date,
+        const std::string& weekmask = "1111100",
+        const std::vector<sys_days>& holidays = {},
+        const busdaycalendar* busdaycal = nullptr) -> bool
+    {
+      ndarray<sys_days> tmp(std::vector<int>{1});
+      tmp.data()[0] = date;
+      return is_busday(tmp, weekmask, holidays, busdaycal).data()[0];
     }
 
     /**
@@ -306,6 +337,23 @@ namespace np
           }
         }
 
+        // Micro-opt: week jump for large offsets when no holidays
+        if (hol.empty() && std::abs(off) > 5)
+        {
+          int per_week = 0;
+          for (bool v : mask)
+            if (v)
+              ++per_week;
+          if (per_week > 0 && per_week < 7)
+          {
+            int64_t weeks = off / per_week;
+            if (weeks != 0)
+            {
+              d += std::chrono::days{weeks * 7};
+              off %= per_week;
+            }
+          }
+        }
         // Apply offset in business days
         if (off > 0)
         {
@@ -362,6 +410,12 @@ namespace np
       std::vector<int> out_shape =
           np::detail::broadcast_shapes(begindates.shape, enddates.shape);
       ndarray<std::int64_t> out(out_shape);
+      // Precompute popcount for fast path
+      int per_week = 0;
+      for (bool v : mask)
+        if (v)
+          ++per_week;
+      bool hol_empty = hol.empty();
       np::detail::Odometer od(out_shape);
       while (!od.done())
       {
@@ -370,6 +424,29 @@ namespace np
             begindates.get(detail::broadcast_index_dt(begindates.shape, out_shape, idx));
         sys_days e =
             enddates.get(detail::broadcast_index_dt(enddates.shape, out_shape, idx));
+        if (hol_empty) [[likely]]
+        {
+          if (b == e)
+          {
+            out.set(idx, 0);
+            od.advance();
+            continue;
+          }
+          bool neg = e < b;
+          sys_days lo = neg ? e : b;
+          sys_days hi = neg ? b : e;
+          int64_t days = (hi - lo).count();
+          int wd0 = _weekday(lo);
+          int64_t weeks = days / 7;
+          int64_t rem = days % 7;
+          int64_t c = weeks * per_week;
+          for (int i = 0; i < rem; ++i)
+            if (mask[(wd0 + i) % 7])
+              ++c;
+          out.set(idx, neg ? -c : c);
+          od.advance();
+          continue;
+        }
         int64_t cnt = 0;
         sys_days cur = b;
         if (cur <= e)
@@ -398,6 +475,35 @@ namespace np
         od.advance();
       }
       return out;
+    }
+
+    NP_API inline auto busday_offset(
+        sys_days date,
+        std::int64_t offset,
+        const std::string& roll = "raise",
+        const std::string& weekmask = "1111100",
+        const std::vector<sys_days>& holidays = {},
+        const busdaycalendar* busdaycal = nullptr) -> sys_days
+    {
+      ndarray<sys_days> d(std::vector<int>{1});
+      ndarray<std::int64_t> o(std::vector<int>{1});
+      d.data()[0] = date;
+      o.data()[0] = offset;
+      return busday_offset(d, o, roll, weekmask, holidays, busdaycal).data()[0];
+    }
+
+    NP_API inline auto busday_count(
+        sys_days begin,
+        sys_days end,
+        const std::string& weekmask = "1111100",
+        const std::vector<sys_days>& holidays = {},
+        const busdaycalendar* busdaycal = nullptr) -> std::int64_t
+    {
+      ndarray<sys_days> b(std::vector<int>{1});
+      ndarray<sys_days> e(std::vector<int>{1});
+      b.data()[0] = begin;
+      e.data()[0] = end;
+      return busday_count(b, e, weekmask, holidays, busdaycal).data()[0];
     }
 
     /**
@@ -435,6 +541,14 @@ namespace np
         tmp.data()[i] = sys_days{std::chrono::days{arr.data()[arr._flat_logical(i)]}};
       }
       return datetime_as_string(tmp, unit);
+    }
+
+    NP_API inline auto datetime_as_string(sys_days d, const std::string& unit = "D")
+        -> std::string
+    {
+      ndarray<sys_days> tmp(std::vector<int>{1});
+      tmp.data()[0] = d;
+      return datetime_as_string(tmp, unit).data()[0];
     }
 
     /**

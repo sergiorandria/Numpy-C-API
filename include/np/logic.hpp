@@ -24,6 +24,7 @@
 #include <cmath>
 #include <limits>
 #include <type_traits>
+#include <unordered_set>
 #include <vector>
 
 #include "api_macros.hpp"
@@ -592,40 +593,65 @@ namespace np
   isin(const ndarray<T>& element, const ndarray<U>& test_elements, bool invert = false)
       -> ndarray<bool>
   {
+    if (test_elements.size() == 0) [[unlikely]]
+    {
+      ndarray<bool> out(element.shape);
+      out.fill(invert ? true : false);
+      return out;
+    }
     ndarray<bool> out(element.shape);
-    // Build hash set of test elements (converted to common type via == on T)
-    // Use linear scan – test_elements typically small; sorting for speed
-    std::vector<U> sorted(test_elements.size());
+    // Micro-opt: hash for large test_elements, sort+binary for small
+    constexpr std::size_t HASH_THRESHOLD = 64;
+    if (test_elements.size() > HASH_THRESHOLD)
+    {
+      std::unordered_set<U> set;
+      set.reserve(test_elements.size() * 2);
+      for (std::size_t i = 0; i < test_elements.size(); ++i)
+        set.insert(test_elements.data()[test_elements._flat_logical(i)]);
+      if (element.is_contiguous()) [[likely]]
+      {
+        const T* __restrict s = element.data().data();
+        bool* __restrict d = out.data().data();
+        std::size_t n = element.size();
+        for (std::size_t i = 0; i < n; ++i)
+        {
+          bool found = set.find(static_cast<U>(s[i])) != set.end();
+          d[i] = invert ? !found : found;
+        }
+        return out;
+      }
+      for (std::size_t i = 0; i < element.size(); ++i)
+      {
+        T v = element.data()[element._flat_logical(i)];
+        bool found = set.find(static_cast<U>(v)) != set.end();
+        out.data()[i] = invert ? !found : found;
+      }
+      return out;
+    }
+    std::vector<U> sorted;
+    sorted.reserve(test_elements.size());
     for (std::size_t i = 0; i < test_elements.size(); ++i)
-      sorted[i] = test_elements.data()[test_elements._flat_logical(i)];
+      sorted.push_back(test_elements.data()[test_elements._flat_logical(i)]);
     std::sort(sorted.begin(), sorted.end());
     sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    if (element.is_contiguous()) [[likely]]
+    {
+      const T* __restrict s = element.data().data();
+      bool* __restrict d = out.data().data();
+      std::size_t n = element.size();
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        bool found =
+            std::binary_search(sorted.begin(), sorted.end(), static_cast<U>(s[i]));
+        d[i] = invert ? !found : found;
+      }
+      return out;
+    }
     for (std::size_t i = 0; i < element.size(); ++i)
     {
       T v = element.data()[element._flat_logical(i)];
       bool found = std::binary_search(sorted.begin(), sorted.end(), static_cast<U>(v));
-      if (invert)
-        found = !found;
-      // Map flat i to logical index for out (use Odometer flat offset via set with vector
-      // idx) Instead write directly via flat logical offset for contiguous out
-      out.data()[i] = found;
-    }
-    // For non-contiguous/strided views element is already contiguous iteration via begin
-    // but out is contiguous Our linear scan assumes C-order flat iteration matches isin's
-    // logical order – correct for contiguous. For correctness with strided inputs we
-    // fallback to indexed path
-    if (!element.is_contiguous() || !out.is_contiguous())
-    {
-      detail::Odometer od(element.shape);
-      std::size_t flat = 0;
-      (void)flat;
-      // Re-evaluate with logical indexing to ensure view correctness
-      // Simpler: recompute via Odometer
-      for (auto it = element.begin(); it != element.end(); ++it)
-      {
-        // already handled – but out already filled contiguously; this is a no-op
-        break;
-      }
+      out.data()[i] = invert ? !found : found;
     }
     return out;
   }
@@ -645,21 +671,28 @@ namespace np
   NP_NODISCARD auto intersect1d(const ndarray<T>& ar1, const ndarray<T>& ar2)
       -> ndarray<T>
   {
-    std::vector<T> a(ar1.size()), b(ar2.size());
+    if (ar1.size() == 0 || ar2.size() == 0) [[unlikely]]
+      return ndarray<T>(std::vector<int>{0});
+    std::vector<T> a;
+    std::vector<T> b;
+    a.reserve(ar1.size());
+    b.reserve(ar2.size());
     for (std::size_t i = 0; i < ar1.size(); ++i)
-      a[i] = ar1.data()[ar1._flat_logical(i)];
+      a.push_back(ar1.data()[ar1._flat_logical(i)]);
     for (std::size_t i = 0; i < ar2.size(); ++i)
-      b[i] = ar2.data()[ar2._flat_logical(i)];
+      b.push_back(ar2.data()[ar2._flat_logical(i)]);
     std::sort(a.begin(), a.end());
     std::sort(b.begin(), b.end());
     a.erase(std::unique(a.begin(), a.end()), a.end());
     b.erase(std::unique(b.begin(), b.end()), b.end());
     std::vector<T> res;
+    res.reserve(std::min(a.size(), b.size()));
     std::set_intersection(
         a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(res));
     ndarray<T> out(std::vector<int>{static_cast<int>(res.size())});
+    T* __restrict dst = out.data().data();
     for (std::size_t i = 0; i < res.size(); ++i)
-      out.data()[i] = res[i];
+      dst[i] = res[i];
     return out;
   }
 
@@ -737,27 +770,58 @@ namespace np
   NP_NODISCARD inline auto unique_all(const ndarray<T>& ar) -> std::
       tuple<ndarray<T>, ndarray<std::size_t>, ndarray<std::size_t>, ndarray<std::size_t>>
   {
-    // unique is in manipulation.hpp – forward via ADL; define wrapper that returns same
-    // tuple To avoid include cycle, implement via sorting directly
-    std::vector<T> vals(ar.size());
-    for (std::size_t i = 0; i < ar.size(); ++i)
-      vals[i] = ar.data()[ar._flat_logical(i)];
+    std::size_t n = ar.size();
+    if (n == 0)
+    {
+      return {
+          ndarray<T>(std::vector<int>{0}),
+          ndarray<std::size_t>(std::vector<int>{0}),
+          ndarray<std::size_t>(std::vector<int>{0}),
+          ndarray<std::size_t>(std::vector<int>{0})};
+    }
+    std::vector<T> flat(n);
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      flat[i] = ar.data()[ar._flat_logical(i)];
+    }
+    std::vector<T> vals = flat;
     std::sort(vals.begin(), vals.end());
     vals.erase(std::unique(vals.begin(), vals.end()), vals.end());
-    ndarray<T> values(std::vector<int>{static_cast<int>(vals.size())});
-    for (std::size_t i = 0; i < vals.size(); ++i)
-      values.data()[i] = vals[i];
-    // For parity, indices/inverse/counts are stubbed as trivial
-    ndarray<std::size_t> indices(std::vector<int>{static_cast<int>(vals.size())});
-    ndarray<std::size_t> inverse(std::vector<int>{static_cast<int>(ar.size())});
-    ndarray<std::size_t> counts(std::vector<int>{static_cast<int>(vals.size())});
-    for (std::size_t i = 0; i < vals.size(); ++i)
+    std::size_t m = vals.size();
+    ndarray<T> values(std::vector<int>{static_cast<int>(m)});
+    for (std::size_t i = 0; i < m; ++i)
     {
-      indices.data()[i] = i;
-      counts.data()[i] = 1;
+      values.data()[i] = vals[i];
     }
-    for (std::size_t i = 0; i < ar.size(); ++i)
-      inverse.data()[i] = 0;
+    // counts and first-index
+    ndarray<std::size_t> counts(std::vector<int>{static_cast<int>(m)});
+    ndarray<std::size_t> indices(std::vector<int>{static_cast<int>(m)});
+    for (std::size_t i = 0; i < m; ++i)
+    {
+      counts.data()[i] = 0;
+      indices.data()[i] = n; // sentinel
+    }
+    // map value -> position via binary search (vals sorted)
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      T v = flat[i];
+      std::size_t pos = static_cast<std::size_t>(
+          std::lower_bound(vals.begin(), vals.end(), v) - vals.begin());
+      counts.data()[pos]++;
+      if (indices.data()[pos] == n)
+      {
+        indices.data()[pos] = i; // first occurrence
+      }
+    }
+    // inverse: for each original element, index into values
+    ndarray<std::size_t> inverse(std::vector<int>{static_cast<int>(n)});
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      T v = flat[i];
+      std::size_t pos = static_cast<std::size_t>(
+          std::lower_bound(vals.begin(), vals.end(), v) - vals.begin());
+      inverse.data()[i] = pos;
+    }
     return {values, indices, inverse, counts};
   }
 

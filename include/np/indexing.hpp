@@ -37,23 +37,76 @@ namespace np
 
   // ── s_ / index_exp ────────────────────────────────────────────────
   /**
+   * @brief Slice descriptor with optional start/stop/step (np.s_ element).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.s_.html
+   */
+  struct Slice
+  {
+    std::optional<int> start;
+    std::optional<int> stop;
+    std::optional<int> step;
+    bool is_ellipsis = false;
+    bool is_newaxis = false;
+
+    Slice() = default;
+    Slice(int s, int e, int st = 1) : start(s), stop(e), step(st)
+    {
+    }
+    static Slice all()
+    {
+      return Slice{};
+    }
+    static Slice ellipsis()
+    {
+      Slice s;
+      s.is_ellipsis = true;
+      return s;
+    }
+    static Slice newaxis()
+    {
+      Slice s;
+      s.is_newaxis = true;
+      return s;
+    }
+  };
+
+  /**
    * @brief Index expression holder (np.s_ / np.index_exp).
    *
    * In NumPy `np.s_[0:5, ::2]` returns a tuple of slices. Here we model
    * the index as a vector of `std::optional<std::pair<int,int>>` where
    * nullopt means `:` (full range). Users build it as `s_(0,5)` etc.
+   * The richer `Slice` type is also accepted and converted to the
+   * legacy pair representation for backward compatibility.
    *
    * Reference: numpy-reference/reference/generated/numpy.s_.html
    */
   struct IndexExp
   {
     std::vector<std::optional<std::pair<int, int>>> slices;
+    std::vector<Slice> rich;
 
     IndexExp() = default;
 
     explicit IndexExp(std::initializer_list<std::optional<std::pair<int, int>>> list)
         : slices(list)
     {
+    }
+
+    explicit IndexExp(std::initializer_list<Slice> list) : rich(list)
+    {
+      for (auto& s : list)
+      {
+        if (s.is_ellipsis || s.is_newaxis || !s.start || !s.stop)
+        {
+          slices.push_back(std::nullopt);
+        }
+        else
+        {
+          slices.push_back(std::make_pair(s.start.value(), s.stop.value()));
+        }
+      }
     }
 
     template <typename... Args>
@@ -74,6 +127,24 @@ namespace np
     IndexExp operator[](std::optional<std::pair<int, int>> a) const
     {
       return IndexExp{a};
+    }
+
+    IndexExp operator[](const Slice& s) const
+    {
+      return IndexExp{s};
+    }
+
+    // Step-aware factory: s_.slice(0,10,2) == np.s_[0:10:2]
+    Slice slice(
+        std::optional<int> start = std::nullopt,
+        std::optional<int> stop = std::nullopt,
+        std::optional<int> step = std::nullopt) const
+    {
+      Slice s;
+      s.start = start;
+      s.stop = stop;
+      s.step = step;
+      return s;
     }
   } s_{};
 
@@ -115,6 +186,18 @@ namespace np
   /**
    * @brief Row-stack helper (np.r_).
    *
+   * In NumPy `np.r_` translates slice objects (`0:5`, `0:5:2`) into
+   * concatenated ranges and stacks scalars/arrays row-wise. In C++
+   * slice syntax is not available, so we model slices as
+   * `std::pair<int,int>` (start, stop) or `std::tuple<int,int,int>`
+   * (start, stop, step) and also accept `IndexExp` built via `s_`.
+   *
+   * Examples:
+   *   `r_({a,b})` == `np.r_[a,b]` (row concat)
+   *   `r_.range(0,5)` == `np.r_[0:5]`
+   *   `r_[IndexExp{{0,5},{5,10}}]` == `np.r_[0:5,5:10]`
+   *   `r_(1,2,3)` variadic scalars/arrays
+   *
    * Reference: numpy-reference/reference/generated/numpy.r_.html
    */
   struct RClass
@@ -137,6 +220,106 @@ namespace np
     auto range(int start, int stop, int step = 1) const -> ndarray<T>
     {
       return arange<T>(static_cast<T>(start), static_cast<T>(stop), static_cast<T>(step));
+    }
+
+    // IndexExp-based slice translation: IndexExp{{0,5},{5,10}} -> concat(arange(0,5),
+    // arange(5,10))
+    [[nodiscard]] inline auto operator[](const IndexExp& exp) const -> ndarray<int>
+    {
+      std::vector<ndarray<int>> parts;
+      parts.reserve(exp.slices.size());
+      for (const auto& sl : exp.slices)
+      {
+        if (!sl.has_value())
+        {
+          continue;
+        }
+        auto [start, stop] = sl.value();
+        parts.push_back(arange<int>(start, stop, 1));
+      }
+      if (parts.empty())
+      {
+        return ndarray<int>(std::vector<int>{0});
+      }
+      if (parts.size() == 1)
+      {
+        return parts[0];
+      }
+      return concat(parts, 0);
+    }
+
+    // Pair slice (start, stop) -> arange
+    template <typename T = int>
+    [[nodiscard]] auto slice(int start, int stop, int step = 1) const -> ndarray<T>
+    {
+      return arange<T>(static_cast<T>(start), static_cast<T>(stop), static_cast<T>(step));
+    }
+
+    // Variadic scalar + array mix: r_(1, arange(0,3), 5) -> concatenated 1-D
+    template <typename... Args>
+    [[nodiscard]] auto variadic(Args&&... args) const
+    {
+      // Deduce common type via first ndarray if any, else int
+      return variadic_impl(std::forward<Args>(args)...);
+    }
+
+  private:
+    template <typename T>
+    static auto to_array(const ndarray<T>& v) -> ndarray<T>
+    {
+      if (v.ndim() == 0)
+      {
+        ndarray<T> out(std::vector<int>{1});
+        out.data()[0] = v.item();
+        return out;
+      }
+      return v.ravel();
+    }
+    template <typename T>
+      requires(std::is_arithmetic_v<T>)
+    static auto to_array(T scalar) -> ndarray<T>
+    {
+      ndarray<T> out(std::vector<int>{1});
+      out.data()[0] = scalar;
+      return out;
+    }
+    template <typename T, typename... Rest>
+    auto variadic_impl(const T& first, const Rest&... rest) const
+    {
+      using Common = std::common_type_t<
+          std::conditional_t<std::is_arithmetic_v<T>, T, typename T::value_type>,
+          std::conditional_t<
+              std::is_arithmetic_v<Rest>,
+              Rest,
+              typename Rest::value_type>...>;
+      std::vector<ndarray<Common>> parts;
+      auto add = [&parts](const auto& x)
+      {
+        using X = std::decay_t<decltype(x)>;
+        if constexpr (std::is_arithmetic_v<X>)
+        {
+          ndarray<Common> a(std::vector<int>{1});
+          a.data()[0] = static_cast<Common>(x);
+          parts.push_back(std::move(a));
+        }
+        else
+        {
+          ndarray<Common> cv = x.template astype<Common>();
+          if (cv.ndim() == 0)
+          {
+            ndarray<Common> a(std::vector<int>{1});
+            a.data()[0] = cv.item();
+            parts.push_back(std::move(a));
+          }
+          else
+          {
+            parts.push_back(cv.ravel());
+          }
+        }
+      };
+      add(first);
+      (add(rest), ...);
+      return concat(parts, 0);
     }
   };
 
@@ -394,22 +577,24 @@ namespace np
   class nditer
   {
   public:
-    explicit nditer(ndarray<T>& arr) : arr_(arr), pos_(0), total_(arr.size())
+    explicit nditer(ndarray<T>& arr)
+        : arr_(arr), pos_(0), total_(arr.size()), ptr_(arr.data().data()),
+          contig_(arr.is_contiguous())
     {
     }
-    bool has_next() const noexcept
+    [[nodiscard]] inline bool has_next() const noexcept
     {
       return pos_ < total_;
     }
-    T& next()
+    inline T& next()
     {
-      if (!has_next())
+      if (!has_next()) [[unlikely]]
         throw std::out_of_range("nditer: no more");
-      T& ref = arr_.data()[arr_._flat_logical(pos_)];
+      T& ref = contig_ ? ptr_[pos_] : arr_.data()[arr_._flat_logical(pos_)];
       ++pos_;
       return ref;
     }
-    void reset() noexcept
+    inline void reset() noexcept
     {
       pos_ = 0;
     }
@@ -418,6 +603,8 @@ namespace np
     ndarray<T>& arr_;
     std::size_t pos_;
     std::size_t total_;
+    T* __restrict ptr_;
+    bool contig_;
   };
 
   /**
@@ -434,36 +621,38 @@ namespace np
   class flatiter
   {
   public:
-    explicit flatiter(ndarray<T>& arr) : arr_(arr), pos_(0), total_(arr.size())
+    explicit flatiter(ndarray<T>& arr)
+        : arr_(arr), pos_(0), total_(arr.size()), ptr_(arr.data().data()),
+          contig_(arr.is_contiguous())
     {
     }
 
-    NP_NODISCARD bool has_next() const noexcept
+    [[nodiscard]] inline bool has_next() const noexcept
     {
       return pos_ < total_;
     }
 
-    T& next()
+    inline T& next()
     {
-      if (!has_next())
+      if (!has_next()) [[unlikely]]
         throw std::out_of_range("flatiter: no more");
-      T& ref = arr_.data()[arr_._flat_logical(pos_)];
+      T& ref = contig_ ? ptr_[pos_] : arr_.data()[arr_._flat_logical(pos_)];
       ++pos_;
       return ref;
     }
 
-    NP_NODISCARD T& current()
+    [[nodiscard]] inline T& current()
     {
-      if (pos_ >= total_)
+      if (pos_ >= total_) [[unlikely]]
         throw std::out_of_range("flatiter: no current");
-      return arr_.data()[arr_._flat_logical(pos_)];
+      return contig_ ? ptr_[pos_] : arr_.data()[arr_._flat_logical(pos_)];
     }
 
-    NP_NODISCARD const T& current() const
+    [[nodiscard]] inline const T& current() const
     {
-      if (pos_ >= total_)
+      if (pos_ >= total_) [[unlikely]]
         throw std::out_of_range("flatiter: no current");
-      return arr_.data()[arr_._flat_logical(pos_)];
+      return contig_ ? ptr_[pos_] : arr_.data()[arr_._flat_logical(pos_)];
     }
 
     NP_NODISCARD std::size_t index() const noexcept
@@ -516,23 +705,37 @@ namespace np
     ndarray<T>& arr_;
     std::size_t pos_;
     std::size_t total_;
+    T* __restrict ptr_;
+    bool contig_;
   };
 
   /**
    * @brief Nested iters (np.nested_iters).
    *
+   * NumPy's `nested_iters` creates a tuple of `nditer` objects that can be
+   * iterated in lockstep (broadcast-aware). Here we provide the common
+   * 2-array case returning a pair, plus a variadic overload returning a
+   * tuple. Flags (`op_flags`, `flags`) are accepted for API parity but
+   * ignored – iteration is always C-order, read-write.
+   *
    * Reference: numpy-reference/reference/generated/numpy.nested_iters.html
    */
   NP_API template <typename T, typename U>
-  inline auto nested_iters(ndarray<T>& a, ndarray<U>& b)
-      -> std::pair<nditer<T>, nditer<U>>
+  inline auto nested_iters(
+      ndarray<T>& a,
+      ndarray<U>& b,
+      const std::vector<std::string>& /*op_flags*/ = {},
+      const std::vector<std::string>& /*flags*/ = {}) -> std::pair<nditer<T>, nditer<U>>
   {
     return {nditer<T>(a), nditer<U>(b)};
   }
 
   NP_API template <typename T, typename U>
-  inline auto nested_iters(const ndarray<T>& a, const ndarray<U>& b)
-      -> std::pair<nditer<T>, nditer<U>>
+  inline auto nested_iters(
+      const ndarray<T>& a,
+      const ndarray<U>& b,
+      const std::vector<std::string>& /*op_flags*/ = {},
+      const std::vector<std::string>& /*flags*/ = {}) -> std::pair<nditer<T>, nditer<U>>
   {
     // const overload – create mutable copies for iteration
     static thread_local ndarray<T> ac;
@@ -540,6 +743,210 @@ namespace np
     ac = a.copy();
     bc = b.copy();
     return {nditer<T>(ac), nditer<U>(bc)};
+  }
+
+  NP_API template <typename... Ts>
+  inline auto nested_iters(std::tuple<ndarray<Ts>&...> ops) -> std::tuple<nditer<Ts>...>
+  {
+    return std::apply(
+        [](auto&... arrs)
+        { return std::make_tuple(nditer<std::decay_t<decltype(arrs)>>(arrs)...); },
+        ops);
+  }
+
+  // ── Arrayterator – buffered iteration (np.lib.Arrayterator) ───
+  /**
+   * @brief Buffered iterator for large arrays (np.lib.Arrayterator).
+   *
+   * Wraps an `ndarray` and yields buffered blocks of size `buf_size`
+   * on each `next()` call, mimicking NumPy's `Arrayterator` which is
+   * used for iterating over arrays too large to fit in memory. Here
+   * the buffer is a contiguous copy of the next `buf_size` logical
+   * elements.
+   *
+   * Reference: https://numpy.org/doc/2.2/reference/generated/numpy.lib.Arrayterator.html
+   */
+  template <typename T>
+  class Arrayterator
+  {
+  public:
+    explicit Arrayterator(const ndarray<T>& arr, std::size_t buf_size = 8192)
+        : arr_(arr), buf_size_(buf_size), pos_(0)
+    {
+    }
+
+    NP_NODISCARD bool has_next() const noexcept
+    {
+      return pos_ < arr_.size();
+    }
+
+    ndarray<T> next()
+    {
+      if (!has_next())
+      {
+        throw std::out_of_range("Arrayterator: no more");
+      }
+      std::size_t n = std::min(buf_size_, arr_.size() - pos_);
+      ndarray<T> out(std::vector<int>{static_cast<int>(n)});
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        out.data()[i] = arr_.data()[arr_._flat_logical(pos_ + i)];
+      }
+      pos_ += n;
+      return out;
+    }
+
+    void reset() noexcept
+    {
+      pos_ = 0;
+    }
+
+    NP_NODISCARD const ndarray<T>& array() const noexcept
+    {
+      return arr_;
+    }
+
+    NP_NODISCARD std::size_t buf_size() const noexcept
+    {
+      return buf_size_;
+    }
+
+  private:
+    ndarray<T> arr_;
+    std::size_t buf_size_;
+    std::size_t pos_;
+  };
+
+  // ── Free-function wrappers for indexing-like operations ───────────
+  /**
+   * @brief Take elements from an array along an axis (np.take).
+   *
+   * Thin wrapper around `ndarray::take`.
+   * Reference: numpy-reference/reference/generated/numpy.take.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto
+  take(const ndarray<T>& a, const std::vector<std::size_t>& indices, int axis = 0)
+      -> ndarray<T>
+  {
+    return a.take(indices, axis);
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto take(
+      const ndarray<T>& a,
+      const std::vector<std::size_t>& indices,
+      std::optional<int> axis) -> ndarray<T>
+  {
+    return a.take(indices, axis);
+  }
+
+  /**
+   * @brief Replace specified elements (np.put).
+   *
+   * Thin wrapper around `ndarray::put`.
+   * Reference: numpy-reference/reference/generated/numpy.put.html
+   */
+  NP_API template <typename T>
+  inline void
+  put(ndarray<T>& a,
+      const std::vector<std::size_t>& indices,
+      const std::vector<T>& values,
+      char mode = 'r')
+  {
+    a.put(indices, values, mode);
+  }
+
+  NP_API template <typename T>
+  inline void
+  put(ndarray<T>& a,
+      const std::vector<std::size_t>& indices,
+      const std::vector<T>& values,
+      std::optional<char> mode)
+  {
+    a.put(indices, values, mode);
+  }
+
+  /**
+   * @brief Choose elements via index array (np.choose).
+   *
+   * Wrapper around `ndarray::choose`.
+   * Reference: numpy-reference/reference/generated/numpy.choose.html
+   */
+  NP_API template <typename T, typename U>
+  NP_NODISCARD inline auto
+  choose(const ndarray<T>& idx, const std::vector<ndarray<U>>& choices, char mode = 'r')
+      -> ndarray<U>
+  {
+    return idx.choose(choices, mode);
+  }
+
+  /**
+   * @brief Compress– select slices along axis by condition (np.compress).
+   *
+   * Wrapper around `ndarray::compress`.
+   * Reference: numpy-reference/reference/generated/numpy.compress.html
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline auto
+  compress(const ndarray<bool>& condition, const ndarray<T>& a, int axis = 0)
+      -> ndarray<T>
+  {
+    return a.compress(condition, axis);
+  }
+
+  NP_API template <typename T>
+  NP_NODISCARD inline auto compress(const ndarray<bool>& condition, const ndarray<T>& a)
+      -> ndarray<T>
+  {
+    return a.compress(condition);
+  }
+
+  // mgrid / ogrid aliases forwarding to creation.hpp (already defined there)
+  // They are provided here for discoverability via `np::mgrid`/`np::ogrid` in
+  // the indexing namespace import.
+
+  /**
+   * @brief Iterable check (np.iterable).
+   *
+   * Reference: numpy-reference/reference/generated/numpy.iterable.html
+   * Returns true for `ndarray` and any range-like type.
+   */
+  NP_API template <typename T>
+  [[nodiscard]] inline constexpr bool iterable(const ndarray<T>& /*a*/) noexcept
+  {
+    return true;
+  }
+
+  namespace detail
+  {
+    template <typename>
+    struct is_ndarray_helper : std::false_type
+    {
+    };
+    template <typename T>
+    struct is_ndarray_helper<ndarray<T>> : std::true_type
+    {
+    };
+  } // namespace detail
+
+  NP_API template <typename T>
+    requires(!detail::is_ndarray_helper<std::decay_t<T>>::value)
+  [[nodiscard]] inline bool iterable(const T& obj) noexcept
+  {
+    if constexpr (requires {
+                    std::begin(obj);
+                    std::end(obj);
+                  })
+    {
+      (void)obj;
+      return true;
+    }
+    else
+    {
+      (void)obj;
+      return false;
+    }
   }
 
 } // namespace np
