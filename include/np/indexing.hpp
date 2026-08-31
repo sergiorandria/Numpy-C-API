@@ -472,12 +472,45 @@ namespace np
   {
     if (a.ndim() < 2)
       throw std::invalid_argument("fill_diagonal: need at least 2-D");
-    int n = std::min(a.shape[0], a.shape[1]);
-    for (int i = 0; i < n; ++i)
-      a.set(
-          std::vector<std::size_t>{
-              static_cast<std::size_t>(i), static_cast<std::size_t>(i)},
-          val);
+    // Fast path for contiguous: diagonal stride is shape[1]+1 in flat layout for 2-D
+    // For ND, diagonal is where all indices equal; handle general case
+    if (a.ndim() == 2)
+    {
+      int n = std::min(a.shape[0], a.shape[1]);
+      if (a.is_contiguous())
+      {
+        T* __restrict ptr = a.data().data();
+        int cols = a.shape[1];
+        for (int i = 0; i < n; ++i)
+        {
+          ptr[static_cast<std::size_t>(i) * static_cast<std::size_t>(cols)
+              + static_cast<std::size_t>(i)] = val;
+        }
+      }
+      else
+      {
+        for (int i = 0; i < n; ++i)
+          a.set(
+              std::vector<std::size_t>{
+                  static_cast<std::size_t>(i), static_cast<std::size_t>(i)},
+              val);
+      }
+    }
+    else
+    {
+      int n = a.shape[0];
+      for (int d = 1; d < static_cast<int>(a.ndim()); ++d)
+        n = std::min(n, a.shape[d]);
+      for (int i = 0; i < n; ++i)
+      {
+        std::vector<std::size_t> idx(a.ndim(), static_cast<std::size_t>(i));
+        if (wrap && i > 0)
+        {
+          // wrap handling already via diagonal; no-op for simplicity
+        }
+        a.set(idx, val);
+      }
+    }
     (void)wrap;
   }
 
@@ -548,6 +581,19 @@ namespace np
   {
     if (a.shape != mask.shape)
       throw std::invalid_argument("putmask: shape mismatch");
+    if (a.is_contiguous() && values.is_contiguous())
+    {
+      T* __restrict ap = a.data().data();
+      const T* __restrict vp = values.data().data();
+      std::size_t n = a.size();
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        bool m = mask.data()[mask._flat_logical(i)];
+        if (m)
+          ap[i] = vp[i];
+      }
+      return;
+    }
     detail::Odometer od(a.shape);
     while (!od.done())
     {
@@ -560,6 +606,18 @@ namespace np
   NP_API template <typename T>
   inline void putmask(ndarray<T>& a, const ndarray<bool>& mask, const T& value)
   {
+    if (a.is_contiguous())
+    {
+      T* __restrict ap = a.data().data();
+      std::size_t n = a.size();
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        bool m = mask.data()[mask._flat_logical(i)];
+        if (m)
+          ap[i] = value;
+      }
+      return;
+    }
     detail::Odometer od(a.shape);
     while (!od.done())
     {
@@ -771,7 +829,8 @@ namespace np
   {
   public:
     explicit Arrayterator(const ndarray<T>& arr, std::size_t buf_size = 8192)
-        : arr_(arr), buf_size_(buf_size), pos_(0)
+        : arr_(arr), buf_size_(buf_size), pos_(0), contig_(arr.is_contiguous()),
+          ptr_(arr.is_contiguous() ? arr.data().data() : nullptr)
     {
     }
 
@@ -782,15 +841,23 @@ namespace np
 
     ndarray<T> next()
     {
-      if (!has_next())
+      if (!has_next()) [[unlikely]]
       {
         throw std::out_of_range("Arrayterator: no more");
       }
       std::size_t n = std::min(buf_size_, arr_.size() - pos_);
       ndarray<T> out(std::vector<int>{static_cast<int>(n)});
-      for (std::size_t i = 0; i < n; ++i)
+      T* __restrict op = out.data().data();
+      if (contig_ && ptr_)
       {
-        out.data()[i] = arr_.data()[arr_._flat_logical(pos_ + i)];
+        const T* __restrict ap = ptr_ + pos_;
+        for (std::size_t i = 0; i < n; ++i)
+          op[i] = ap[i];
+      }
+      else
+      {
+        for (std::size_t i = 0; i < n; ++i)
+          op[i] = arr_.data()[arr_._flat_logical(pos_ + i)];
       }
       pos_ += n;
       return out;
@@ -815,6 +882,8 @@ namespace np
     ndarray<T> arr_;
     std::size_t buf_size_;
     std::size_t pos_;
+    bool contig_;
+    const T* ptr_;
   };
 
   // ── Free-function wrappers for indexing-like operations ───────────
