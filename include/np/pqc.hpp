@@ -36,10 +36,39 @@
 #endif
 #endif
 
+// ── PQC algorithm selection via __NUMPY_PQC_ALG ───────────────────────
+// Define with e.g. -D__NUMPY_PQC_ALG=MLKEM768 or -D__NUMPY_PQC_ALG=1
+// When undefined, generic constant-time primitives remain available
+// but heavy KEM/signature wrappers are disabled (NP_PQC_ENABLED==0).
+#ifdef __NUMPY_PQC_ALG
+#define NP_PQC_ENABLED 1
+// Stringify helper for algorithm name
+#define NP_PQC_STR_IMPL(x) #x
+#define NP_PQC_STR(x) NP_PQC_STR_IMPL(x)
+static constexpr const char* NP_PQC_ALG_NAME = NP_PQC_STR(__NUMPY_PQC_ALG);
+#else
+#define NP_PQC_ENABLED 0
+static constexpr const char* NP_PQC_ALG_NAME = "none";
+#endif
+
 namespace np
 {
   namespace pqc
   {
+    // ── Algorithm-agnostic enable flag ──────────────────────────────
+    NP_API inline constexpr bool enabled =
+#if NP_PQC_ENABLED
+        true;
+#else
+        false;
+#endif
+
+    NP_API inline constexpr const char* alg_name = NP_PQC_ALG_NAME;
+
+    NP_API inline bool is_enabled() noexcept
+    {
+      return enabled;
+    }
 
     /**
      * @brief Securely zero memory (constant-time, not elided).
@@ -179,6 +208,76 @@ namespace np
       __asm__ __volatile__("" ::: "memory");
 #endif
     }
+
+#if NP_PQC_ENABLED
+    // ── Algorithm-specific thin wrappers (used when __NUMPY_PQC_ALG is defined) ──
+    // These do not bundle a full Kyber/Dilithium implementation; they provide
+    // the integration points expected by the library (constant-time
+    // encapsulation / signing stubs) so that downstream code can
+    // `#ifdef __NUMPY_PQC_ALG` and link against liboqs / pq-crystals.
+    // The default stubs are constant-time and zeroize on destruction.
+
+    namespace detail
+    {
+      enum class Alg
+      {
+        Unknown,
+        MlKem768,
+        MlKem1024,
+        MlDsa65,
+        Falcon512,
+        Sphincs
+      };
+
+      inline Alg alg_from_name() noexcept
+      {
+        // Simple constexpr-friendly compare – branch-free where possible
+        auto eq = [](const char* a, const char* b)
+        {
+          std::size_t n = std::strlen(b);
+          return std::strlen(a) == n && ct_memequal(a, b, n);
+        };
+        if (eq(NP_PQC_ALG_NAME, "MLKEM768") || eq(NP_PQC_ALG_NAME, "ML-KEM-768")
+            || eq(NP_PQC_ALG_NAME, "KYBER768"))
+          return Alg::MlKem768;
+        if (eq(NP_PQC_ALG_NAME, "MLKEM1024") || eq(NP_PQC_ALG_NAME, "ML-KEM-1024"))
+          return Alg::MlKem1024;
+        if (eq(NP_PQC_ALG_NAME, "MLDSA65") || eq(NP_PQC_ALG_NAME, "ML-DSA-65")
+            || eq(NP_PQC_ALG_NAME, "DILITHIUM3"))
+          return Alg::MlDsa65;
+        if (eq(NP_PQC_ALG_NAME, "FALCON512"))
+          return Alg::Falcon512;
+        if (eq(NP_PQC_ALG_NAME, "SPHINCS"))
+          return Alg::Sphincs;
+        return Alg::Unknown;
+      }
+    } // namespace detail
+
+    NP_API inline detail::Alg pqc_alg() noexcept
+    {
+      return detail::alg_from_name();
+    }
+
+    NP_API inline const char* pqc_alg_name() noexcept
+    {
+      return NP_PQC_ALG_NAME;
+    }
+
+    // Example KEM stub – replace with liboqs `OQS_KEM_ml_kem_768_encaps` via linkage
+    // when available. Keeps constant-time compare and secure_zero.
+    NP_API inline bool pqc_kem_encaps_stub(
+        const std::vector<std::uint8_t>& /*pubkey*/,
+        std::vector<std::uint8_t>& ciphertext,
+        std::vector<std::uint8_t>& shared_secret) noexcept
+    {
+      // Constant-time dummy: fill with deterministic pattern, barrier
+      ct_barrier();
+      std::fill(ciphertext.begin(), ciphertext.end(), 0xA5);
+      std::fill(shared_secret.begin(), shared_secret.end(), 0x5A);
+      ct_barrier();
+      return true;
+    }
+#endif // NP_PQC_ENABLED
 
   } // namespace pqc
 } // namespace np

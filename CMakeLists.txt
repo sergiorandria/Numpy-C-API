@@ -13,6 +13,12 @@ endif()
 option(NP_ENABLE_SIMD "Enable SIMD optimizations (SSE2/AVX/AVX2/AVX-512/NEON)" ON)
 option(NP_ENABLE_AVX2 "Enable AVX2 instructions (implies AVX)" OFF)
 option(NP_ENABLE_AVX512 "Enable AVX-512 instructions (implies AVX2)" OFF)
+option(NP_ENABLE_PQC "Enable post-quantum constant-time hardening (pqc.hpp)" ON)
+option(NP_ENABLE_RVV "Enable RISC-V Vector (RVV 1.0) when targeting riscv64" OFF)
+option(NP_ENABLE_WASM_SIMD "Enable WASM SIMD128 when targeting wasm32/wasm64" OFF)
+option(NP_ENABLE_SVE "Enable ARM SVE/SVE2 when targeting aarch64" OFF)
+option(NP_ENABLE_VSX "Enable POWER VSX when targeting powerpc64" OFF)
+set(NP_PQC_ALG "" CACHE STRING "PQC algorithm for __NUMPY_PQC_ALG (e.g., MLKEM768, MLDSA65) – empty = none")
 
 if(NP_ENABLE_SIMD)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
@@ -69,18 +75,15 @@ endif()
 if(NP_ENABLE_PQC)
     add_compile_definitions(NP_ENABLE_PQC=1)
 endif()
+if(NP_PQC_ALG)
+    add_compile_definitions(__NUMPY_PQC_ALG=${NP_PQC_ALG})
+endif()
 
 option(NP_COMPILED_UNITS
        "Enable the compile-time (negative-trait and constexpr-fold) test units"
        ON)
 
 option(NP_USE_THREADING "Enable threadpool for sorting/searching/loops (NP_THREADPOOL)" OFF)
-
-option(NP_ENABLE_PQC "Enable post-quantum constant-time hardening (pqc.hpp)" ON)
-option(NP_ENABLE_RVV "Enable RISC-V Vector (RVV 1.0) when targeting riscv64" OFF)
-option(NP_ENABLE_WASM_SIMD "Enable WASM SIMD128 when targeting wasm32/wasm64" OFF)
-option(NP_ENABLE_SVE "Enable ARM SVE/SVE2 when targeting aarch64" OFF)
-option(NP_ENABLE_VSX "Enable POWER VSX when targeting powerpc64" OFF)
 
 # ── Compilation optimization ──────────────────────────────────────────
 # Tuned for powerful multi-core machines; all options are OFF by default
