@@ -395,6 +395,73 @@ namespace np::homology
          {}}};
   }
 
+  // ── Builder & ergonomic helpers ───────────────────────────────────────
+
+  struct SimplicialComplexBuilder
+  {
+    std::set<std::vector<int>> simplices;
+    void add_simplex(std::vector<int> s)
+    {
+      std::sort(s.begin(), s.end());
+      // add all faces
+      int n = static_cast<int>(s.size());
+      for (int mask = 1; mask < (1 << n); ++mask)
+      {
+        std::vector<int> face;
+        for (int i = 0; i < n; ++i)
+          if (mask & (1 << i)) face.push_back(s[i]);
+        simplices.insert(face);
+      }
+    }
+    void add_maximal(const std::vector<std::vector<int>>& max)
+    {
+      for (auto s : max) add_simplex(s);
+    }
+    SimplicialComplex build() const
+    {
+      int max_dim = 0;
+      for (auto& s : simplices) max_dim = std::max(max_dim, (int)s.size() - 1);
+      std::vector<std::vector<std::vector<int>>> lvl(max_dim + 1);
+      for (auto& s : simplices) lvl[s.size() - 1].push_back(s);
+      for (auto& l : lvl) std::sort(l.begin(), l.end());
+      return SimplicialComplex{lvl};
+    }
+  };
+
+  NP_NODISCARD inline SimplicialComplex from_maximal(std::vector<std::vector<int>> max)
+  {
+    SimplicialComplexBuilder b;
+    b.add_maximal(max);
+    return b.build();
+  }
+
+  // Aliases for discoverability
+  NP_NODISCARD inline SimplicialComplex make_circle() { return circle_complex(); }
+  NP_NODISCARD inline SimplicialComplex make_sphere(int n = 2)
+  {
+    if (n == 1) return circle_complex();
+    if (n == 2) return sphere_tetrahedron();
+    return make_simplex(n + 1);
+  }
+
+  NP_NODISCARD inline int betti(const SimplicialComplex& K, int k)
+  {
+    auto b = betti_numbers(K);
+    if (k < 0 || k >= (int)b.size()) return 0;
+    return b[k];
+  }
+  NP_NODISCARD inline std::string homology_string(const SimplicialComplex& K)
+  {
+    auto hg = homology_groups(K);
+    std::string s;
+    for (size_t i = 0; i < hg.size(); ++i)
+    {
+      if (i) s += " + ";
+      s += "H" + std::to_string(i) + "=" + hg[i].to_string();
+    }
+    return s;
+  }
+
 } // namespace np::homology
 
 #endif // NP_HOMOLOGY_HPP

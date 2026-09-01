@@ -277,11 +277,46 @@ namespace np::modular
       for (int n = 0; n < (int)a.shape[0]; ++n)
       {
         bigint expected = ap * a.at(static_cast<std::size_t>(n));
-        if (Tp[n] != expected) return false;
+        if (Tp.at(static_cast<std::size_t>(n)) != expected) return false;
       }
     }
     return true;
   }
+
+  // ── Ergonomic ModularForm wrapper ───────────────────────────────────────
+
+  struct ModularForm
+  {
+    int weight = 0, level = 1;
+    ndarray<bigint> qexp;
+    ModularForm() = default;
+    ModularForm(int k, int lvl, ndarray<bigint> q) : weight(k), level(lvl), qexp(std::move(q)) {}
+    explicit ModularForm(int k, ndarray<bigint> q) : weight(k), level(1), qexp(std::move(q)) {}
+
+    NP_NODISCARD ndarray<bigint> hecke(int p) const { return hecke_operator(qexp, weight, p); }
+    NP_NODISCARD bool is_eigenform() const { return is_hecke_eigenform(qexp, weight); }
+    NP_NODISCARD bigint coeff(int n) const
+    {
+      if (n < 0 || n >= (int)qexp.shape[0]) return bigint(0);
+      return qexp.at(static_cast<std::size_t>(n));
+    }
+    std::string to_string(int max_terms = 5) const
+    {
+      std::string s = "ModularForm k=" + std::to_string(weight) + " qexp: ";
+      for (int i = 0; i < std::min(max_terms, (int)qexp.shape[0]); ++i)
+      {
+        if (i) s += " + ";
+        s += qexp.at(static_cast<std::size_t>(i)).convert_to<std::string>() + "*q^" + std::to_string(i);
+      }
+      return s;
+    }
+  };
+
+  NP_NODISCARD inline ModularForm make_eisenstein(int k, int N, int level = 1)
+  {
+    return ModularForm(k, level, eisenstein_series(k, N));
+  }
+  NP_NODISCARD inline ModularForm make_delta(int N) { return ModularForm(12, 1, ramanujan_tau(N)); }
 
 } // namespace np::modular
 
