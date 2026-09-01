@@ -435,7 +435,7 @@ namespace np::differential
 
   public:
     VM() = default;
-    VM(const std::string& e, const std::vector<std::string>& vs = {"x"})
+    VM(const std::string& e, const std::vector<std::string>& vs = std::vector<std::string>{"x"})
         : expr(e), vars(vs)
     {
       for (size_t i = 0; i < vars.size(); ++i) var_index[vars[i]] = static_cast<int>(i);
@@ -444,21 +444,31 @@ namespace np::differential
       skip();
       if (pos != expr.size()) throw std::invalid_argument("VM: trailing chars");
 #if NP_HAS_LLVM_JIT
-      // Optional LLVM JIT: build module for root
-      // For brevity, we keep interpreter; full JIT would use IRBuilder here.
+      // Optional LLVM JIT: build module for root (header-only fallback keeps interpreter)
 #endif
     }
 
+    // ── Ergonomic eval ──────────────────────────────────────────────────
     double eval(const Point& p) const
     {
       if (!root) throw std::runtime_error("VM: empty");
       return eval_node(root, p);
     }
+    double operator()(const Point& p) const { return eval(p); }
+    double operator()(double x) const { return eval(Point{x}); }
+    double operator()(double x, double y) const { return eval(Point{x, y}); }
+    double operator()(double x, double y, double z) const { return eval(Point{x, y, z}); }
 
-    // Dual AD derivative w.r.t var
-    double derivative(const Point& p, int var) const
+    int dim() const noexcept { return static_cast<int>(vars.size()); }
+    const std::vector<std::string>& variables() const noexcept { return vars; }
+
+    // Dual AD derivative w.r.t var index
+    double derivative(const Point& p, int var) const { return eval_dual(root, p, var, 0).dval; }
+    double derivative(const Point& p, const std::string& var) const
     {
-      return eval_dual(root, p, var, 0).dval;
+      auto it = var_index.find(var);
+      if (it == var_index.end()) throw std::invalid_argument("VM: unknown var " + var);
+      return derivative(p, it->second);
     }
 
     VM derivative_vm(int var) const
@@ -469,6 +479,19 @@ namespace np::differential
       out.root = diff_node(root, var);
       out.expr = expr + "'_d" + std::to_string(var);
       return out;
+    }
+    VM derivative_vm(const std::string& var) const
+    {
+      auto it = var_index.find(var);
+      if (it == var_index.end()) throw std::invalid_argument("VM: unknown var " + var);
+      return derivative_vm(it->second);
+    }
+    // Shorthand d/dx, d/dy
+    VM dx() const { return derivative_vm(0); }
+    VM dy() const
+    {
+      if (vars.size() < 2) throw std::invalid_argument("VM::dy need dim>=2");
+      return derivative_vm(1);
     }
 
     std::string to_string() const { return expr; }
@@ -487,6 +510,15 @@ namespace np::differential
         for (int j = 0; j < D; ++j) p[j] = pts(i, j);
         out[i] = eval(p);
       }
+      return out;
+    }
+    // Single-value batch for 1D
+    ndarray<double> eval_batch_1d(const ndarray<double>& xs) const
+    {
+      if (xs.ndim() != 1) throw std::invalid_argument("eval_batch_1d need 1D");
+      int N = xs.shape[0];
+      ndarray<double> out(std::vector<int>{N});
+      for (int i = 0; i < N; ++i) out[i] = eval(Point{xs[i]});
       return out;
     }
   };
@@ -516,7 +548,22 @@ namespace np::differential
     return out;
   }
 
-  // Symbolic exterior derivative for VM
+  // Symbolic exterior derivative for VM (ergonomic: uses vm.variables())
+  NP_NODISCARD inline OneForm exterior_derivative(const VM& vm)
+  {
+    auto vars = vm.variables();
+    OneForm out;
+    out.dim = static_cast<int>(vars.size());
+    out.comps.reserve(vars.size());
+    for (size_t i = 0; i < vars.size(); ++i)
+    {
+      VM dvm = vm.derivative_vm(static_cast<int>(i));
+      ScalarField sf(
+          [dvm](const Point& p) { return dvm.eval(p); }, static_cast<int>(vars.size()));
+      out.comps.push_back(sf);
+    }
+    return out;
+  }
   NP_NODISCARD inline OneForm exterior_derivative_vm(const VM& vm, const std::vector<std::string>& vars)
   {
     OneForm out;
@@ -532,6 +579,9 @@ namespace np::differential
     out.dim = static_cast<int>(vars.size());
     return out;
   }
+  // Alias d for exterior_derivative
+  NP_NODISCARD inline OneForm d(const ScalarField& f) { return exterior_derivative(f); }
+  NP_NODISCARD inline OneForm d(const VM& vm) { return exterior_derivative(vm); }
 
   NP_NODISCARD inline KForm wedge(const OneForm& a, const OneForm& b)
   {
