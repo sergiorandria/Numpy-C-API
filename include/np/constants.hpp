@@ -77,6 +77,13 @@ namespace np
 
     // Additional NumPy scalar aliases (often imported as constants)
     // Note: avoid `NAN`/`INF` macro clash with <cmath> (they are macros).
+    // Also avoid NZERO/PZERO clash with <bits/xopen_lim.h> (defines NZERO as 20).
+#ifdef NZERO
+#undef NZERO
+#endif
+#ifdef PZERO
+#undef PZERO
+#endif
     inline constexpr double NINF = -std::numeric_limits<double>::infinity();
     inline constexpr double PINF = std::numeric_limits<double>::infinity();
     inline constexpr double NaN = std::numeric_limits<double>::quiet_NaN();
