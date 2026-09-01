@@ -678,8 +678,8 @@ namespace np
    * @tparam D  A dtype value.
    */
   template <dtype D>
-  using is_integral_dtype = std::bool_constant<
-      (D >= dtype::int8 && D <= dtype::uint64) || D == dtype::bigint>;
+  using is_integral_dtype =
+      std::bool_constant<(D >= dtype::int8 && D <= dtype::uint64) || D == dtype::bigint>;
 
   template <dtype D>
   inline constexpr bool is_integral_dtype_v = is_integral_dtype<D>::value;

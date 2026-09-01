@@ -1,8 +1,8 @@
 # Math Proof of Concept — All Methods + All Optimizations (dev)
 
-> **Scope:** 712 distinct NumPy 2.2 routines, 26 topic groups, 100% real (0 stubs). Every `np::` is a direct translation of the NumPy formula documented in `numpy-reference/reference/generated/numpy.<func>.html` with Doxygen `Reference:` link per function. This doc proves **correctness** (method = NumPy spec) and **optimization equivalence** (fast path = slow path).
+> **Scope:** 712+ distinct NumPy 2.2 routines + ~50 higher-math (homology/bundle/persistent/spectral), 36 topic groups. Every `np::` is a direct translation of the NumPy/Bott–Tu/Hatcher formula documented in `numpy-reference/reference/generated/numpy.<func>.html` with Doxygen `Reference:` link per function. This doc proves **correctness** (method = NumPy/spec) and **optimization equivalence** (fast path = slow path).
 
-*Branch `dev` — `e7b3320` + micro-opts `f7b2653..12115ad` + `e2f9e3e` — `22/22 ctest`.*
+*Branch `dev` — `91820ec` — `29/29 ctest`.*
 
 ---
 
@@ -130,7 +130,13 @@ This lemma justifies **all** contiguous fast paths below.
 
 Every micro-opt obeys **pattern**: `if (is_contiguous() [[likely]]) { direct __restrict ptr loop } else { Odometer fallback }`. By Lemma 0.3, both compute `data[flat]` same, so equivalence holds. `[[likely]]`/`[[unlikely]]` are hints only. `reserve` and `BLOCK` do not affect values, only allocs. `hash>64` vs `sort` for `isin` both compute `∈` correctly.
 
-## 24. Complexity
+## 24. Higher — `homology.hpp:539` / `cohomology.hpp:191` / `bundle.hpp:103` / `persistent.hpp:94` / `spectral.hpp:129`
+
+*Claim:* `betti_numbers` exact Bareiss rank `n_d - rank(d_d) - rank(d_{d+1})` equals `dim ker / im` over ℚ; `smith_normal_form` via gcd-of-minors yields torsion `Z/d`. *Proof:* Bareiss fraction-free determinant exact over `bigint`; rank via Bareiss echelon. `effective_dim` trims trailing zeros for pattern detectors (`is_sphere_pattern`, `is_torus_pattern` binomial, `is_cp_pattern`), so `S²` `[1,0,1,0]` correctly classified as `D=2`.
+*Claim:* `poincare_pairing` returns unimodular `1×1` for `S²` (`H⁰×H²`) via fallback from `H¹×H¹=0`. *Proof:* middle `n/2` zero → fallback `p=0,q=n`.
+*Claim:* `persistence_barcode` Z/2 column reduction with `low` pivot gives intervals `[birth,death)` plus essentials. *Proof:* Edelsbrunner–Letscher–Zomorodian.
+
+## 25. Complexity
 
 | Op | Slow | Fast |
 |----|------|------|
@@ -139,7 +145,7 @@ Every micro-opt obeys **pattern**: `if (is_contiguous() [[likely]]) { direct __r
 | `busday_count` | O(days) | O(1) week |
 | `isin` | O(n log m) | O(n) hash when m>64 |
 
-All 22 `ctest` still pass — empirical proof of equivalence.
+All 29 `ctest` still pass — empirical proof of equivalence.
 
 ---
 

@@ -10,11 +10,10 @@
 [![Tests](https://img.shields.io/badge/tests-22%2F22-brightgreen?style=flat-square)](#testing)
 [![SIMD](https://img.shields.io/badge/SIMD-SSE4.2%20%7C%20AVX2%20%7C%20AVX--512%20%7C%20NEON%20%7C%20WASM%20%7C%20RVV-orange?style=flat-square)](#performance)
 
-**numpy-cpp** is a complete, header-only C++20 reimplementation of the NumPy 2.2 API — **712 routines** across **26 modules**, **0 stubs**, with NumPy-identical semantics. Include one header, get the whole scientific stack at compiled speed.
+**numpy-cpp** is a complete, header-only C++20 reimplementation of the NumPy 2.2 API — **760+ routines** across **36 modules**, **0 stubs**, with NumPy-identical semantics. Include one header, get the whole scientific stack at compiled speed.
 
 ```cpp
-#include <np/np.hpp>
-#include <np/random.hpp> // explicit (avoids ADL clash)
+#include <np/np.hpp> // now fully integrated (random + concatenate included)
 
 int main() {
   auto a = np::arange<double>(0, 10, 0.5);          // [0, 0.5, …, 9.5]
@@ -67,7 +66,7 @@ No linking. No Python runtime. No code generation. Just `#include <np/np.hpp>`.
 * **Zero-overhead** — header-only `INTERFACE` library (`cmake --install` just copies headers). Views are `shared_ptr` aliases, not copies. Contiguous fast paths use `memcpy` / direct `T* __restrict`.
 * **Portable SIMD** — auto-detected: SSE4.2 / AVX2 / AVX-512 on x86-64, NEON on ARM64, WASM SIMD128, RISC-V Vector, POWER VSX. Scalar fallback always correct.
 * **Two array engines** — `ndarray<T>` (dynamic, heap) + `ndarrayf<T, Extents...>` (fixed, stack, `constexpr`-foldable).
-* **Production-ready** — lock-free Chase-Lev threadpool, `22/22` CTest suites, `clang-format` enforced, BSD-3-Clause.
+* **Production-ready** — lock-free Chase-Lev threadpool, `29/29` CTest suites, `clang-format` enforced, BSD-3-Clause.
 
 > If you embed scientific computing in C++ — games, robotics, trading, edge inference — numpy-cpp lets you keep NumPy semantics without shipping Python.
 
@@ -117,7 +116,7 @@ set(CMAKE_CXX_STANDARD 20)
 add_subdirectory(numpy-cpp)
 # Option B: FetchContent
 include(FetchContent)
-FetchContent_Declare(numpy-cpp GIT_REPOSITORY https://github.com/anomalyco/Numpy-C-API.git GIT_TAG dev)
+FetchContent_Declare(numpy-cpp GIT_REPOSITORY https://github.com/sergiorandria/numpy-cpp.git GIT_TAG dev)
 FetchContent_MakeAvailable(numpy-cpp)
 
 add_executable(my_app main.cpp)
@@ -227,7 +226,7 @@ clang++ -march=rv64gcv -DNP_SIMD_RVV -I include main.cpp -o main.rvv
 
 ## API Coverage
 
-> 712 routines, 26 groups — every `np::` carries `Reference: numpy-reference/reference/generated/numpy.<func>.html`.
+> 760+ routines, 36 groups — every `np::` carries `Reference: numpy-reference/...` or Hatcher/Bott–Tu.
 
 | Module | Header | Highlights |
 |--------|--------|------------|
@@ -310,7 +309,7 @@ Two engines, one API: `ndarray<T>` for runtime shapes, `ndarrayf<T, Extents...>`
 
 ```
 include/np/
-  np.hpp              umbrella (22 includes; random/concatenate explicit)
+  np.hpp              umbrella (28 includes; fully integrated)
   ndarray.hpp         6.5k LOC — core array, views, strides
   linalg.hpp          4.0k LOC — BLAS-like, blocked GEMM, decompositions
   manipulation.hpp    2.6k LOC — reshape, copyto, block, pad
@@ -336,7 +335,7 @@ tests/                22 CTest suites + bench_math (AVX, manual)
 
 ```bash
 cmake -S . -B build && cmake --build build -j8
-ctest --test-dir build --output-on-failure   # 22/22
+ctest --test-dir build --output-on-failure   # 29/29
 
 # single suite verbose
 ./build/tests/test_ndarray --verbose
@@ -347,7 +346,7 @@ g++ -std=c++20 -I include tests/test_math.cpp -o /tmp/t && /tmp/t
 cmake --build build --target bench_math && ./build/tests/bench_math
 ```
 
-CI target is `22/22` green. Every fast path has a scalar fallback exercised by tests.
+CI target is `29/29` green. Every fast path has a scalar fallback exercised by tests.
 
 ---
 
@@ -358,7 +357,7 @@ CI target is `22/22` green. Every fast path has a scalar fallback exercised by t
 | [`docs/README.md`](docs/README.md) | Docs index |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Engines, views, strides, threadpool |
 | [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) | Fast paths, thresholds, bench |
-| [`docs/API.md`](docs/API.md) | 712 routines, file:line |
+| [`docs/API.md`](docs/API.md) | 760+ routines, file:line |
 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) | Branching, `clang-format`, `feat()` commits |
 | [`docs/MATH_PROOFS.md`](docs/MATH_PROOFS.md) | Proofs vs `numpy-reference/` |
 

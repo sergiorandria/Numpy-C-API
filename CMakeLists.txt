@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 project(numpy-cpp
   VERSION 2.2.0
   DESCRIPTION "Header-only C++20 NumPy 2.2 — 712 routines, zero Python runtime"
-  HOMEPAGE_URL "https://github.com/anomalyco/Numpy-C-API"
+  HOMEPAGE_URL "https://github.com/sergiorandria/numpy-cpp"
   LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -197,6 +197,15 @@ endif()
 # ── LLVM JIT for differential VM (optional, header-only fallback) ─────
 # No find_package needed: differential.hpp uses __has_include(<llvm/IR/IRBuilder.h>)
 # to enable JIT when LLVM headers are present. No link required for fallback.
+option(NP_ENABLE_LLVM "Enable LLVM JIT for differential VM (requires LLVM dev headers)" OFF)
+if(NP_ENABLE_LLVM)
+  target_compile_definitions(numpy-cpp INTERFACE NP_ENABLE_LLVM=1)
+  find_package(LLVM QUIET)
+  if(LLVM_FOUND)
+    target_include_directories(numpy-cpp INTERFACE ${LLVM_INCLUDE_DIRS})
+    target_link_libraries(numpy-cpp INTERFACE LLVM)
+  endif()
+endif()
 if(NP_USE_THREADING)
   target_compile_definitions(numpy-cpp INTERFACE NP_USE_THREADING)
 endif()

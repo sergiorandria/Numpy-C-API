@@ -25,6 +25,7 @@
 #include "linalg.hpp"
 #include "linalg_fixed.hpp"
 #include "logic.hpp"
+#include "concatenate.hpp"
 #include "manipulation.hpp"
 #include "masked_array.hpp"
 #include "math.hpp"
@@ -48,7 +49,15 @@
 #include "manifold.hpp"
 #include "variety.hpp"
 #include "differential.hpp"
-// Note: random.hpp and concatenate.hpp are not included by default.
-// Include them explicitly if needed to avoid template conflicts.
+#include "cohomology.hpp"
+#include "bundle.hpp"
+#include "persistent.hpp"
+#include "spectral.hpp"
+#include "random.hpp"
+
+// Suppress -Wbraced-scalar-init for NDProxy braced-init (e.g. {{{1},{2},{3}},{{1},{2},{3}}} shape 2×3×1)
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wbraced-scalar-init"
+#endif
 
 #endif // NP_NP_HPP

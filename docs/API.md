@@ -1,8 +1,8 @@
-# API — dev (712 routines)
+# API — dev (760+ routines)
 
-Umbrella `include/np/np.hpp:13` (22 includes; `random.hpp`/`concatenate.hpp` explicit). Every `np::` has Doxygen `Reference: numpy-reference/...`.
+Umbrella `include/np/np.hpp:13` (28 includes; all integrated). Every `np::` has Doxygen `Reference: numpy-reference/...` or Bott–Tu/Hatcher.
 
-## Module table (26 groups)
+## Module table (36 groups)
 
 | Group | Header | Key symbols (file:line) | NumPy ref |
 |-------|--------|--------------------------|-----------|
@@ -34,8 +34,19 @@ Umbrella `include/np/np.hpp:13` (22 includes; `random.hpp`/`concatenate.hpp` exp
 | **Testing** | `testing.hpp:108` | `assert_equal, Tester:442` | `routines.testing.html` |
 | **Other** | `other.hpp:119` | `who, byte_bounds, einsum_path_stub` | `routines.other.html` |
 | **Threadpool** | `threadpool.hpp:236` | `ThreadPool::global().parallel_for` | `threadpool` |
+| **BigInt** | `bigint.hpp:304` | `bigint (cpp_int/GMP), make_bigint, _mpz` | `—` |
+| **Homology** | `homology.hpp:539` | `SimplicialComplex, betti_numbers, homology_groups, smith_normal_form, exact_rank` | `Hatcher` |
+| **Homotopy** | `homotopy.hpp:236` | `Whitehead, aspherical, homotopy_groups` | `Hatcher` |
+| **Modular** | `modular.hpp:232` | `ModularForm, Hecke` | `Diamond–Shurman` |
+| **Manifold** | `manifold.hpp:583` | `AbstractManifold, Sphere/Torus/Projective/Klein, de_rham, simplicial` | `Lee` |
+| **Variety** | `variety.hpp` | `deprecated alias of manifold.hpp` | `—` |
+| **Differential** | `differential.hpp:438` | `VM, ScalarField, KForm, exterior_derivative, wedge, pullback` | `Bott–Tu` |
+| **Cohomology** | `cohomology.hpp:191` | `cohomology_groups, cohomology_ring, cup_product, poincare_pairing, intersection_form, kunneth` | `Hatcher Ch.3` |
+| **Bundle** | `bundle.hpp:103` | `VectorBundle, tangent/cotangent, chern/stiefel/euler/pontryagin, whitney_sum, HodgeStar` | `Milnor–Stasheff` |
+| **Persistent** | `persistent.hpp:94` | `FilteredSimplex, Filtration, persistence_barcode, bottleneck_distance, vietoris_rips` | `Edelsbrunner–Harer` |
+| **Spectral** | `spectral.hpp:129` | `MayerVietoris, SpectralSequence, leray_serre (Hopf), ahss, total_betti` | `McCleary` |
 
-Count `712` includes `_like` variants and aliases (`concat`).
+Count `712` base + ~50 higher-math (homology/bundle/persistent/spectral) + aliases.
 
 ## Quick reference
 

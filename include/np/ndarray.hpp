@@ -46,6 +46,11 @@
 #include "threadpool.hpp"
 #endif
 
+// Suppress -Wbraced-scalar-init for NDProxy braced-init (e.g. {{{1},{2},{3}},{{1},{2},{3}}} shape 2×3×1)
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wbraced-scalar-init"
+#endif
+
 namespace np
 {
   namespace matrix
@@ -197,6 +202,184 @@ namespace np
       }
     }
 #endif
+
+  } // namespace detail
+
+  namespace detail
+  {
+
+    // ── ND initializer_list proxy helpers (arbitrary depth) ─────────────────
+    template <typename T>
+    struct is_init_list : std::false_type
+    {
+    };
+    template <typename U>
+    struct is_init_list<std::initializer_list<U>> : std::true_type
+    {
+    };
+    template <typename T>
+    constexpr bool is_init_list_v = is_init_list<T>::value;
+
+    template <typename T>
+    struct init_depth
+    {
+      static constexpr std::size_t value = 0;
+    };
+    template <typename U>
+    struct init_depth<std::initializer_list<U>>
+    {
+      static constexpr std::size_t value = 1 + init_depth<U>::value;
+    };
+    template <typename T>
+    constexpr std::size_t init_depth_v = init_depth<T>::value;
+
+    template <typename T>
+    struct init_value_type
+    {
+      using type = T;
+    };
+    template <typename U>
+    struct init_value_type<std::initializer_list<U>>
+    {
+      using type = typename init_value_type<U>::type;
+    };
+    template <typename T>
+    using init_value_type_t = typename init_value_type<T>::type;
+
+    template <typename List>
+    inline std::vector<int> nested_shape(const List& lst)
+    {
+      std::vector<int> s;
+      s.push_back(static_cast<int>(lst.size()));
+      if constexpr (is_init_list_v<typename List::value_type>)
+      {
+        if (lst.size() > 0)
+        {
+          auto sub = nested_shape(*lst.begin());
+          for (auto& sub_lst : lst)
+          {
+            auto cur = nested_shape(sub_lst);
+            if (cur != sub)
+            {
+              throw std::invalid_argument("ragged nested initializer list");
+            }
+          }
+          s.insert(s.end(), sub.begin(), sub.end());
+        }
+      }
+      return s;
+    }
+
+    template <typename List, typename T>
+    inline void nested_flatten(const List& lst, std::vector<T>& out)
+    {
+      if constexpr (is_init_list_v<typename List::value_type>)
+      {
+        for (auto& sub : lst)
+        {
+          nested_flatten(sub, out);
+        }
+      }
+      else
+      {
+        for (auto& v : lst)
+        {
+          out.push_back(static_cast<T>(v));
+        }
+      }
+    }
+
+    // ── NDProxy for arbitrary-depth braced-init (proxy pattern) ─────────
+    template <typename T>
+    struct NDProxy
+    {
+      std::vector<NDProxy> children;
+      T value{};
+      bool is_leaf = false;
+      NDProxy() = default;
+      template <typename U>
+        requires std::is_convertible_v<U, T>
+      NDProxy(U v) : value(static_cast<T>(v)), is_leaf(true)
+      {
+      }
+      NDProxy(std::initializer_list<NDProxy> lst) : children(lst), is_leaf(false)
+      {
+      }
+    };
+
+    template <typename T>
+    inline std::vector<int> proxy_shape(const NDProxy<T>& p)
+    {
+      if (p.is_leaf)
+      {
+        return {};
+      }
+      std::vector<int> s;
+      s.push_back(static_cast<int>(p.children.size()));
+      if (!p.children.empty() && !p.children[0].is_leaf)
+      {
+        auto sub = proxy_shape(p.children[0]);
+        for (auto& c : p.children)
+        {
+          auto cur = proxy_shape(c);
+          if (cur != sub)
+          {
+            throw std::invalid_argument("ragged nested initializer list");
+          }
+        }
+        s.insert(s.end(), sub.begin(), sub.end());
+      }
+      else
+      {
+        // Check all children are leaf for 1-D branch; for deeper, leaf branch is 1-D
+        for (auto& c : p.children)
+        {
+          if (c.is_leaf != p.children[0].is_leaf)
+          {
+            throw std::invalid_argument("ragged nested initializer list");
+          }
+        }
+      }
+      return s;
+    }
+
+    template <typename T>
+    inline std::vector<int> proxy_shape_list(const std::initializer_list<NDProxy<T>>& lst)
+    {
+      std::vector<int> s;
+      s.push_back(static_cast<int>(lst.size()));
+      if (lst.size() == 0)
+      {
+        return s;
+      }
+      auto sub = proxy_shape(*lst.begin());
+      for (auto& p : lst)
+      {
+        auto cur = proxy_shape(p);
+        if (cur != sub)
+        {
+          throw std::invalid_argument("ragged nested initializer list");
+        }
+      }
+      s.insert(s.end(), sub.begin(), sub.end());
+      return s;
+    }
+
+    template <typename T>
+    inline void proxy_flatten(const NDProxy<T>& p, std::vector<T>& out)
+    {
+      if (p.is_leaf)
+      {
+        out.push_back(p.value);
+      }
+      else
+      {
+        for (auto& c : p.children)
+        {
+          proxy_flatten(c, out);
+        }
+      }
+    }
 
   } // namespace detail
 
@@ -450,6 +633,14 @@ namespace np
     ndarray(std::initializer_list<std::initializer_list<U>> rows);
 
     ndarray(std::initializer_list<std::initializer_list<double>> rows);
+
+    /**
+     * @brief ND construction via proxy for arbitrary depth,
+     *        e.g. `ndarray<int> a{{{1,2},{3,4}},{{5,6},{7,8}}}` (2×2×2).
+     *        Uses `detail::NDProxy<T>` so a single overload handles
+     *        any depth >=1; ragged inputs throw.
+     */
+    ndarray(std::initializer_list<detail::NDProxy<T>> nested);
     /**
      * @brief Deep-copying copy constructor (value semantics).
      * @param other Array to copy.
@@ -718,6 +909,18 @@ namespace np
     auto operator()(std::size_t i, std::size_t j) const -> const T&;
 
     /**
+     * @brief ND index access (read/write) for `ndim() >= 3`.
+     *        e.g. `a(0,1,2)` for 3-D, `a(0,1,2,3)` for 4-D.
+     * @tparam Args Index types convertible to `size_t`; count must equal `ndim()`.
+     */
+    template <typename... Args>
+      requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+    auto operator()(Args... args) -> reference;
+    template <typename... Args>
+      requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+    auto operator()(Args... args) const -> const T&;
+
+    /**
      * @brief 2D bounds-checked access.
      * @param i Row index.
      * @param j Column index.
@@ -736,6 +939,14 @@ namespace np
      * @throws std::out_of_range if either index is out of bounds.
      */
     auto at(std::size_t i, std::size_t j) const -> const T&;
+
+    /** @brief ND bounds-checked access for `ndim() >= 3`. */
+    template <typename... Args>
+      requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+    auto at(Args... args) -> reference;
+    template <typename... Args>
+      requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+    auto at(Args... args) const -> const T&;
 
     /**
      * @brief Returns the single element of a 0-d/1-element array.
@@ -3063,6 +3274,24 @@ namespace np
   }
 
   template <typename T>
+  ndarray<T>::ndarray(std::initializer_list<detail::NDProxy<T>> nested)
+  {
+    shape = detail::proxy_shape_list(nested);
+    std::vector<value_type> flat;
+    flat.reserve(_checked_numel(shape));
+    for (auto& p : nested)
+    {
+      detail::proxy_flatten(p, flat);
+    }
+    if (flat.size() != _checked_numel(shape))
+    {
+      throw std::invalid_argument("ragged nested initializer list");
+    }
+    data_ = std::make_shared<std::vector<value_type>>(std::move(flat));
+    _finalize();
+  }
+
+  template <typename T>
   ndarray<T>::ndarray(const ndarray& other)
       : shape(other.shape), strides(other.strides), type(other.type), order(other.order),
         offset(other.offset), writeable_(other.writeable_), is_view_(false)
@@ -3480,6 +3709,42 @@ namespace np
       const T* __restrict d = data_->data();
       return d[offset + i * strides[0] + j * strides[1]];
     }
+  }
+
+  template <typename T>
+  template <typename... Args>
+    requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+  auto ndarray<T>::operator()(Args... args) -> reference
+  {
+    std::array<std::size_t, sizeof...(Args)> idx{static_cast<std::size_t>(args)...};
+    return get(idx);
+  }
+
+  template <typename T>
+  template <typename... Args>
+    requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+  auto ndarray<T>::operator()(Args... args) const -> const T&
+  {
+    std::array<std::size_t, sizeof...(Args)> idx{static_cast<std::size_t>(args)...};
+    return get(idx);
+  }
+
+  template <typename T>
+  template <typename... Args>
+    requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+  auto ndarray<T>::at(Args... args) -> reference
+  {
+    std::array<std::size_t, sizeof...(Args)> idx{static_cast<std::size_t>(args)...};
+    return get(idx);
+  }
+
+  template <typename T>
+  template <typename... Args>
+    requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+  auto ndarray<T>::at(Args... args) const -> const T&
+  {
+    std::array<std::size_t, sizeof...(Args)> idx{static_cast<std::size_t>(args)...};
+    return get(idx);
   }
 
   // Internals

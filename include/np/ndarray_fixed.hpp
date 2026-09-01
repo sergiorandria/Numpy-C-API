@@ -1244,18 +1244,41 @@ namespace np
   {
 
     /** @brief True when all arrays share rank >= 1 and the same tail. */
+    template <typename T, typename = void>
+    struct is_ndarrayf : std::false_type
+    {
+    };
+    template <typename T>
+    struct is_ndarrayf<T, std::void_t<typename T::value_type, decltype(T::rank)>>
+        : std::true_type
+    {
+    };
+
+    template <typename A0, typename... Rest>
+    constexpr bool concat_ok_v()
+    {
+      if constexpr (!is_ndarrayf<A0>::value || !(is_ndarrayf<Rest>::value && ...))
+      {
+        return false;
+      }
+      else
+      {
+        using t0 = detail::expr::shape_tag_t<A0>;
+        constexpr std::size_t r0 = A0::rank;
+        return r0 >= 1 && ((Rest::rank == r0) && ...)
+            && ((
+                detail::expr::same_tag<
+                    typename detail::expr::tail<t0>::type,
+                    typename detail::expr::tail<detail::expr::shape_tag_t<Rest>>::type>::
+                    value
+                && ...));
+      }
+    }
+
     template <typename A0, typename... Rest>
     struct concat_ok
     {
-      using t0 = detail::expr::shape_tag_t<A0>;
-      static constexpr std::size_t r0 = A0::rank;
-      static constexpr bool valid = r0 >= 1 && ((Rest::rank == r0) && ...)
-          && ((
-              (detail::expr::same_tag<
-                  typename detail::expr::tail<t0>::type,
-                  typename detail::expr::tail<detail::expr::shape_tag_t<Rest>>::type>::
-                   value)
-              && ...));
+      static constexpr bool valid = concat_ok_v<A0, Rest...>();
     };
 
     /** @brief Cumulative axis-0 offsets across the concatenated arrays. */

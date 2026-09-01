@@ -154,7 +154,10 @@ namespace np::linalg
         RV nrm2{};
         for (std::size_t i = 0; i < rows; ++i)
         {
-          if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+          if constexpr (
+              np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+              || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+              || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
             nrm2 += std::norm(data[i * cols + j]);
           else
             nrm2 += data[i * cols + j] * data[i * cols + j];
@@ -174,23 +177,29 @@ namespace np::linalg
             R dot{};
             for (std::size_t i = 0; i < rows; ++i)
             {
-              if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+              if constexpr (
+                  np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+                  || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+                  || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
                 dot += std::conj(data[i * cols + t]) * cand[i];
               else
                 dot += cand[i] * data[i * cols + t];
             }
             for (std::size_t i = 0; i < rows; ++i)
             {
-              // For complex, projection uses data * dot? For Gram-Schmidt with Hermitian inner product,
-              // cand = cand - dot * data; but dot = <data,cand>, so need data*dot
-              // For real, dot = <cand,data> so cand - dot*data is same.
+              // For complex, projection uses data * dot? For Gram-Schmidt with Hermitian
+              // inner product, cand = cand - dot * data; but dot = <data,cand>, so need
+              // data*dot For real, dot = <cand,data> so cand - dot*data is same.
               cand[i] -= dot * data[i * cols + t];
             }
           }
           RV cn2{};
           for (std::size_t i = 0; i < rows; ++i)
           {
-            if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+            if constexpr (
+                np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+                || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+                || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
               cn2 += std::norm(cand[i]);
             else
               cn2 += cand[i] * cand[i];
@@ -263,7 +272,10 @@ namespace np::linalg
           RV nrm2{};
           for (std::size_t i = 0; i < p; ++i)
           {
-            if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+            if constexpr (
+                np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+                || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+                || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
               nrm2 += std::norm(b[i * q + j]);
             else
               nrm2 += b[i * q + j] * b[i * q + j];
@@ -281,7 +293,10 @@ namespace np::linalg
             {
               const R x = b[i * q + pc];
               const R y = b[i * q + qc];
-              if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+              if constexpr (
+                  np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+                  || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+                  || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
               {
                 alpha += std::norm(x);
                 beta += std::norm(y);
@@ -303,7 +318,10 @@ namespace np::linalg
             {
               continue;
             }
-            if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+            if constexpr (
+                np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+                || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+                || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
             {
               if (gamma_abs != RV{0})
               {
@@ -324,7 +342,10 @@ namespace np::linalg
               }
             }
             RV g_real{};
-            if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+            if constexpr (
+                np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+                || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+                || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
               g_real = std::real(gamma);
             else
               g_real = gamma;
@@ -364,7 +385,10 @@ namespace np::linalg
         RV nrm2{};
         for (std::size_t i = 0; i < p; ++i)
         {
-          if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+          if constexpr (
+              np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+              || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+              || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
             nrm2 += std::norm(b[i * q + j]);
           else
             nrm2 += b[i * q + j] * b[i * q + j];
@@ -383,7 +407,10 @@ namespace np::linalg
       s.assign(k, R{});
       for (std::size_t j = 0; j < k; ++j)
       {
-        if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+        if constexpr (
+            np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+            || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+            || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
           s[j] = R{norms[order[j]]};
         else
           s[j] = static_cast<R>(norms[order[j]]);
@@ -422,7 +449,8 @@ namespace np::linalg
     // R in the upper triangle, Householder vectors below the diagonal
     // with v_j = 1) and tau (k,) follow the LAPACK convention used by
     // numpy's raw mode.
-    // Complex-aware: real path uses Householder reflectors, complex path uses Gram-Schmidt.
+    // Complex-aware: real path uses Householder reflectors, complex path uses
+    // Gram-Schmidt.
     template <typename R>
     void householder_qr(
         const std::vector<R>& a,
@@ -433,7 +461,10 @@ namespace np::linalg
         std::vector<R>& h,
         std::vector<R>& tau)
     {
-      if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+      if constexpr (
+          np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+          || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+          || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
       {
         const std::size_t k = std::min(m, n);
         q.assign(m * m, R{});
@@ -1021,7 +1052,8 @@ namespace np::linalg
       {
         piv[k] = k;
         std::size_t p = k;
-        auto best = [&]() {
+        auto best = [&]()
+        {
           if constexpr (np::detail::is_bigint_v<R>)
           {
             R v = a[k * n + k];
@@ -1032,7 +1064,8 @@ namespace np::linalg
         }();
         for (std::size_t i = k + 1; i < n; ++i)
         {
-          auto v = [&]() {
+          auto v = [&]()
+          {
             if constexpr (np::detail::is_bigint_v<R>)
             {
               R x = a[i * n + k];
@@ -1402,28 +1435,31 @@ namespace np::linalg
     EigenResult<RV> out;
     if (n == 0)
     {
-      out.w = ndarray<CR>::from_data(
-          std::vector<int>{0}, std::vector<CR>{});
-      out.v = ndarray<CR>::from_data(
-          std::vector<int>{0, 0}, std::vector<CR>{});
+      out.w = ndarray<CR>::from_data(std::vector<int>{0}, std::vector<CR>{});
+      out.v = ndarray<CR>::from_data(std::vector<int>{0, 0}, std::vector<CR>{});
       return out;
     }
 
     if (n == 1)
     {
       CR w0{};
-      if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+      if constexpr (
+          np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+          || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+          || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
         w0 = CR{dense[0]};
       else
         w0 = CR{static_cast<RV>(dense[0]), RV{0}};
-      out.w = ndarray<CR>::from_data(
-          std::vector<int>{1}, std::vector<CR>{w0});
+      out.w = ndarray<CR>::from_data(std::vector<int>{1}, std::vector<CR>{w0});
       out.v = ndarray<CR>::from_data(
           std::vector<int>{1, 1}, std::vector<CR>{CR{RV{1}, RV{0}}});
       return out;
     }
 
-    if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+    if constexpr (
+        np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+        || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+        || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
     {
       // Complex path: analytic for 2x2, QR iteration for larger
       if (n == 2)
@@ -1482,24 +1518,29 @@ namespace np::linalg
           }
           v[k] = v0;
           v[2 + k] = v1;
-          // column k is (v0, v1)?? Need row-major: v[0*2+0]=v0 for col0 row0, v[1*2+0]=v1 for col0 row1 etc.
-          // Our storage is row-major n x n: v[i*n+j] is row i col j
-          // So col k: v[0*n + k] = v0, v[1*n + k] = v1
+          // column k is (v0, v1)?? Need row-major: v[0*2+0]=v0 for col0 row0, v[1*2+0]=v1
+          // for col0 row1 etc. Our storage is row-major n x n: v[i*n+j] is row i col j So
+          // col k: v[0*n + k] = v0, v[1*n + k] = v1
         }
         // Reorder to match expected layout above (we filled incorrectly)
         std::vector<CR> vmat(4);
-        vmat[0] = v[0]; vmat[1] = v[1]; vmat[2] = v[2]; vmat[3] = v[3];
+        vmat[0] = v[0];
+        vmat[1] = v[1];
+        vmat[2] = v[2];
+        vmat[3] = v[3];
         // Actually v vector above already holds columns correctly if we set
         // Let's recompute properly:
         // For k=0: v[0]=v0_0, v[2]=v1_0
         // For k=1: v[1]=v0_1, v[3]=v1_1
-        out.v = ndarray<CR>::from_data(std::vector<int>{2, 2}, std::vector<CR>{v[0], v[1], v[2], v[3]});
+        out.v = ndarray<CR>::from_data(
+            std::vector<int>{2, 2}, std::vector<CR>{v[0], v[1], v[2], v[3]});
         return out;
       }
       // Larger complex: use simple QR iteration (unshifted) to get Schur form
       std::vector<R> A = dense;
       std::vector<R> Qacc(n * n, R{});
-      for (std::size_t i = 0; i < n; ++i) Qacc[i * n + i] = R{1};
+      for (std::size_t i = 0; i < n; ++i)
+        Qacc[i * n + i] = R{1};
       const int maxIter = 200;
       for (int iter = 0; iter < maxIter; ++iter)
       {
@@ -1532,11 +1573,14 @@ namespace np::linalg
         for (std::size_t i = 1; i < n; ++i)
           if (std::abs(A[i * n + i - 1]) > RV{1e-8})
             conv = false;
-        if (conv) break;
+        if (conv)
+          break;
       }
       std::vector<CR> w(n);
-      for (std::size_t i = 0; i < n; ++i) w[i] = CR{A[i * n + i]};
-      // eigenvectors are columns of Qacc (approx). For Schur, eigenvectors of A are Qacc * I
+      for (std::size_t i = 0; i < n; ++i)
+        w[i] = CR{A[i * n + i]};
+      // eigenvectors are columns of Qacc (approx). For Schur, eigenvectors of A are Qacc
+      // * I
       std::vector<CR> vmat(n * n);
       for (std::size_t i = 0; i < n; ++i)
         for (std::size_t j = 0; j < n; ++j)
@@ -1545,13 +1589,16 @@ namespace np::linalg
       for (std::size_t j = 0; j < n; ++j)
       {
         RV nrm2{};
-        for (std::size_t i = 0; i < n; ++i) nrm2 += std::norm(vmat[i * n + j]);
+        for (std::size_t i = 0; i < n; ++i)
+          nrm2 += std::norm(vmat[i * n + j]);
         RV nrm = std::sqrt(nrm2);
         if (nrm > RV{0})
-          for (std::size_t i = 0; i < n; ++i) vmat[i * n + j] /= static_cast<CR>(nrm);
+          for (std::size_t i = 0; i < n; ++i)
+            vmat[i * n + j] /= static_cast<CR>(nrm);
       }
       out.w = ndarray<CR>::from_data(std::vector<int>{static_cast<int>(n)}, std::move(w));
-      out.v = ndarray<CR>::from_data(std::vector<int>{static_cast<int>(n), static_cast<int>(n)}, std::move(vmat));
+      out.v = ndarray<CR>::from_data(
+          std::vector<int>{static_cast<int>(n), static_cast<int>(n)}, std::move(vmat));
       return out;
     }
     else
@@ -1569,7 +1616,8 @@ namespace np::linalg
       std::vector<CR> w = detail::schur_eigenvalues(schur, n);
       std::vector<CR> v = detail::schur_eigenvectors(schur, q, n, w);
       out.w = ndarray<CR>::from_data(std::vector<int>{static_cast<int>(n)}, std::move(w));
-      out.v = ndarray<CR>::from_data(std::vector<int>{static_cast<int>(n), static_cast<int>(n)}, std::move(v));
+      out.v = ndarray<CR>::from_data(
+          std::vector<int>{static_cast<int>(n), static_cast<int>(n)}, std::move(v));
       return out;
     }
   }
@@ -1658,7 +1706,8 @@ namespace np::linalg
         {
           for (std::size_t j = k + 1; j < n; ++j)
           {
-            A[i * n + j] = (A[i * n + j] * A[k * n + k] - A[i * n + k] * A[k * n + j]) / prev;
+            A[i * n + j] =
+                (A[i * n + j] * A[k * n + k] - A[i * n + k] * A[k * n + j]) / prev;
           }
           A[i * n + k] = R{0};
         }
@@ -1676,7 +1725,10 @@ namespace np::linalg
     {
       return R{0};
     }
-    if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+    if constexpr (
+        np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+        || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+        || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
     {
       R d = swaps % 2 == 0 ? R{1} : R{-1};
       for (std::size_t i = 0; i < n; ++i)
@@ -1732,12 +1784,19 @@ namespace np::linalg
     std::size_t swaps{};
     if (detail::lu_factor(lu, n, piv, swaps))
     {
-      if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
-        return SlogdetResult<R>{R{0}, R{-std::numeric_limits<real_value_t<R>>::infinity()}};
+      if constexpr (
+          np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+          || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+          || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+        return SlogdetResult<R>{
+            R{0}, R{-std::numeric_limits<real_value_t<R>>::infinity()}};
       else
         return SlogdetResult<R>{R{0}, -std::numeric_limits<R>::infinity()};
     }
-    if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+    if constexpr (
+        np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+        || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+        || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
     {
       using RV = real_value_t<R>;
       R sign = swaps % 2 == 0 ? R{1} : R{-1};
@@ -1773,7 +1832,8 @@ namespace np::linalg
           logabs += std::log(d);
         }
       }
-      // logabs stored as R (bigint) truncated; for exact bigint slogdet, user should use det
+      // logabs stored as R (bigint) truncated; for exact bigint slogdet, user should use
+      // det
       return SlogdetResult<R>{sign, R{static_cast<long long>(logabs)}};
     }
     else
@@ -1919,22 +1979,26 @@ namespace np::linalg
     requires(np::detail::is_bigint_v<T> || np::detail::is_bigint_v<U>)
   NP_NODISCARD auto solve(const ndarray<T>& a, const ndarray<U>& b) -> ndarray<double>
   {
-    auto ad = [&]{
+    auto ad = [&]
+    {
       if constexpr (np::detail::is_bigint_v<T>)
         return from_bigint<double>(a);
       else
-        return ndarray<double>(a.shape, dtype::float64, 0.0); // placeholder, will use as_bigint conversion?
+        return ndarray<double>(
+            a.shape, dtype::float64, 0.0); // placeholder, will use as_bigint conversion?
     }();
     // Actually for mixed bigint/double, convert both to double
     ndarray<double> ad2, bd2;
     if constexpr (np::detail::is_bigint_v<T>)
       ad2 = from_bigint<double>(a);
     else
-      ad2 = ndarray<double>::from_data(a.shape, std::vector<double>(a.data().begin(), a.data().end()));
+      ad2 = ndarray<double>::from_data(
+          a.shape, std::vector<double>(a.data().begin(), a.data().end()));
     if constexpr (np::detail::is_bigint_v<U>)
       bd2 = from_bigint<double>(b);
     else
-      bd2 = ndarray<double>::from_data(b.shape, std::vector<double>(b.data().begin(), b.data().end()));
+      bd2 = ndarray<double>::from_data(
+          b.shape, std::vector<double>(b.data().begin(), b.data().end()));
     // Use double solve
     return solve(ad2, bd2);
   }
@@ -1994,14 +2058,20 @@ namespace np::linalg
         R s = d[i * n + j];
         for (std::size_t kk = 0; kk < j; ++kk)
         {
-          if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+          if constexpr (
+              np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+              || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+              || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
             s -= l[i * n + kk] * std::conj(l[j * n + kk]);
           else
             s -= l[i * n + kk] * l[j * n + kk];
         }
         if (i == j)
         {
-          if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+          if constexpr (
+              np::detail::is_complex_v<R> || np::detail::is_bigint_v<R>
+              || std::is_same_v<std::remove_cv_t<R>, np::bigint>
+              || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
           {
             auto rs = std::real(s);
             if (rs <= decltype(rs){0})
@@ -2059,7 +2129,8 @@ namespace np::linalg
    *         O(M*N*min(M,N)) for Two/NegTwo (via SVD).
    */
   NP_API template <typename T>
-  NP_NODISCARD auto norm(const ndarray<T>& x, NormOrd ord = NormOrd::None) -> real_value_t<T>
+  NP_NODISCARD auto norm(const ndarray<T>& x, NormOrd ord = NormOrd::None)
+      -> real_value_t<T>
   {
     using R = real_t<T>;
     using RV = real_value_t<T>;

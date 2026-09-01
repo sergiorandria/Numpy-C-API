@@ -1687,6 +1687,7 @@ namespace np
   }
 
   /** @brief Stack 1-D arrays as columns (np.column_stack). */
+#ifndef NP_CONCATENATE_HPP
   NP_API template <typename T>
   NP_NODISCARD auto column_stack(const std::vector<ndarray<T>>& tup) -> ndarray<T>
   {
@@ -1768,6 +1769,7 @@ namespace np
     }
     return out;
   }
+#endif // NP_CONCATENATE_HPP
 
   /** @brief Assemble array from blocks (np.block) – 2-D case. */
   NP_API template <typename T>
@@ -2493,6 +2495,7 @@ namespace np
    *
    * Reference: numpy-reference/reference/generated/numpy.concat.html
    */
+#ifndef NP_CONCATENATE_HPP
   NP_API template <typename T>
   NP_NODISCARD inline auto concat(const std::vector<ndarray<T>>& arrays, int axis = 0)
       -> ndarray<T>
@@ -2547,6 +2550,7 @@ namespace np
     }
     return out;
   }
+#endif // NP_CONCATENATE_HPP
 
   /**
    * @brief `np.delete` alias – C++ keyword workaround.
