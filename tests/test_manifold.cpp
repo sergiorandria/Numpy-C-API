@@ -12,7 +12,7 @@ int main()
 
   // ── Sphere S² via manifold ──────────────────────────────────────────────
   {
-    auto S2 = make_sphere(2);
+    auto S2 = np::manifold::make_sphere(2);
     test::check(S2.dimension() == 2, "manifold S2 dim");
     test::check(S2.is_orientable(), "S2 orientable");
     test::check(S2.is_compact(), "S2 compact");
@@ -27,7 +27,7 @@ int main()
   // ── Sphere S^n returns R for n==dim ───────────────────────────────────
   for (int n = 0; n <= 3; ++n)
   {
-    auto Sn = make_sphere(n);
+    auto Sn = np::manifold::make_sphere(n);
     auto dr_n = Sn.de_rham(n);
     test::check(dr_n.betti == 1, "S^n de Rham Hn=R");
     auto dr0 = Sn.de_rham(0);
@@ -74,15 +74,15 @@ int main()
 
   // ── Homotopy via manifold ──────────────────────────────────────────────
   {
-    auto S1 = make_sphere(1);
-    auto S2 = make_sphere(2);
+    auto S1 = np::manifold::make_sphere(1);
+    auto S2 = np::manifold::make_sphere(2);
     test::check(!is_homotopy_equivalent(S1, S2), "S1 != S2 homotopy");
     test::check(is_homotopy_equivalent(S1, S1), "S1 homotopy self");
   }
 
   // ── AnyManifold variant ────────────────────────────────────────────────
   {
-    AnyManifold v = make_sphere(2);
+    AnyManifold v = np::manifold::make_sphere(2);
     test::check(std::visit([](auto& x){ return x.dimension(); }, v) == 2, "AnyManifold visit");
     test::check(name(v) == "S^2", "AnyManifold name");
   }
