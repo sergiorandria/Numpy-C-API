@@ -14,8 +14,9 @@
  *     modern parsing, prototype clone, derivative cache, thread-safe observers.
  *   - `kernel` — modern derivation kernel (`kernel::symbolic`,
  *     `kernel::forward`, `kernel::exterior_scalar`, `kernel::batch_forward`,
- *     `NodeVariant` with `std::variant`/`std::visit`, `std::span`/`std::ranges`,
- *     `consteval` dual check) centralizing symbolic + AD logic.
+ *     `kernel::simplify`, `NodeVariant` with `std::variant`/`std::visit`,
+ *     `std::span`/`std::ranges`, `consteval` dual check) centralizing symbolic +
+ *     AD logic + simplification + general `Pow` handling.
  *   - Design patterns: **Strategy** (Evaluator + CachedDecorator), **Visitor**
  *     (Node), **Factory/Abstract Factory** (FormFactory), **Builder** (VM::Builder),
  *     **Decorator/Composite** (KForm wedge + CachedEvaluator), **Prototype**
@@ -481,10 +482,14 @@ namespace np::differential
       return ev.eval_dual(n, tmp, var);
     }
 
+    // forward decl for simplify used by symbolic
+    NP_NODISCARD inline NodePtr simplify(const NodePtr& n);
+
     NP_NODISCARD inline NodePtr symbolic(const Node& n, int var)
     {
       DiffVisitor v{var};
-      return v.visit(n);
+      auto d = v.visit(n);
+      return simplify(d);
     }
 
     struct ConstNode
@@ -524,6 +529,146 @@ namespace np::differential
         default:
           return UnaryNode{n.type, n.child};
       }
+    }
+
+    // Modern helpers for simplification (constexpr, nodiscard, ranges-friendly)
+    NP_NODISCARD inline bool is_const(const NodePtr& n, f64_t v) noexcept
+    {
+      return n && n->type == Node::Const && n->cval == v;
+    }
+    NP_NODISCARD inline bool is_zero(const NodePtr& n) noexcept
+    {
+      return is_const(n, 0.0);
+    }
+    NP_NODISCARD inline bool is_one(const NodePtr& n) noexcept
+    {
+      return is_const(n, 1.0);
+    }
+    NP_NODISCARD inline NodePtr make_const_node(f64_t v)
+    {
+      auto n = std::make_shared<Node>();
+      n->type = Node::Const;
+      n->cval = v;
+      return n;
+    }
+
+    // Symbolic simplification kernel: constant folding + algebraic identities
+    // Uses std::visit on NodeVariant and recursion, C++20 style.
+    NP_NODISCARD inline NodePtr simplify(const NodePtr& n)
+    {
+      if (!n)
+        return nullptr;
+      // simplify children first (ranges-style recursion)
+      if (n->left)
+        n->left = simplify(n->left);
+      if (n->right)
+        n->right = simplify(n->right);
+      if (n->child)
+        n->child = simplify(n->child);
+
+      // constant folding for binary ops
+      if (n->left && n->right && n->left->type == Node::Const
+          && n->right->type == Node::Const)
+      {
+        f64_t a = n->left->cval, b = n->right->cval;
+        switch (n->type)
+        {
+          case Node::Add:
+            return make_const_node(a + b);
+          case Node::Sub:
+            return make_const_node(a - b);
+          case Node::Mul:
+            return make_const_node(a * b);
+          case Node::Div:
+            return b != 0 ? make_const_node(a / b) : n;
+          case Node::Pow:
+            return make_const_node(std::pow(a, b));
+          default:
+            break;
+        }
+      }
+      // constant folding for unary
+      if (n->child && n->child->type == Node::Const)
+      {
+        f64_t a = n->child->cval;
+        switch (n->type)
+        {
+          case Node::Sin:
+            return make_const_node(std::sin(a));
+          case Node::Cos:
+            return make_const_node(std::cos(a));
+          case Node::Exp:
+            return make_const_node(std::exp(a));
+          case Node::Log:
+            return a > 0 ? make_const_node(std::log(a)) : n;
+          case Node::Sqrt:
+            return a >= 0 ? make_const_node(std::sqrt(a)) : n;
+          case Node::Tan:
+            return make_const_node(std::tan(a));
+          case Node::Asin:
+            return (a >= -1 && a <= 1) ? make_const_node(std::asin(a)) : n;
+          case Node::Acos:
+            return (a >= -1 && a <= 1) ? make_const_node(std::acos(a)) : n;
+          case Node::Atan:
+            return make_const_node(std::atan(a));
+          default:
+            break;
+        }
+      }
+      // algebraic identities (modern, ranges-aware)
+      switch (n->type)
+      {
+        case Node::Add:
+          if (is_zero(n->left))
+            return n->right;
+          if (is_zero(n->right))
+            return n->left;
+          break;
+        case Node::Sub:
+          if (is_zero(n->right))
+            return n->left;
+          if (is_zero(n->left))
+          {
+            // 0 - x => -1 * x
+            auto o = std::make_shared<Node>();
+            o->type = Node::Mul;
+            o->left = make_const_node(-1);
+            o->right = n->right;
+            return o;
+          }
+          break;
+        case Node::Mul:
+          if (is_zero(n->left) || is_zero(n->right))
+            return make_const_node(0);
+          if (is_one(n->left))
+            return n->right;
+          if (is_one(n->right))
+            return n->left;
+          if (is_const(n->left, -1))
+          {
+            // keep as is, but could canonicalize
+          }
+          break;
+        case Node::Div:
+          if (is_zero(n->left))
+            return make_const_node(0);
+          if (is_one(n->right))
+            return n->left;
+          break;
+        case Node::Pow:
+          if (is_zero(n->right))
+            return make_const_node(1);
+          if (is_one(n->right))
+            return n->left;
+          if (is_zero(n->left))
+            return make_const_node(0);
+          if (is_one(n->left))
+            return make_const_node(1);
+          break;
+        default:
+          break;
+      }
+      return n;
     }
 
     template <Scalar T>
@@ -1811,7 +1956,35 @@ namespace np::differential
           o->right = lv.visit(*n.left);
           return o;
         }
-        return make_const(0);
+        // general a^b : a^b * (b' * log(a) + b * a'/a)
+        auto a_pow_b = std::make_shared<Node>(n);
+        DiffVisitor lv{var}, rv{var};
+        auto b_prime = lv.visit(*n.right);
+        auto a_prime = rv.visit(*n.left);
+        auto log_a = std::make_shared<Node>();
+        log_a->type = Node::Log;
+        log_a->child = n.left;
+        auto term1 = std::make_shared<Node>();
+        term1->type = Node::Mul;
+        term1->left = b_prime;
+        term1->right = log_a;
+        auto a_div = std::make_shared<Node>();
+        a_div->type = Node::Div;
+        a_div->left = a_prime;
+        a_div->right = n.left;
+        auto term2 = std::make_shared<Node>();
+        term2->type = Node::Mul;
+        term2->left = n.right;
+        term2->right = a_div;
+        auto sum = std::make_shared<Node>();
+        sum->type = Node::Add;
+        sum->left = term1;
+        sum->right = term2;
+        auto o = std::make_shared<Node>();
+        o->type = Node::Mul;
+        o->left = a_pow_b;
+        o->right = sum;
+        return o;
       }
       case Node::Sin:
       {
