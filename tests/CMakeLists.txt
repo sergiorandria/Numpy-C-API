@@ -22,6 +22,7 @@ set(NP_TESTS
     test_bigint
     test_abstract
     test_variety
+    test_manifold
     test_differential)
 
 if(NP_COMPILED_UNITS)
