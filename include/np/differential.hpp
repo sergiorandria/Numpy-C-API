@@ -7,12 +7,16 @@
  *   - `ScalarField<T>` (0-form) `f: R^n -> T` via `std::function` or string `VM`
  *   - `OneForm<T>`, `KForm<T>` (k-form) as antisymmetric coefficient arrays
  *   - `exterior_derivative`, `wedge`, `pullback`, `interior_product`,
- *     `lie_derivative` (de Rham, Cartan)
+ *     `lie_derivative` (de Rham, Cartan) + form operators `+ - ^ *`
  *   - `VM` — small stack VM that parses `"x^2 + sin(y)"`, JITs via LLVM if
- *     `NP_HAS_LLVM` else interprets, and differentiates symbolically.
- *   - Design patterns: **Strategy** (Evaluator), **Visitor** (Node),
- *     **Factory** (FormFactory), **Decorator/Composite** (KForm wedge),
- *     **Template Method** (exterior derivative).
+ *     `NP_HAS_LLVM` else interprets, and differentiates symbolically;
+ *     supports `sqrt/tan/asin/acos/atan`, scientific notation, `from_chars`
+ *     modern parsing, prototype clone, derivative cache, thread-safe observers.
+ *   - Design patterns: **Strategy** (Evaluator + CachedDecorator), **Visitor**
+ *     (Node), **Factory/Abstract Factory** (FormFactory), **Builder** (VM::Builder),
+ *     **Decorator/Composite** (KForm wedge + CachedEvaluator), **Prototype**
+ *     (Node::clone), **Observer** (VM observers), **Template Method**
+ *     (exterior derivative) + Form `concept`.
  *
  * The VM is header-only; when `llvm/IR/IRBuilder.h` is available and
  * `-DNP_HAS_LLVM=1` it JITs to native via `llvm::ExecutionEngine`, otherwise
@@ -35,17 +39,21 @@
 #define NP_DIFFERENTIAL_HPP
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <complex>
 #include <concepts>
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <numeric>
+#include <shared_mutex>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -157,6 +165,41 @@ namespace np::differential
     T d = v * (b.dval * log(a.val) + b.val * a.dval / a.val);
     return {v, d};
   }
+  template <Scalar T>
+  NP_NODISCARD inline Dual<T> sqrt(const Dual<T>& a)
+  {
+    using std::sqrt;
+    T s = sqrt(a.val);
+    return {s, a.dval / (T(2) * s)};
+  }
+  template <Scalar T>
+  NP_NODISCARD inline Dual<T> tan(const Dual<T>& a)
+  {
+    using std::cos;
+    using std::tan;
+    T c = cos(a.val);
+    return {tan(a.val), a.dval / (c * c)};
+  }
+  template <Scalar T>
+  NP_NODISCARD inline Dual<T> asin(const Dual<T>& a)
+  {
+    using std::asin;
+    using std::sqrt;
+    return {asin(a.val), a.dval / sqrt(T(1) - a.val * a.val)};
+  }
+  template <Scalar T>
+  NP_NODISCARD inline Dual<T> acos(const Dual<T>& a)
+  {
+    using std::acos;
+    using std::sqrt;
+    return {acos(a.val), -a.dval / sqrt(T(1) - a.val * a.val)};
+  }
+  template <Scalar T>
+  NP_NODISCARD inline Dual<T> atan(const Dual<T>& a)
+  {
+    using std::atan;
+    return {atan(a.val), a.dval / (T(1) + a.val * a.val)};
+  }
 
   // ── ScalarField / Forms (templated for C, f64_t default) ─────────────────
   template <Scalar T = f64_t>
@@ -226,6 +269,28 @@ namespace np::differential
   using KForm = KFormT<f64_t>;
   using CKForm = KFormT<c128_t>;
 
+  // Form trait for generic programming (Form concept) — after ScalarField/OneForm/KForm
+  template <typename T>
+  struct is_form : std::false_type
+  {
+  };
+  template <Scalar S>
+  struct is_form<ScalarFieldT<S>> : std::true_type
+  {
+  };
+  template <Scalar S>
+  struct is_form<OneFormT<S>> : std::true_type
+  {
+  };
+  template <Scalar S>
+  struct is_form<KFormT<S>> : std::true_type
+  {
+  };
+  template <typename T>
+  inline constexpr bool is_form_v = is_form<T>::value;
+  template <typename T>
+  concept Form = is_form_v<T>;
+
   // ── Visitor for Node (modern variant-based) ──────────────────────────────
   // Forward
   struct Node;
@@ -245,11 +310,32 @@ namespace np::differential
       Sin,
       Cos,
       Exp,
-      Log
+      Log,
+      Sqrt,
+      Tan,
+      Asin,
+      Acos,
+      Atan
     } type = Const;
     int var = -1;
     f64_t cval = 0;
     NodePtr left, right, child;
+
+    // Prototype pattern: deep clone
+    NP_NODISCARD NodePtr clone() const
+    {
+      auto n = std::make_shared<Node>();
+      n->type = type;
+      n->var = var;
+      n->cval = cval;
+      if (left)
+        n->left = left->clone();
+      if (right)
+        n->right = right->clone();
+      if (child)
+        n->child = child->clone();
+      return n;
+    }
 
     // Visitor accept (Visitor pattern) — calls visitor.visit(*this)
     template <typename Visitor>
@@ -287,6 +373,7 @@ namespace np::differential
   // ── Strategy for evaluation (Strategy pattern) ───────────────────────────
   // IEvaluator is the Strategy abstraction; InterpreterStrategy and LLVMStrategy
   // are concrete strategies swapped at runtime (VM holds shared_ptr<IEvaluator>).
+  // Decorator: CachedEvaluator wraps any IEvaluator and memoizes eval.
   template <Scalar T = f64_t>
   struct IEvaluator
   {
@@ -304,6 +391,54 @@ namespace np::differential
     NP_NODISCARD std::string name() const noexcept override
     {
       return "interpreter";
+    }
+  };
+
+  // Decorator pattern: caching layer for any evaluator (memoization)
+  template <Scalar T = f64_t>
+  struct CachedEvaluator : IEvaluator<T>
+  {
+    std::shared_ptr<IEvaluator<T>> inner;
+    mutable std::unordered_map<std::string, T> cache_;
+    mutable std::shared_mutex mtx_;
+    explicit CachedEvaluator(std::shared_ptr<IEvaluator<T>> in) : inner(std::move(in))
+    {
+    }
+    NP_NODISCARD static std::string key(const Node& n, const PointT<T>& p)
+    {
+      std::string k = std::to_string(reinterpret_cast<std::uintptr_t>(&n)) + "|";
+      for (auto v : p)
+        k += std::to_string(v) + ",";
+      return k;
+    }
+    T eval(const Node& n, const PointT<T>& p) const override
+    {
+      auto k = key(n, p);
+      {
+        std::shared_lock lock(mtx_);
+        auto it = cache_.find(k);
+        if (it != cache_.end())
+          return it->second;
+      }
+      T v = inner->eval(n, p);
+      {
+        std::unique_lock lock(mtx_);
+        cache_[k] = v;
+      }
+      return v;
+    }
+    Dual<T> eval_dual(const Node& n, const PointT<T>& p, int var) const override
+    {
+      return inner->eval_dual(n, p, var);
+    }
+    NP_NODISCARD std::string name() const noexcept override
+    {
+      return "cached(" + inner->name() + ")";
+    }
+    void clear() const noexcept
+    {
+      std::unique_lock lock(mtx_);
+      cache_.clear();
     }
   };
 
@@ -341,8 +476,12 @@ namespace np::differential
     // Strategy (Strategy pattern)
     std::shared_ptr<IEvaluator<f64_t>> evaluator;
 
-    // Observer (Observer pattern) — mutable so const eval can notify
+    // Observer (Observer pattern) — mutable so const eval can notify, thread-safe
     mutable std::vector<std::function<void(const Point& p, f64_t result)>> observers_;
+    mutable std::shared_mutex obs_mtx_;
+    // Derivative cache (Prototype + caching)
+    mutable std::unordered_map<int, NodePtr> deriv_cache_;
+    mutable std::shared_mutex deriv_mtx_;
 
     static NodePtr make_const(f64_t v)
     {
@@ -377,6 +516,49 @@ namespace np::differential
 
   public:
     VM() = default;
+    // Custom copy/move to handle mutex members (Prototype-safe)
+    VM(const VM& o)
+        : root(o.root), vars(o.vars), var_index(o.var_index), expr(o.expr), pos(o.pos),
+          evaluator(o.evaluator), observers_(o.observers_), deriv_cache_(o.deriv_cache_)
+    {
+    }
+    VM& operator=(const VM& o)
+    {
+      if (this != &o)
+      {
+        root = o.root;
+        vars = o.vars;
+        var_index = o.var_index;
+        expr = o.expr;
+        pos = o.pos;
+        evaluator = o.evaluator;
+        observers_ = o.observers_;
+        deriv_cache_ = o.deriv_cache_;
+      }
+      return *this;
+    }
+    VM(VM&& o) noexcept
+        : root(std::move(o.root)), vars(std::move(o.vars)),
+          var_index(std::move(o.var_index)), expr(std::move(o.expr)), pos(o.pos),
+          evaluator(std::move(o.evaluator)), observers_(std::move(o.observers_)),
+          deriv_cache_(std::move(o.deriv_cache_))
+    {
+    }
+    VM& operator=(VM&& o) noexcept
+    {
+      if (this != &o)
+      {
+        root = std::move(o.root);
+        vars = std::move(o.vars);
+        var_index = std::move(o.var_index);
+        expr = std::move(o.expr);
+        pos = o.pos;
+        evaluator = std::move(o.evaluator);
+        observers_ = std::move(o.observers_);
+        deriv_cache_ = std::move(o.deriv_cache_);
+      }
+      return *this;
+    }
     VM(const std::string& e,
        const std::vector<std::string>& vs = std::vector<std::string>{"x"})
         : vars(vs), expr(e), pos(0)
@@ -401,8 +583,11 @@ namespace np::differential
       if (!root)
         throw std::runtime_error("VM: empty");
       f64_t v = eval_node(root, p);
-      for (auto& obs : observers_)
-        obs(p, v);
+      {
+        std::shared_lock lock(obs_mtx_);
+        for (auto& obs : observers_)
+          obs(p, v);
+      }
       return v;
     }
     f64_t operator()(const Point& p) const
@@ -444,13 +629,30 @@ namespace np::differential
       return derivative(p, it->second);
     }
 
+    // Prototype + cache: reuse previously derived NodePtr if available
+    NodePtr cached_diff(int var) const
+    {
+      {
+        std::shared_lock lock(deriv_mtx_);
+        auto it = deriv_cache_.find(var);
+        if (it != deriv_cache_.end())
+          return it->second->clone();
+      }
+      NodePtr d = diff_node(root, var);
+      {
+        std::unique_lock lock(deriv_mtx_);
+        deriv_cache_[var] = d->clone();
+      }
+      return d;
+    }
+
     VM derivative_vm(int var) const
     {
       VM out;
       out.vars = vars;
       out.var_index = var_index;
       out.expr = expr + "'_d" + std::to_string(var);
-      out.root = diff_node(root, var);
+      out.root = cached_diff(var);
 #if NP_HAS_LLVM_JIT
       out.evaluator = std::make_shared<LLVMStrategy<f64_t>>();
 #else
@@ -495,10 +697,25 @@ namespace np::differential
     {
       evaluator = std::make_shared<InterpreterStrategy<f64_t>>();
     }
+    void use_cached()
+    {
+      auto inner = evaluator ? evaluator : std::make_shared<InterpreterStrategy<f64_t>>();
+      evaluator = std::make_shared<CachedEvaluator<f64_t>>(inner);
+    }
+    void use_cached_interpreter()
+    {
+      evaluator = std::make_shared<CachedEvaluator<f64_t>>(
+          std::make_shared<InterpreterStrategy<f64_t>>());
+    }
 #if NP_HAS_LLVM_JIT
     void use_llvm()
     {
       evaluator = std::make_shared<LLVMStrategy<f64_t>>();
+    }
+    void use_cached_llvm()
+    {
+      evaluator = std::make_shared<CachedEvaluator<f64_t>>(
+          std::make_shared<LLVMStrategy<f64_t>>());
     }
 #endif
 
@@ -547,11 +764,18 @@ namespace np::differential
     using Observer = std::function<void(const Point& p, f64_t result)>;
     void add_observer(Observer obs) const
     {
+      std::unique_lock lock(obs_mtx_);
       observers_.push_back(std::move(obs));
     }
     void clear_observers() const noexcept
     {
+      std::unique_lock lock(obs_mtx_);
       observers_.clear();
+    }
+    std::size_t observer_count() const noexcept
+    {
+      std::shared_lock lock(obs_mtx_);
+      return observers_.size();
     }
 
     // Evaluate on ndarray points: each row is a point (modern span-based)
@@ -869,6 +1093,8 @@ namespace np::differential
   {
     if (a.dim != b.dim)
       throw std::invalid_argument("wedge: dim mismatch");
+    if (a.coeffs.empty() || b.coeffs.empty())
+      return KFormT<T>(a.k + b.k, a.dim);
     KFormT<T> out;
     out.k = a.k + b.k;
     out.dim = a.dim;
@@ -895,8 +1121,108 @@ namespace np::differential
         ScalarFieldT<T> cf(
             [fa, fb, sign](const PointT<T>& p) { return T(sign) * fa(p) * fb(p); },
             a.dim);
-        out.coeffs[idx] = std::move(cf);
+        // if idx already exists (should not for distinct wedge) sum, else insert
+        auto it = out.coeffs.find(idx);
+        if (it == out.coeffs.end())
+          out.coeffs[idx] = std::move(cf);
+        else
+        {
+          auto prev = it->second;
+          out.coeffs[idx] = ScalarFieldT<T>(
+              [prev, cf](const PointT<T>& p) { return prev(p) + cf(p); }, a.dim);
+        }
       }
+    return out;
+  }
+
+  // ── Form operators (Decorator / Composite syntactic sugar) ─────────────────
+  // Wedge as operator^ (exterior algebra) and operator* alias
+  template <Scalar T>
+  NP_NODISCARD inline KFormT<T> operator^(const OneFormT<T>& a, const OneFormT<T>& b)
+  {
+    return wedge(a, b);
+  }
+  template <Scalar T>
+  NP_NODISCARD inline KFormT<T> operator^(const KFormT<T>& a, const KFormT<T>& b)
+  {
+    return wedge(a, b);
+  }
+  template <Scalar T>
+  NP_NODISCARD inline KFormT<T> operator*(const OneFormT<T>& a, const OneFormT<T>& b)
+  {
+    return wedge(a, b);
+  }
+  template <Scalar T>
+  NP_NODISCARD inline KFormT<T> operator*(const KFormT<T>& a, const KFormT<T>& b)
+  {
+    return wedge(a, b);
+  }
+  // Form addition / subtraction (pointwise)
+  template <Scalar T>
+  NP_NODISCARD inline OneFormT<T> operator+(const OneFormT<T>& a, const OneFormT<T>& b)
+  {
+    if (a.dim != b.dim)
+      throw std::invalid_argument("OneForm +: dim mismatch");
+    OneFormT<T> out(a.dim);
+    for (int i = 0; i < a.dim; ++i)
+      out.comps[i] = ScalarFieldT<T>(
+          [a, b, i](const PointT<T>& p) { return a.comps[i](p) + b.comps[i](p); }, a.dim);
+    return out;
+  }
+  template <Scalar T>
+  NP_NODISCARD inline OneFormT<T> operator-(const OneFormT<T>& a, const OneFormT<T>& b)
+  {
+    if (a.dim != b.dim)
+      throw std::invalid_argument("OneForm -: dim mismatch");
+    OneFormT<T> out(a.dim);
+    for (int i = 0; i < a.dim; ++i)
+      out.comps[i] = ScalarFieldT<T>(
+          [a, b, i](const PointT<T>& p) { return a.comps[i](p) - b.comps[i](p); }, a.dim);
+    return out;
+  }
+  template <Scalar T>
+  NP_NODISCARD inline KFormT<T> operator+(const KFormT<T>& a, const KFormT<T>& b)
+  {
+    if (a.dim != b.dim || a.k != b.k)
+      throw std::invalid_argument("KForm +: dim/k mismatch");
+    KFormT<T> out(a.k, a.dim);
+    out.coeffs = a.coeffs;
+    for (auto& [idx, fb] : b.coeffs)
+    {
+      auto it = out.coeffs.find(idx);
+      if (it == out.coeffs.end())
+        out.coeffs[idx] = fb;
+      else
+      {
+        auto fa = it->second;
+        out.coeffs[idx] = ScalarFieldT<T>(
+            [fa, fb](const PointT<T>& p) { return fa(p) + fb(p); }, a.dim);
+      }
+    }
+    return out;
+  }
+  template <Scalar T>
+  NP_NODISCARD inline KFormT<T> operator-(const KFormT<T>& a, const KFormT<T>& b)
+  {
+    if (a.dim != b.dim || a.k != b.k)
+      throw std::invalid_argument("KForm -: dim/k mismatch");
+    KFormT<T> out(a.k, a.dim);
+    out.coeffs = a.coeffs;
+    for (auto& [idx, fb] : b.coeffs)
+    {
+      auto it = out.coeffs.find(idx);
+      if (it == out.coeffs.end())
+      {
+        out.coeffs[idx] =
+            ScalarFieldT<T>([fb](const PointT<T>& p) { return -fb(p); }, a.dim);
+      }
+      else
+      {
+        auto fa = it->second;
+        out.coeffs[idx] = ScalarFieldT<T>(
+            [fa, fb](const PointT<T>& p) { return fa(p) - fb(p); }, a.dim);
+      }
+    }
     return out;
   }
 
@@ -1061,7 +1387,8 @@ namespace np::differential
     if (std::isalpha((unsigned char)expr[pos]))
     {
       std::size_t start = pos;
-      while (pos < expr.size() && std::isalpha((unsigned char)expr[pos]))
+      while (pos < expr.size()
+             && (std::isalnum((unsigned char)expr[pos]) || expr[pos] == '_'))
         ++pos;
       std::string name = expr.substr(start, pos - start);
       skip();
@@ -1082,6 +1409,16 @@ namespace np::differential
           o->type = Node::Exp;
         else if (name == "log")
           o->type = Node::Log;
+        else if (name == "sqrt")
+          o->type = Node::Sqrt;
+        else if (name == "tan")
+          o->type = Node::Tan;
+        else if (name == "asin")
+          o->type = Node::Asin;
+        else if (name == "acos")
+          o->type = Node::Acos;
+        else if (name == "atan")
+          o->type = Node::Atan;
         else
           throw std::invalid_argument("VM: unknown func " + name);
         o->child = arg;
@@ -1092,14 +1429,39 @@ namespace np::differential
         throw std::invalid_argument("VM: unknown var " + name);
       return make_var(it->second);
     }
-    // number (use string_view + from_chars for modern)
+    // number: modern string_view + from_chars with scientific notation fallback
     std::size_t start = pos;
-    while (pos < expr.size()
-           && (std::isdigit((unsigned char)expr[pos]) || expr[pos] == '.'))
-      ++pos;
+    bool has_exp = false;
+    while (pos < expr.size())
+    {
+      char c = expr[pos];
+      if (std::isdigit((unsigned char)c) || c == '.')
+        ++pos;
+      else if ((c == 'e' || c == 'E') && !has_exp)
+      {
+        has_exp = true;
+        ++pos;
+        if (pos < expr.size() && (expr[pos] == '+' || expr[pos] == '-'))
+          ++pos;
+      }
+      else
+        break;
+    }
     if (start == pos)
       throw std::invalid_argument("VM: expected number/var");
-    f64_t v = std::stod(expr.substr(start, pos - start));
+    std::string_view sv(expr.data() + start, pos - start);
+    f64_t v = 0;
+#if __cpp_lib_to_chars >= 201611L
+    auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), v);
+    if (ec != std::errc{})
+#endif
+    {
+      std::string tmp(sv);
+      char* end = nullptr;
+      v = std::strtod(tmp.c_str(), &end);
+      if (end != tmp.c_str() + tmp.size())
+        throw std::invalid_argument("VM: invalid number " + tmp);
+    }
     return make_const(v);
   }
 
@@ -1110,104 +1472,20 @@ namespace np::differential
     {
       return evaluator->eval(*n, p);
     }
-    // fallback direct (should not happen)
-    switch (n->type)
-    {
-      case Node::Const:
-        return n->cval;
-      case Node::Var:
-        return p[n->var];
-      case Node::Add:
-        return eval_node(n->left, p) + eval_node(n->right, p);
-      case Node::Sub:
-        return eval_node(n->left, p) - eval_node(n->right, p);
-      case Node::Mul:
-        return eval_node(n->left, p) * eval_node(n->right, p);
-      case Node::Div:
-        return eval_node(n->left, p) / eval_node(n->right, p);
-      case Node::Pow:
-        return std::pow(eval_node(n->left, p), eval_node(n->right, p));
-      case Node::Sin:
-        return std::sin(eval_node(n->child, p));
-      case Node::Cos:
-        return std::cos(eval_node(n->child, p));
-      case Node::Exp:
-        return std::exp(eval_node(n->child, p));
-      case Node::Log:
-        return std::log(eval_node(n->child, p));
-    }
-    return 0;
+    // fallback — DRY via InterpreterStrategy (handles all Node types)
+    return InterpreterStrategy<f64_t>{}.eval(*n, p);
   }
 
   inline Dual<f64_t>
   VM::eval_dual(const NodePtr& n, const Point& p, int var, double h) const
   {
     (void)h;
-    // Strategy pattern: delegate to evaluator for AD
+    // Strategy pattern: delegate to evaluator for AD — DRY
     if (evaluator && n)
     {
       return evaluator->eval_dual(*n, p, var);
     }
-    switch (n->type)
-    {
-      case Node::Const:
-        return {n->cval, 0};
-      case Node::Var:
-        return {p[n->var], (n->var == var) ? 1.0 : 0.0};
-      case Node::Add:
-      {
-        auto a = eval_dual(n->left, p, var, h);
-        auto b = eval_dual(n->right, p, var, h);
-        return a + b;
-      }
-      case Node::Sub:
-      {
-        auto a = eval_dual(n->left, p, var, h);
-        auto b = eval_dual(n->right, p, var, h);
-        return a - b;
-      }
-      case Node::Mul:
-      {
-        auto a = eval_dual(n->left, p, var, h);
-        auto b = eval_dual(n->right, p, var, h);
-        return a * b;
-      }
-      case Node::Div:
-      {
-        auto a = eval_dual(n->left, p, var, h);
-        auto b = eval_dual(n->right, p, var, h);
-        return a / b;
-      }
-      case Node::Pow:
-      {
-        auto a = eval_dual(n->left, p, var, h);
-        auto b = eval_dual(n->right, p, var, h);
-        if (n->right->type == Node::Const)
-          return pow(a, n->right->cval);
-        return pow(a, b);
-      }
-      case Node::Sin:
-      {
-        auto a = eval_dual(n->child, p, var, h);
-        return sin(a);
-      }
-      case Node::Cos:
-      {
-        auto a = eval_dual(n->child, p, var, h);
-        return cos(a);
-      }
-      case Node::Exp:
-      {
-        auto a = eval_dual(n->child, p, var, h);
-        return exp(a);
-      }
-      case Node::Log:
-      {
-        auto a = eval_dual(n->child, p, var, h);
-        return log(a);
-      }
-    }
-    return {0, 0};
+    return InterpreterStrategy<f64_t>{}.eval_dual(*n, p, var);
   }
 
   inline NodePtr VM::diff_node(const NodePtr& n, int var) const
@@ -1339,6 +1617,99 @@ namespace np::differential
         o->right = n->child;
         return o;
       }
+      case Node::Sqrt:
+      {
+        // (sqrt(u))' = u' / (2 sqrt(u))
+        auto o = std::make_shared<Node>();
+        o->type = Node::Div;
+        o->left = diff_node(n->child, var);
+        auto den = std::make_shared<Node>();
+        den->type = Node::Mul;
+        den->left = make_const(2);
+        auto s = std::make_shared<Node>();
+        s->type = Node::Sqrt;
+        s->child = n->child;
+        den->right = s;
+        o->right = den;
+        return o;
+      }
+      case Node::Tan:
+      {
+        // (tan u)' = u' / cos^2 u
+        auto o = std::make_shared<Node>();
+        o->type = Node::Div;
+        o->left = diff_node(n->child, var);
+        auto den = std::make_shared<Node>();
+        den->type = Node::Pow;
+        auto c = std::make_shared<Node>();
+        c->type = Node::Cos;
+        c->child = n->child;
+        den->left = c;
+        den->right = make_const(2);
+        o->right = den;
+        return o;
+      }
+      case Node::Asin:
+      {
+        // (asin u)' = u' / sqrt(1 - u^2)
+        auto o = std::make_shared<Node>();
+        o->type = Node::Div;
+        o->left = diff_node(n->child, var);
+        auto den = std::make_shared<Node>();
+        den->type = Node::Sqrt;
+        auto sub = std::make_shared<Node>();
+        sub->type = Node::Sub;
+        sub->left = make_const(1);
+        auto pw = std::make_shared<Node>();
+        pw->type = Node::Pow;
+        pw->left = n->child;
+        pw->right = make_const(2);
+        sub->right = pw;
+        den->child = sub;
+        o->right = den;
+        return o;
+      }
+      case Node::Acos:
+      {
+        // (acos u)' = -u' / sqrt(1 - u^2)
+        auto o = std::make_shared<Node>();
+        o->type = Node::Mul;
+        o->left = make_const(-1);
+        auto div = std::make_shared<Node>();
+        div->type = Node::Div;
+        div->left = diff_node(n->child, var);
+        auto den = std::make_shared<Node>();
+        den->type = Node::Sqrt;
+        auto sub = std::make_shared<Node>();
+        sub->type = Node::Sub;
+        sub->left = make_const(1);
+        auto pw = std::make_shared<Node>();
+        pw->type = Node::Pow;
+        pw->left = n->child;
+        pw->right = make_const(2);
+        sub->right = pw;
+        den->child = sub;
+        div->right = den;
+        o->right = div;
+        return o;
+      }
+      case Node::Atan:
+      {
+        // (atan u)' = u' / (1 + u^2)
+        auto o = std::make_shared<Node>();
+        o->type = Node::Div;
+        o->left = diff_node(n->child, var);
+        auto den = std::make_shared<Node>();
+        den->type = Node::Add;
+        den->left = make_const(1);
+        auto pw = std::make_shared<Node>();
+        pw->type = Node::Pow;
+        pw->left = n->child;
+        pw->right = make_const(2);
+        den->right = pw;
+        o->right = den;
+        return o;
+      }
     }
     return make_const(0);
   }
@@ -1371,6 +1742,16 @@ namespace np::differential
         return std::exp(eval(*n.child, p));
       case Node::Log:
         return std::log(eval(*n.child, p));
+      case Node::Sqrt:
+        return std::sqrt(eval(*n.child, p));
+      case Node::Tan:
+        return std::tan(eval(*n.child, p));
+      case Node::Asin:
+        return std::asin(eval(*n.child, p));
+      case Node::Acos:
+        return std::acos(eval(*n.child, p));
+      case Node::Atan:
+        return std::atan(eval(*n.child, p));
     }
     return T(0);
   }
@@ -1435,6 +1816,31 @@ namespace np::differential
       {
         auto a = eval_dual(*n.child, p, var);
         return log(a);
+      }
+      case Node::Sqrt:
+      {
+        auto a = eval_dual(*n.child, p, var);
+        return sqrt(a);
+      }
+      case Node::Tan:
+      {
+        auto a = eval_dual(*n.child, p, var);
+        return tan(a);
+      }
+      case Node::Asin:
+      {
+        auto a = eval_dual(*n.child, p, var);
+        return asin(a);
+      }
+      case Node::Acos:
+      {
+        auto a = eval_dual(*n.child, p, var);
+        return acos(a);
+      }
+      case Node::Atan:
+      {
+        auto a = eval_dual(*n.child, p, var);
+        return atan(a);
       }
     }
     return {T(0), T(0)};
@@ -1571,6 +1977,99 @@ namespace np::differential
         DiffVisitor cv{var};
         o->left = cv.visit(*n.child);
         o->right = n.child;
+        return o;
+      }
+      case Node::Sqrt:
+      {
+        auto o = std::make_shared<Node>();
+        o->type = Node::Div;
+        DiffVisitor cv{var};
+        o->left = cv.visit(*n.child);
+        auto den = std::make_shared<Node>();
+        den->type = Node::Mul;
+        den->left = make_const(2);
+        auto s = std::make_shared<Node>();
+        s->type = Node::Sqrt;
+        s->child = n.child;
+        den->right = s;
+        o->right = den;
+        return o;
+      }
+      case Node::Tan:
+      {
+        auto o = std::make_shared<Node>();
+        o->type = Node::Div;
+        DiffVisitor cv{var};
+        o->left = cv.visit(*n.child);
+        auto den = std::make_shared<Node>();
+        den->type = Node::Pow;
+        auto c = std::make_shared<Node>();
+        c->type = Node::Cos;
+        c->child = n.child;
+        den->left = c;
+        den->right = make_const(2);
+        o->right = den;
+        return o;
+      }
+      case Node::Asin:
+      {
+        auto o = std::make_shared<Node>();
+        o->type = Node::Div;
+        DiffVisitor cv{var};
+        o->left = cv.visit(*n.child);
+        auto den = std::make_shared<Node>();
+        den->type = Node::Sqrt;
+        auto sub = std::make_shared<Node>();
+        sub->type = Node::Sub;
+        sub->left = make_const(1);
+        auto pw = std::make_shared<Node>();
+        pw->type = Node::Pow;
+        pw->left = n.child;
+        pw->right = make_const(2);
+        sub->right = pw;
+        den->child = sub;
+        o->right = den;
+        return o;
+      }
+      case Node::Acos:
+      {
+        auto o = std::make_shared<Node>();
+        o->type = Node::Mul;
+        o->left = make_const(-1);
+        auto div = std::make_shared<Node>();
+        div->type = Node::Div;
+        DiffVisitor cv{var};
+        div->left = cv.visit(*n.child);
+        auto den = std::make_shared<Node>();
+        den->type = Node::Sqrt;
+        auto sub = std::make_shared<Node>();
+        sub->type = Node::Sub;
+        sub->left = make_const(1);
+        auto pw = std::make_shared<Node>();
+        pw->type = Node::Pow;
+        pw->left = n.child;
+        pw->right = make_const(2);
+        sub->right = pw;
+        den->child = sub;
+        div->right = den;
+        o->right = div;
+        return o;
+      }
+      case Node::Atan:
+      {
+        auto o = std::make_shared<Node>();
+        o->type = Node::Div;
+        DiffVisitor cv{var};
+        o->left = cv.visit(*n.child);
+        auto den = std::make_shared<Node>();
+        den->type = Node::Add;
+        den->left = make_const(1);
+        auto pw = std::make_shared<Node>();
+        pw->type = Node::Pow;
+        pw->left = n.child;
+        pw->right = make_const(2);
+        den->right = pw;
+        o->right = den;
         return o;
       }
       case Node::Div:
