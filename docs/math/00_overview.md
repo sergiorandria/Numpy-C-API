@@ -1,42 +1,99 @@
-# 00 — Overview: Model, Notation, Lemma 0.3
+# 00 — Overview: Array Model, Notation, Lemma 0.3
 
-## Notation
+## 1. Notation
 
-* `a : ndarray<T>` with `n = _numel() = ∏ shape`, `data: vector<T>`, `strides: vector<size_t>`, `offset`.
-* `a[i0,…,ik-1] = data[offset + Σ idx_j·strides[j]]` (C-order).
-* `_c_strides(shape)[j] = ∏_{t>j} shape[t]`, `stride[k-1]=1`.
-* `flat(i)` for linear `i ∈ [0,n)` via `i → coords → flat` using division by `shape`.
+Let $a$ be an `ndarray<T>` with:
 
-## Lemma 0.3 — Contiguous flat equivalence
+- shape $\mathrm{shape}(a) = (s_0, \dots, s_{k-1})$, so $n = |a| = \prod_{j=0}^{k-1} s_j$ (`_numel()`),
+- a flat backing store $\mathrm{data} : \mathrm{Vec}\langle T\rangle$,
+- strides $\mathrm{str}(a) = (\sigma_0, \dots, \sigma_{k-1})$ (in elements, not bytes),
+- an element offset $\mathrm{off}(a) \in \mathbb{N}$.
 
-**Definition (Contiguous, `ndarray.hpp:3116`):**
-```
-is_contiguous ⇔ offset==0 ∧ strides==_c_strides(shape) ∧ data.size()≥n
-```
-New dev: `exp` loop, no alloc, `[[unlikely]]`.
+Element access is affine in the multi-index:
 
-**Definition (`_flat_logical:3479`):**
-```
-if shape.empty()||i==0 → offset
-else if is_contiguous() [[likely]] → offset+i
-else flat = offset + Σ ( (i / ∏_{t>j} shape[t]) % shape[j] ) * strides[j]
-```
-Old: `_shape_u()` vector alloc + `Odometer`.
+$$
+a[i_0, \dots, i_{k-1}] \;=\; \mathrm{data}\Big[\mathrm{off}(a) + \sum_{j=0}^{k-1} i_j\,\sigma_j\Big].
+$$
 
-**Lemma:** For contiguous `a`, `data[_flat_logical(i)] = data[offset+i]`.
+The canonical **C-order (row-major)** strides for a shape $s$ are
 
-*Proof.* Contiguous strides are C-order, so `i`'s mixed-radix expansion `coord_j = (i / stride_j) % shape[j]` satisfies `i = Σ coord_j·stride_j`. Then `flat = offset + Σ coord_j·strides[j] = offset+i`. Non-contiguous branch computes same sum directly without alloc, so equality holds. ∎
+$$
+\sigma^C_j(s) = \prod_{t=j+1}^{k-1} s_t, \qquad \sigma^C_{k-1}(s) = 1,
+$$
 
-**Corollary (Fast path correctness).** Any loop
+computed by `_c_strides(shape)`.
+
+For a linear index $i \in [0, n)$, the **mixed-radix expansion** into coordinates is
+
+$$
+\mathrm{coord}_j(i) = \left\lfloor \frac{i}{\sigma^C_j(s)} \right\rfloor \bmod s_j, \qquad j = 0, \dots, k-1,
+$$
+
+which is exactly how `flat(i)` (via `_flat_logical`) turns a linear index into an element.
+
+## 2. Lemma 0.3 — Contiguous flat equivalence
+
+**Definition (Contiguous), `ndarray.hpp:3116`.**
+
+$$
+\mathrm{is\_contiguous}(a) \;\Longleftrightarrow\; \mathrm{off}(a) = 0 \;\wedge\; \mathrm{str}(a) = \sigma^C(\mathrm{shape}(a)) \;\wedge\; |\mathrm{data}| \ge n.
+$$
+
+The `dev` implementation computes this via a single reverse pass (`exp` accumulator, no `_c_strides` allocation) and marks the mismatch/`offset≠0` branches `[[unlikely]]` — a performance hint, not a change to the predicate.
+
+**Definition (`_flat_logical`, `ndarray.hpp:3479`).**
+
+$$
+\mathrm{flat}(i) =
+\begin{cases}
+\mathrm{off}(a) & \text{if } \mathrm{shape}(a) = () \text{ or } i = 0 \\[4pt]
+\mathrm{off}(a) + i & \text{if } \mathrm{is\_contiguous}(a) \;[[\text{likely}]] \\[4pt]
+\mathrm{off}(a) + \displaystyle\sum_{j} \mathrm{coord}_j(i)\cdot \sigma_j & \text{otherwise}
+\end{cases}
+$$
+
+The old implementation always took the third branch through an `Odometer` (materializing a coordinate vector on the heap per call); `dev` short-circuits to `offset + i` when contiguous.
+
+**Lemma 0.3.** For contiguous $a$ and any linear index $i \in [0, n)$,
+
+$$
+\mathrm{data}[\mathrm{flat}(i)] \;=\; \mathrm{data}[\mathrm{off}(a) + i].
+$$
+
+*Proof.* Since $a$ is contiguous, $\sigma_j = \sigma^C_j(s)$ for every $j$. The mixed-radix expansion of $i$ against C-order strides is exactly the standard base-$(s_0,\dots,s_{k-1})$ positional representation, so
+
+$$
+i = \sum_{j=0}^{k-1} \mathrm{coord}_j(i)\cdot \sigma^C_j(s).
+$$
+
+Substituting into the non-contiguous branch's formula gives
+
+$$
+\mathrm{off}(a) + \sum_j \mathrm{coord}_j(i)\cdot\sigma_j \;=\; \mathrm{off}(a) + \sum_j \mathrm{coord}_j(i)\cdot\sigma^C_j(s) \;=\; \mathrm{off}(a) + i,
+$$
+
+which is precisely what the contiguous fast branch returns directly, without computing coordinates. The two branches therefore agree on every $i$, and both equal $\mathrm{off}(a)+i$. $\blacksquare$
+
+**Corollary (fast-path correctness).** Any loop of the shape
 
 ```cpp
-if (is_contiguous() [[likely]]) { const T* p=data.data(); for i<n p[i] } else { Odometer...
+if (is_contiguous()) [[likely]] {
+    const T* p = data.data();
+    for (std::size_t i = 0; i < n; ++i) { /* use p[i] */ }
+} else {
+    Odometer od(shape);
+    while (!od.done()) { /* use data[_flat(od.idx())] */ od.advance(); }
+}
 ```
 
-computes same `data[flat]` sequence, hence any `np::` that delegates to `_for_each_logical` (e.g. `sum:3680`, `mean`) is correct under micro-opt.
+produces the identical sequence of `data[flat(i)]` values as the slow, always-`Odometer` version, for every `i`. Hence any `np::` routine that delegates iteration to `_for_each_logical` — `sum` (`ndarray.hpp:3680`), `mean`, `prod`, `all`, `any`, and by extension every reduction/ufunc built on top of it — is correct under the micro-optimization. This is the **single proof obligation** discharged once here and reused by every contiguous fast path in `01`–`08`.
 
-**Branch hints** `[[likely]]`/`[[unlikely]]` are performance hints only.
+## 3. What Lemma 0.3 does *not* need to prove
 
-**Reserve/BLOCK** (`split:728` `reserve`, `dot:2669` `BLOCK=32`) do not affect values, only allocs — trivially correct.
+Three classes of `dev` change are correctness-irrelevant by construction, and are noted rather than re-proven per site:
 
-This lemma is the single proof for **all** contiguous fast paths below (`copyto`, `is_busday`, `dot`, `norm`, `isin`, `nditer`, `_for_each_logical`).
+1. **`[[likely]]` / `[[unlikely]]`** — branch-prediction hints only; they do not change control flow or values.
+2. **`reserve(n)` / block-size constants (e.g. `BLOCK=32` in `dot`)** — affect allocation count/cache behavior only, never the values written.
+3. **`__restrict`-qualified pointers** — an alias-freedom promise to the optimizer; changes only what the compiler is permitted to assume, not what the code computes. It is the programmer's obligation (verified here per-site) that the promise is actually true — e.g. `dot`'s `a`, `b`, and output buffers must not alias, which holds because the output is freshly allocated.
+
+Every subsequent proof in this series either reduces to Lemma 0.3, or is a self-contained algorithmic argument (Cooley–Tukey induction for FFT, blocked-sum associativity for `dot`, Chase-Lev linearizability for the thread pool, etc.).

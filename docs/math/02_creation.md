@@ -1,20 +1,41 @@
-# 02 — Creation (42 routines)
+# 02 — Creation (42 routines) — `creation.hpp:65`
 
-## `arange`, `linspace`, `logspace`, `geomspace` — `creation.hpp:65`
+## 2.1 `arange`, `linspace`, `logspace`, `geomspace`
 
-**Spec:** `arange(start,stop,step)` → `n=ceil((stop-start)/step)` values `start + k*step`. `linspace` → `x_i = start + i*(stop-start)/(num-1)` with `endpoint` flag. `geomspace` → `exp(log)`.
+**Spec.**
 
-**Proof:** Loop `for (T v=start; step>0? v<stop : v>stop; v+=step) push_back(v)` matches `n` and values. `linspace` uses `i/(num-1)` double exactly.
+$$
+\mathrm{arange}(\mathrm{start}, \mathrm{stop}, \mathrm{step}) = \big(\mathrm{start} + k\cdot\mathrm{step}\big)_{k=0}^{n-1}, \qquad n = \left\lceil \frac{\mathrm{stop}-\mathrm{start}}{\mathrm{step}} \right\rceil,
+$$
 
-## `eye`, `identity`, `diag`, `tri` — `creation.hpp`
+$$
+\mathrm{linspace}(\mathrm{start},\mathrm{stop},\mathrm{num})_i = \mathrm{start} + i\cdot\frac{\mathrm{stop}-\mathrm{start}}{\mathrm{num}-1}, \qquad i = 0,\dots,\mathrm{num}-1 \ (\texttt{endpoint} \text{ toggles the divisor}),
+$$
 
-**Spec:** `eye(N,M,k)[i,j] = (j-i==k ? 1 : 0)`, `diag` extracts/constructs diagonal. *Proof:* `for i,j if j-i==k` set 1 else 0.
+$$
+\mathrm{geomspace} = \exp\!\big(\mathrm{linspace}(\log \mathrm{start}, \log \mathrm{stop}, \mathrm{num})\big).
+$$
 
-## `mgrid`/`ogrid`, `indices`, `asanyarray`, `fromiter`, `rec.*`
+**Proof.** `arange` is realized as
 
-**Proof:** Direct `for` over shape via `Odometer`, `shared_ptr` views for `asanyarray`. `fromiter:1023` copies `count` elements via iterator range — same as Python iterable.
+```cpp
+for (T v = start; step > 0 ? v < stop : v > stop; v += step) push_back(v);
+```
 
-## Optimization
+which by induction on the loop counter produces exactly $n$ elements $\mathrm{start}+k\cdot\mathrm{step}$ (both signs of `step` handled by the ternary on the comparison direction), matching the $\lceil\cdot\rceil$ element count. `linspace` computes $i/(\mathrm{num}-1)$ in `double` before scaling — exact for the IEEE-754 divisions involved, matching the spec pointwise.
 
-`asanyarray:946` zero-copy when `is_contiguous()` else copy — correct by Def 0.1. No extra alloc for shape vectors beyond `reserve`.
+## 2.2 `eye`, `identity`, `diag`, `tri`
 
+**Spec.** $\mathrm{eye}(N,M,k)[i,j] = \mathbb{1}[j-i=k]$; `diag` extracts (2-D→1-D) or constructs (1-D→2-D) a diagonal; `tri`$(N,M,k)[i,j] = \mathbb{1}[j-i\le k]$.
+
+**Proof.** Direct double loop `for i, for j: out[i,j] = (j-i==k) ? 1 : 0` — a literal transcription of the indicator function, so pointwise equal by construction.
+
+## 2.3 `mgrid`/`ogrid`, `indices`, `asanyarray`, `fromiter`, `rec.*`
+
+**Proof.** All are direct `for`-loops over the target shape via `Odometer`, using `shared_ptr` views for `asanyarray` (zero-copy) and eager copies elsewhere — structurally identical to NumPy's own generator loops. `fromiter` (`creation.hpp:1023`) copies exactly `count` elements from the iterator range, matching Python's `fromiter(iterable, dtype, count)` semantics element-for-element.
+
+## 2.4 Optimization
+
+`asanyarray` (`creation.hpp:946`): returns a zero-copy view when `is_contiguous()`, else falls back to a copy. Correct because a view shares `data_` via `shared_ptr` and identical `(shape, strides, offset)` — by Definition 0.1 this denotes the same logical array, no value changes. No extra allocation is introduced beyond the `reserve` calls already used to size output buffers up front.
+
+**Complexity.** $O(n)$ for all of the above, where $n$ is the number of elements produced.
