@@ -15,8 +15,9 @@
  *   - `kernel` — modern derivation kernel (`kernel::symbolic`,
  *     `kernel::forward`, `kernel::exterior_scalar`, `kernel::batch_forward`,
  *     `kernel::simplify`, `NodeVariant` with `std::variant`/`std::visit`,
- *     `std::span`/`std::ranges`, `consteval` dual check) centralizing symbolic +
- *     AD logic + simplification + general `Pow` handling.
+ *     `std::span`/`std::ranges`, `consteval` dual check, higher-order
+ *     `gradient`/`hessian`/`jacobian`/`laplacian` via ranges) centralizing
+ *     symbolic + AD logic + simplification + general `Pow` handling.
  *   - Design patterns: **Strategy** (Evaluator + CachedDecorator), **Visitor**
  *     (Node), **Factory/Abstract Factory** (FormFactory), **Builder** (VM::Builder),
  *     **Decorator/Composite** (KForm wedge + CachedEvaluator), **Prototype**
@@ -721,6 +722,23 @@ namespace np::differential
 
   } // namespace kernel
 
+  class VM; // forward for kernel higher-order decls
+
+  // Forward decl for kernel higher-order (needs VM complete)
+  namespace kernel
+  {
+    NP_NODISCARD inline std::vector<VM> gradient(const VM& vm);
+    template <Scalar T>
+    NP_NODISCARD inline OneFormT<T> gradient_form(const VM& vm);
+    NP_NODISCARD inline std::vector<std::vector<VM>> jacobian(const std::vector<VM>& F);
+    NP_NODISCARD inline std::vector<std::vector<VM>> hessian(const VM& f);
+    NP_NODISCARD inline ScalarField laplacian_field(const VM& f);
+    NP_NODISCARD inline VM laplacian(const VM& f);
+    NP_NODISCARD inline f64_t laplacian_eval(const VM& f, const Point& p);
+    NP_NODISCARD inline ndarray<f64_t>
+    jacobian_eval(const std::vector<VM>& F, const Point& p);
+  } // namespace kernel
+
   // ── VM: tiny expression VM with symbolic diff and optional LLVM JIT ──────
   // Factory creates VMs and forms (Factory pattern)
   class VM
@@ -1161,6 +1179,123 @@ namespace np::differential
       return b.build();
     }
   };
+
+  // ── Higher-order kernels definitions (after VM complete) ─────────────────
+  namespace kernel
+  {
+    inline std::vector<VM> gradient(const VM& vm)
+    {
+      const auto& vars = vm.variables();
+      std::vector<VM> grad;
+      grad.reserve(vars.size());
+      auto idx = std::views::iota(0, static_cast<int>(vars.size()));
+      std::ranges::transform(
+          idx, std::back_inserter(grad), [&](int i) { return vm.derivative_vm(i); });
+      return grad;
+    }
+    template <Scalar T>
+    inline OneFormT<T> gradient_form(const VM& vm)
+    {
+      return exterior_scalar<T>(FormFactory::create_scalar<T>(vm));
+    }
+    inline std::vector<std::vector<VM>> jacobian(const std::vector<VM>& F)
+    {
+      if (F.empty())
+        return {};
+      int dim = F.front().dim();
+      std::vector<std::vector<VM>> J;
+      J.reserve(F.size());
+      std::ranges::transform(
+          F,
+          std::back_inserter(J),
+          [&](const VM& f)
+          {
+            std::vector<VM> row;
+            row.reserve(dim);
+            auto idx = std::views::iota(0, dim);
+            std::ranges::transform(
+                idx, std::back_inserter(row), [&](int j) { return f.derivative_vm(j); });
+            return row;
+          });
+      return J;
+    }
+    inline std::vector<std::vector<VM>> hessian(const VM& f)
+    {
+      int n = f.dim();
+      std::vector<std::vector<VM>> H(n, std::vector<VM>(n));
+      auto rows = std::views::iota(0, n);
+      std::ranges::for_each(
+          rows,
+          [&](int i)
+          {
+            auto df_i = f.derivative_vm(i);
+            auto cols = std::views::iota(0, n);
+            std::ranges::for_each(cols, [&](int j) { H[i][j] = df_i.derivative_vm(j); });
+          });
+      return H;
+    }
+    inline ScalarField laplacian_field(const VM& f)
+    {
+      int n = f.dim();
+      if (n == 0)
+        throw std::invalid_argument("laplacian_field: dim 0");
+      return ScalarField(
+          [f, n](const Point& p) -> f64_t
+          {
+            f64_t sum = 0;
+            auto idx = std::views::iota(0, n);
+            std::ranges::for_each(
+                idx,
+                [&](int i)
+                {
+                  auto d2 = f.derivative_vm(i).derivative_vm(i);
+                  sum += d2.eval(p);
+                });
+            return sum;
+          },
+          n);
+    }
+    inline VM laplacian(const VM& f)
+    {
+      int n = f.dim();
+      if (n == 0)
+        throw std::invalid_argument("laplacian: dim 0");
+      std::string expr = "(" + f.derivative_vm(0).derivative_vm(0).to_string() + ")";
+      for (int i = 1; i < n; ++i)
+      {
+        expr += "+(" + f.derivative_vm(i).derivative_vm(i).to_string() + ")";
+      }
+      return VM(expr, f.variables());
+    }
+    inline f64_t laplacian_eval(const VM& f, const Point& p)
+    {
+      int n = f.dim();
+      if (static_cast<int>(p.size()) != n)
+        throw std::invalid_argument("laplacian_eval: dim mismatch");
+      f64_t sum = 0;
+      auto idx = std::views::iota(0, n);
+      std::ranges::for_each(
+          idx,
+          [&](int i)
+          {
+            auto d2 = f.derivative_vm(i).derivative_vm(i);
+            sum += d2.eval(p);
+          });
+      return sum;
+    }
+    inline ndarray<f64_t> jacobian_eval(const std::vector<VM>& F, const Point& p)
+    {
+      if (F.empty())
+        return ndarray<f64_t>(std::vector<int>{0, 0});
+      int m = static_cast<int>(F.size());
+      int n = F.front().dim();
+      ndarray<f64_t> J(std::vector<int>{m, n});
+      for (int i = 0; i < m; ++i)
+        for (int j = 0; j < n; ++j)
+          J(i, j) = F[i].derivative(Point{p}, j);
+      return J;
+    }
+  } // namespace kernel
 
   // ── Exterior derivative (Template Method + Strategy) ─────────────────────
   // Modern kernel delegates to kernel::exterior_scalar using ranges
