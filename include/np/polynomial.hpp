@@ -19,6 +19,7 @@
 #include "api_macros.hpp"
 #include "linalg.hpp"
 #include "ndarray.hpp"
+#include "creation.hpp"
 
 namespace np
 {
