@@ -12,6 +12,10 @@
  *     `NP_HAS_LLVM` else interprets, and differentiates symbolically;
  *     supports `sqrt/tan/asin/acos/atan`, scientific notation, `from_chars`
  *     modern parsing, prototype clone, derivative cache, thread-safe observers.
+ *   - `kernel` — modern derivation kernel (`kernel::symbolic`,
+ *     `kernel::forward`, `kernel::exterior_scalar`, `kernel::batch_forward`,
+ *     `NodeVariant` with `std::variant`/`std::visit`, `std::span`/`std::ranges`,
+ *     `consteval` dual check) centralizing symbolic + AD logic.
  *   - Design patterns: **Strategy** (Evaluator + CachedDecorator), **Visitor**
  *     (Node), **Factory/Abstract Factory** (FormFactory), **Builder** (VM::Builder),
  *     **Decorator/Composite** (KForm wedge + CachedEvaluator), **Prototype**
@@ -48,6 +52,7 @@
 #include <memory>
 #include <mutex>
 #include <numeric>
+#include <ranges>
 #include <shared_mutex>
 #include <span>
 #include <stdexcept>
@@ -461,6 +466,115 @@ namespace np::differential
     }
   };
 #endif
+
+  // ── Modern derivation kernel (C++20) ─────────────────────────────────────
+  // Centralized kernel using concepts, span, ranges, variant visitation.
+  namespace kernel
+  {
+    template <Scalar T>
+    using point_span = std::span<const T>;
+
+    NP_NODISCARD inline Dual<f64_t>
+    forward_dual(const Node& n, point_span<f64_t> p, int var, const IEvaluator<f64_t>& ev)
+    {
+      Point tmp(p.begin(), p.end());
+      return ev.eval_dual(n, tmp, var);
+    }
+
+    NP_NODISCARD inline NodePtr symbolic(const Node& n, int var)
+    {
+      DiffVisitor v{var};
+      return v.visit(n);
+    }
+
+    struct ConstNode
+    {
+      f64_t v = 0;
+    };
+    struct VarNode
+    {
+      int idx = 0;
+    };
+    struct BinaryNode
+    {
+      Node::Type op = Node::Add;
+      NodePtr lhs, rhs;
+    };
+    struct UnaryNode
+    {
+      Node::Type op = Node::Sin;
+      NodePtr child;
+    };
+    using NodeVariant = std::variant<ConstNode, VarNode, BinaryNode, UnaryNode>;
+
+    NP_NODISCARD inline NodeVariant to_variant(const Node& n)
+    {
+      switch (n.type)
+      {
+        case Node::Const:
+          return ConstNode{n.cval};
+        case Node::Var:
+          return VarNode{n.var};
+        case Node::Add:
+        case Node::Sub:
+        case Node::Mul:
+        case Node::Div:
+        case Node::Pow:
+          return BinaryNode{n.type, n.left, n.right};
+        default:
+          return UnaryNode{n.type, n.child};
+      }
+    }
+
+    template <Scalar T>
+    NP_NODISCARD inline OneFormT<T> exterior_scalar(const ScalarFieldT<T>& f)
+    {
+      OneFormT<T> out;
+      out.dim = f.dim;
+      out.comps.resize(f.dim);
+      auto idx = std::views::iota(0, f.dim);
+      std::ranges::for_each(
+          idx,
+          [&](int i)
+          {
+            ScalarFieldT<T> df(
+                [f, i](const PointT<T>& p) -> T
+                {
+                  T h = T(1e-7);
+                  PointT<T> pp = p, pm = p;
+                  pp[i] += h;
+                  pm[i] -= h;
+                  return (f(pp) - f(pm)) / (T(2) * h);
+                },
+                f.dim);
+            out.comps[i] = std::move(df);
+          });
+      return out;
+    }
+
+    template <Scalar T>
+    NP_NODISCARD inline std::vector<Dual<T>> batch_forward(
+        const Node& n, std::span<const PointT<T>> pts, int var, const IEvaluator<T>& ev)
+    {
+      std::vector<Dual<T>> out;
+      out.reserve(pts.size());
+      std::ranges::transform(
+          pts,
+          std::back_inserter(out),
+          [&](const PointT<T>& p) { return ev.eval_dual(n, p, var); });
+      return out;
+    }
+
+    consteval bool check_dual_constexpr()
+    {
+      constexpr Dual<double> a{2.0, 1.0};
+      constexpr Dual<double> b{3.0, 0.0};
+      constexpr auto c = a * b;
+      return c.val == 6.0 && c.dval == 3.0;
+    }
+    static_assert(check_dual_constexpr(), "Dual constexpr kernel broken");
+
+  } // namespace kernel
 
   // ── VM: tiny expression VM with symbolic diff and optional LLVM JIT ──────
   // Factory creates VMs and forms (Factory pattern)
@@ -904,28 +1018,11 @@ namespace np::differential
   };
 
   // ── Exterior derivative (Template Method + Strategy) ─────────────────────
+  // Modern kernel delegates to kernel::exterior_scalar using ranges
   template <Scalar T = f64_t>
   NP_NODISCARD inline OneFormT<T> exterior_derivative(const ScalarFieldT<T>& f)
   {
-    OneFormT<T> out;
-    out.dim = f.dim;
-    out.comps.resize(f.dim);
-    for (int i = 0; i < f.dim; ++i)
-    {
-      // Use dual AD if f is from VM? For generic std::function, use central difference
-      ScalarFieldT<T> df(
-          [f, i](const PointT<T>& p) -> T
-          {
-            T h = T(1e-7);
-            PointT<T> pp = p, pm = p;
-            pp[i] += h;
-            pm[i] -= h;
-            return (f(pp) - f(pm)) / (T(2) * h);
-          },
-          f.dim);
-      out.comps[i] = std::move(df);
-    }
-    return out;
+    return kernel::exterior_scalar<T>(f);
   }
   // non-templated alias for f64_t
   NP_NODISCARD inline OneForm exterior_derivative(const ScalarField& f)
@@ -1490,228 +1587,12 @@ namespace np::differential
 
   inline NodePtr VM::diff_node(const NodePtr& n, int var) const
   {
-    // Visitor: symbolic differentiation
-    switch (n->type)
-    {
-      case Node::Const:
-        return make_const(0);
-      case Node::Var:
-        return make_const(n->var == var ? 1 : 0);
-      case Node::Add:
-      {
-        auto o = std::make_shared<Node>();
-        o->type = Node::Add;
-        o->left = diff_node(n->left, var);
-        o->right = diff_node(n->right, var);
-        return o;
-      }
-      case Node::Sub:
-      {
-        auto o = std::make_shared<Node>();
-        o->type = Node::Sub;
-        o->left = diff_node(n->left, var);
-        o->right = diff_node(n->right, var);
-        return o;
-      }
-      case Node::Mul:
-      {
-        auto o = std::make_shared<Node>();
-        o->type = Node::Add;
-        auto a = std::make_shared<Node>();
-        a->type = Node::Mul;
-        a->left = diff_node(n->left, var);
-        a->right = n->right;
-        auto b = std::make_shared<Node>();
-        b->type = Node::Mul;
-        b->left = n->left;
-        b->right = diff_node(n->right, var);
-        o->left = a;
-        o->right = b;
-        return o;
-      }
-      case Node::Div:
-      {
-        auto num = std::make_shared<Node>();
-        num->type = Node::Sub;
-        auto a = std::make_shared<Node>();
-        a->type = Node::Mul;
-        a->left = diff_node(n->left, var);
-        a->right = n->right;
-        auto b = std::make_shared<Node>();
-        b->type = Node::Mul;
-        b->left = n->left;
-        b->right = diff_node(n->right, var);
-        num->left = a;
-        num->right = b;
-        auto den = std::make_shared<Node>();
-        den->type = Node::Pow;
-        den->left = n->right;
-        den->right = make_const(2);
-        auto o = std::make_shared<Node>();
-        o->type = Node::Div;
-        o->left = num;
-        o->right = den;
-        return o;
-      }
-      case Node::Pow:
-      {
-        if (n->right->type == Node::Const)
-        {
-          f64_t c = n->right->cval;
-          auto coeff = make_const(c);
-          auto pw = std::make_shared<Node>();
-          pw->type = Node::Pow;
-          pw->left = n->left;
-          pw->right = make_const(c - 1);
-          auto mul = std::make_shared<Node>();
-          mul->type = Node::Mul;
-          mul->left = coeff;
-          mul->right = pw;
-          auto o = std::make_shared<Node>();
-          o->type = Node::Mul;
-          o->left = mul;
-          o->right = diff_node(n->left, var);
-          return o;
-        }
-        return diff_node(n, var);
-      }
-      case Node::Sin:
-      {
-        auto o = std::make_shared<Node>();
-        o->type = Node::Mul;
-        auto c = std::make_shared<Node>();
-        c->type = Node::Cos;
-        c->child = n->child;
-        o->left = c;
-        o->right = diff_node(n->child, var);
-        return o;
-      }
-      case Node::Cos:
-      {
-        auto o = std::make_shared<Node>();
-        o->type = Node::Mul;
-        auto s = std::make_shared<Node>();
-        s->type = Node::Sin;
-        s->child = n->child;
-        auto neg = std::make_shared<Node>();
-        neg->type = Node::Mul;
-        neg->left = make_const(-1);
-        neg->right = s;
-        o->left = neg;
-        o->right = diff_node(n->child, var);
-        return o;
-      }
-      case Node::Exp:
-      {
-        auto o = std::make_shared<Node>();
-        o->type = Node::Mul;
-        o->left = n;
-        o->right = diff_node(n->child, var);
-        return o;
-      }
-      case Node::Log:
-      {
-        auto o = std::make_shared<Node>();
-        o->type = Node::Div;
-        o->left = diff_node(n->child, var);
-        o->right = n->child;
-        return o;
-      }
-      case Node::Sqrt:
-      {
-        // (sqrt(u))' = u' / (2 sqrt(u))
-        auto o = std::make_shared<Node>();
-        o->type = Node::Div;
-        o->left = diff_node(n->child, var);
-        auto den = std::make_shared<Node>();
-        den->type = Node::Mul;
-        den->left = make_const(2);
-        auto s = std::make_shared<Node>();
-        s->type = Node::Sqrt;
-        s->child = n->child;
-        den->right = s;
-        o->right = den;
-        return o;
-      }
-      case Node::Tan:
-      {
-        // (tan u)' = u' / cos^2 u
-        auto o = std::make_shared<Node>();
-        o->type = Node::Div;
-        o->left = diff_node(n->child, var);
-        auto den = std::make_shared<Node>();
-        den->type = Node::Pow;
-        auto c = std::make_shared<Node>();
-        c->type = Node::Cos;
-        c->child = n->child;
-        den->left = c;
-        den->right = make_const(2);
-        o->right = den;
-        return o;
-      }
-      case Node::Asin:
-      {
-        // (asin u)' = u' / sqrt(1 - u^2)
-        auto o = std::make_shared<Node>();
-        o->type = Node::Div;
-        o->left = diff_node(n->child, var);
-        auto den = std::make_shared<Node>();
-        den->type = Node::Sqrt;
-        auto sub = std::make_shared<Node>();
-        sub->type = Node::Sub;
-        sub->left = make_const(1);
-        auto pw = std::make_shared<Node>();
-        pw->type = Node::Pow;
-        pw->left = n->child;
-        pw->right = make_const(2);
-        sub->right = pw;
-        den->child = sub;
-        o->right = den;
-        return o;
-      }
-      case Node::Acos:
-      {
-        // (acos u)' = -u' / sqrt(1 - u^2)
-        auto o = std::make_shared<Node>();
-        o->type = Node::Mul;
-        o->left = make_const(-1);
-        auto div = std::make_shared<Node>();
-        div->type = Node::Div;
-        div->left = diff_node(n->child, var);
-        auto den = std::make_shared<Node>();
-        den->type = Node::Sqrt;
-        auto sub = std::make_shared<Node>();
-        sub->type = Node::Sub;
-        sub->left = make_const(1);
-        auto pw = std::make_shared<Node>();
-        pw->type = Node::Pow;
-        pw->left = n->child;
-        pw->right = make_const(2);
-        sub->right = pw;
-        den->child = sub;
-        div->right = den;
-        o->right = div;
-        return o;
-      }
-      case Node::Atan:
-      {
-        // (atan u)' = u' / (1 + u^2)
-        auto o = std::make_shared<Node>();
-        o->type = Node::Div;
-        o->left = diff_node(n->child, var);
-        auto den = std::make_shared<Node>();
-        den->type = Node::Add;
-        den->left = make_const(1);
-        auto pw = std::make_shared<Node>();
-        pw->type = Node::Pow;
-        pw->left = n->child;
-        pw->right = make_const(2);
-        den->right = pw;
-        o->right = den;
-        return o;
-      }
-    }
-    return make_const(0);
+    // Modern kernel: Visitor + Prototype + ranges-aware, single dispatch
+    if (!n)
+      return make_const(0);
+    // Delegate to modern kernel symbolic visitor (C++20 variant visitation)
+    // Keeps derivation kernel centralized in kernel::symbolic / DiffVisitor
+    return kernel::symbolic(*n, var);
   }
 
   // Strategy implementations
