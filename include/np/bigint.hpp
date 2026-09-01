@@ -196,7 +196,58 @@ namespace np
     {
       return bigint(std::string(str, len));
     }
+    NP_NODISCARD inline bigint operator""_mpz(const char* str, std::size_t len)
+    {
+      return bigint(std::string(str, len));
+    }
   } // namespace literals
+
+  // ── Ergonomic helpers ───────────────────────────────────────────────────
+
+  /**
+   * @brief Create `bigint` from any string/arithmetic literal (constexpr where possible).
+   * `auto b = np::make_bigint("12345678901234567890");`
+   */
+  template <typename T>
+  NP_NODISCARD inline auto make_bigint(T&& v) -> bigint
+  {
+    if constexpr (detail::is_bigint_v<std::remove_cv_t<T>>)
+      return bigint(std::forward<T>(v));
+    else if constexpr (std::is_same_v<std::remove_cv_t<T>, const char*> || std::is_same_v<std::remove_cv_t<T>, char*>)
+      return bigint(std::string(v));
+    else
+      return bigint(std::forward<T>(v));
+  }
+
+  /**
+   * @brief `constexpr` promote any integral `ndarray` to `ndarray<bigint>`.
+   * `auto b = np::promote_to_bigint(a); // ndarray<int> -> ndarray<bigint> if needed`
+   * If already `bigint`, returns copy.
+   */
+  template <typename T>
+  NP_NODISCARD inline auto promote_to_bigint(const ndarray<T>& a)
+  {
+    if constexpr (detail::is_bigint_v<T>)
+      return a.copy();
+    else
+      return as_bigint(a);
+  }
+
+  /**
+   * @brief Create `ndarray<bigint>` from initializer list of ints/strings.
+   * `auto a = np::make_bigint_array({1, 2, 3});`
+   * `auto b = np::make_bigint_array({"123", "456"});`
+   */
+  template <typename T>
+  NP_NODISCARD inline auto make_bigint_array(std::initializer_list<T> list) -> ndarray<bigint>
+  {
+    std::vector<bigint> data;
+    data.reserve(list.size());
+    for (auto &v : list) data.emplace_back(make_bigint(v));
+    ndarray<bigint> out(std::vector<int>{static_cast<int>(data.size())});
+    for (size_t i = 0; i < data.size(); ++i) out[i] = data[i];
+    return out;
+  }
 
 } // namespace np
 
