@@ -408,7 +408,8 @@ namespace np::cohomology
     int n = detail::effective_dim(hg);
     if (n < 0 || hg[n].betti != 1)
       return ndarray<int>::from_data({0, 0}, std::vector<int>{});
-    // Try middle pairing first, fallback to H^0×H^n which is always 1×1 for closed manifold
+    // Try middle pairing first, fallback to H^0×H^n which is always 1×1 for closed
+    // manifold
     int half = n / 2;
     int p = half;
     int q = n - p;

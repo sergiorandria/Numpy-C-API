@@ -660,7 +660,8 @@ namespace np::manifold
             tris.push_back({v00, v11, v01});
           }
         homology::SimplicialComplexBuilder b;
-        for (auto& t : tris) b.add_simplex(t);
+        for (auto& t : tris)
+          b.add_simplex(t);
         return b.build();
       }
       // For dim>2, build wedge-like product placeholder whose homology matches

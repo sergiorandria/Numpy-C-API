@@ -133,10 +133,12 @@ namespace np::spectral
     auto pg2 = e2_page_product(base, fiber);
     ss.pages.push_back(pg2);
 
-    // Detect Hopf fibration: base S2 (H=[1,0,1]), fiber S1 (H=[1,1]) – trim trailing zeros
+    // Detect Hopf fibration: base S2 (H=[1,0,1]), fiber S1 (H=[1,1]) – trim trailing
+    // zeros
     auto hb_raw = homology::betti_numbers(base);
     auto hf_raw = homology::betti_numbers(fiber);
-    auto trim = [](std::vector<int> v) {
+    auto trim = [](std::vector<int> v)
+    {
       while (v.size() > 1 && v.back() == 0)
         v.pop_back();
       return v;

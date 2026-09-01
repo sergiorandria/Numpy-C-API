@@ -1,6 +1,7 @@
 /**
  * @file differential.hpp
- * @brief Differential forms, exterior derivatives, and a tiny VM/LLVM JIT for scalar fields.
+ * @brief Differential forms, exterior derivatives, and a tiny VM/LLVM JIT for scalar
+ * fields.
  *
  * Provides `np::differential` with:
  *   - `ScalarField` (0-form) `f: R^n -> R` via `std::function` or string `VM`
@@ -62,21 +63,47 @@ namespace np::differential
   {
     double val = 0, dval = 0;
     Dual() = default;
-    Dual(double v, double d = 0) : val(v), dval(d) {}
+    Dual(double v, double d = 0) : val(v), dval(d)
+    {
+    }
   };
 
-  inline Dual operator+(const Dual& a, const Dual& b) { return {a.val + b.val, a.dval + b.dval}; }
-  inline Dual operator-(const Dual& a, const Dual& b) { return {a.val - b.val, a.dval - b.dval}; }
-  inline Dual operator*(const Dual& a, const Dual& b) { return {a.val * b.val, a.val * b.dval + a.dval * b.val}; }
+  inline Dual operator+(const Dual& a, const Dual& b)
+  {
+    return {a.val + b.val, a.dval + b.dval};
+  }
+  inline Dual operator-(const Dual& a, const Dual& b)
+  {
+    return {a.val - b.val, a.dval - b.dval};
+  }
+  inline Dual operator*(const Dual& a, const Dual& b)
+  {
+    return {a.val * b.val, a.val * b.dval + a.dval * b.val};
+  }
   inline Dual operator/(const Dual& a, const Dual& b)
   {
     return {a.val / b.val, (a.dval * b.val - a.val * b.dval) / (b.val * b.val)};
   }
-  inline Dual sin(const Dual& a) { return {std::sin(a.val), std::cos(a.val) * a.dval}; }
-  inline Dual cos(const Dual& a) { return {std::cos(a.val), -std::sin(a.val) * a.dval}; }
-  inline Dual exp(const Dual& a) { return {std::exp(a.val), std::exp(a.val) * a.dval}; }
-  inline Dual log(const Dual& a) { return {std::log(a.val), a.dval / a.val}; }
-  inline Dual pow(const Dual& a, double n) { return {std::pow(a.val, n), n * std::pow(a.val, n - 1) * a.dval}; }
+  inline Dual sin(const Dual& a)
+  {
+    return {std::sin(a.val), std::cos(a.val) * a.dval};
+  }
+  inline Dual cos(const Dual& a)
+  {
+    return {std::cos(a.val), -std::sin(a.val) * a.dval};
+  }
+  inline Dual exp(const Dual& a)
+  {
+    return {std::exp(a.val), std::exp(a.val) * a.dval};
+  }
+  inline Dual log(const Dual& a)
+  {
+    return {std::log(a.val), a.dval / a.val};
+  }
+  inline Dual pow(const Dual& a, double n)
+  {
+    return {std::pow(a.val, n), n * std::pow(a.val, n - 1) * a.dval};
+  }
   inline Dual pow(const Dual& a, const Dual& b)
   {
     double v = std::pow(a.val, b.val);
@@ -93,10 +120,21 @@ namespace np::differential
     std::function<double(const Point&)> f;
     int dim = 0;
     ScalarField() = default;
-    ScalarField(std::function<double(const Point&)> fn, int d) : f(std::move(fn)), dim(d) {}
-    ScalarField(std::function<double(double)> fn) : f([fn](const Point& p) { return fn(p[0]); }), dim(1) {}
-    double operator()(const Point& p) const { return f(p); }
-    double operator()(double x) const { return f(Point{x}); }
+    ScalarField(std::function<double(const Point&)> fn, int d) : f(std::move(fn)), dim(d)
+    {
+    }
+    ScalarField(std::function<double(double)> fn)
+        : f([fn](const Point& p) { return fn(p[0]); }), dim(1)
+    {
+    }
+    double operator()(const Point& p) const
+    {
+      return f(p);
+    }
+    double operator()(double x) const
+    {
+      return f(Point{x});
+    }
   };
 
   struct OneForm
@@ -104,8 +142,14 @@ namespace np::differential
     std::vector<ScalarField> comps; // size = dim, comps[i] = f_i(x) for dx_i
     int dim = 0;
     OneForm() = default;
-    explicit OneForm(int d) : dim(d), comps(d, ScalarField{[](const Point&) { return 0; }, d}) {}
-    double operator()(const Point& p, int i) const { return comps[i](p); }
+    explicit OneForm(int d)
+        : dim(d), comps(d, ScalarField{[](const Point&) { return 0; }, d})
+    {
+    }
+    double operator()(const Point& p, int i) const
+    {
+      return comps[i](p);
+    }
   };
 
   struct KForm
@@ -114,7 +158,9 @@ namespace np::differential
     // coeffs indexed by sorted tuple I = {i1<...<ik}} -> function
     std::map<std::vector<int>, ScalarField> coeffs;
     KForm() = default;
-    KForm(int degree, int d) : k(degree), dim(d) {}
+    KForm(int degree, int d) : k(degree), dim(d)
+    {
+    }
   };
 
   // ── VM: tiny expression VM with symbolic diff and optional LLVM JIT ─────
@@ -123,7 +169,20 @@ namespace np::differential
   {
     struct Node
     {
-      enum Type { Var, Const, Add, Sub, Mul, Div, Pow, Sin, Cos, Exp, Log } type = Const;
+      enum Type
+      {
+        Var,
+        Const,
+        Add,
+        Sub,
+        Mul,
+        Div,
+        Pow,
+        Sin,
+        Cos,
+        Exp,
+        Log
+      } type = Const;
       int var = -1;
       double cval = 0;
       std::shared_ptr<Node> left, right, child;
@@ -150,7 +209,11 @@ namespace np::differential
     // Parser state
     std::string expr;
     size_t pos = 0;
-    void skip() { while (pos < expr.size() && isspace((unsigned char)expr[pos])) ++pos; }
+    void skip()
+    {
+      while (pos < expr.size() && isspace((unsigned char)expr[pos]))
+        ++pos;
+    }
     std::shared_ptr<Node> parse_expr()
     {
       auto n = parse_term();
@@ -219,20 +282,23 @@ namespace np::differential
     std::shared_ptr<Node> parse_primary()
     {
       skip();
-      if (pos >= expr.size()) throw std::invalid_argument("VM: unexpected end");
+      if (pos >= expr.size())
+        throw std::invalid_argument("VM: unexpected end");
       if (expr[pos] == '(')
       {
         ++pos;
         auto n = parse_expr();
         skip();
-        if (pos >= expr.size() || expr[pos] != ')') throw std::invalid_argument("VM: missing )");
+        if (pos >= expr.size() || expr[pos] != ')')
+          throw std::invalid_argument("VM: missing )");
         ++pos;
         return n;
       }
       if (isalpha((unsigned char)expr[pos]))
       {
         size_t start = pos;
-        while (pos < expr.size() && isalpha((unsigned char)expr[pos])) ++pos;
+        while (pos < expr.size() && isalpha((unsigned char)expr[pos]))
+          ++pos;
         std::string name = expr.substr(start, pos - start);
         skip();
         if (pos < expr.size() && expr[pos] == '(')
@@ -240,25 +306,34 @@ namespace np::differential
           ++pos;
           auto arg = parse_expr();
           skip();
-          if (pos >= expr.size() || expr[pos] != ')') throw std::invalid_argument("VM: missing ) after func");
+          if (pos >= expr.size() || expr[pos] != ')')
+            throw std::invalid_argument("VM: missing ) after func");
           ++pos;
           auto o = std::make_shared<Node>();
-          if (name == "sin") o->type = Node::Sin;
-          else if (name == "cos") o->type = Node::Cos;
-          else if (name == "exp") o->type = Node::Exp;
-          else if (name == "log") o->type = Node::Log;
-          else throw std::invalid_argument("VM: unknown func " + name);
+          if (name == "sin")
+            o->type = Node::Sin;
+          else if (name == "cos")
+            o->type = Node::Cos;
+          else if (name == "exp")
+            o->type = Node::Exp;
+          else if (name == "log")
+            o->type = Node::Log;
+          else
+            throw std::invalid_argument("VM: unknown func " + name);
           o->child = arg;
           return o;
         }
         auto it = var_index.find(name);
-        if (it == var_index.end()) throw std::invalid_argument("VM: unknown var " + name);
+        if (it == var_index.end())
+          throw std::invalid_argument("VM: unknown var " + name);
         return make_var(it->second);
       }
       // number
       size_t start = pos;
-      while (pos < expr.size() && (isdigit((unsigned char)expr[pos]) || expr[pos] == '.')) ++pos;
-      if (start == pos) throw std::invalid_argument("VM: expected number/var");
+      while (pos < expr.size() && (isdigit((unsigned char)expr[pos]) || expr[pos] == '.'))
+        ++pos;
+      if (start == pos)
+        throw std::invalid_argument("VM: expected number/var");
       double v = std::stod(expr.substr(start, pos - start));
       return make_const(v);
     }
@@ -267,43 +342,95 @@ namespace np::differential
     {
       switch (n->type)
       {
-        case Node::Const: return n->cval;
-        case Node::Var: return p[n->var];
-        case Node::Add: return eval_node(n->left, p) + eval_node(n->right, p);
-        case Node::Sub: return eval_node(n->left, p) - eval_node(n->right, p);
-        case Node::Mul: return eval_node(n->left, p) * eval_node(n->right, p);
-        case Node::Div: return eval_node(n->left, p) / eval_node(n->right, p);
-        case Node::Pow: return std::pow(eval_node(n->left, p), eval_node(n->right, p));
-        case Node::Sin: return std::sin(eval_node(n->child, p));
-        case Node::Cos: return std::cos(eval_node(n->child, p));
-        case Node::Exp: return std::exp(eval_node(n->child, p));
-        case Node::Log: return std::log(eval_node(n->child, p));
+        case Node::Const:
+          return n->cval;
+        case Node::Var:
+          return p[n->var];
+        case Node::Add:
+          return eval_node(n->left, p) + eval_node(n->right, p);
+        case Node::Sub:
+          return eval_node(n->left, p) - eval_node(n->right, p);
+        case Node::Mul:
+          return eval_node(n->left, p) * eval_node(n->right, p);
+        case Node::Div:
+          return eval_node(n->left, p) / eval_node(n->right, p);
+        case Node::Pow:
+          return std::pow(eval_node(n->left, p), eval_node(n->right, p));
+        case Node::Sin:
+          return std::sin(eval_node(n->child, p));
+        case Node::Cos:
+          return std::cos(eval_node(n->child, p));
+        case Node::Exp:
+          return std::exp(eval_node(n->child, p));
+        case Node::Log:
+          return std::log(eval_node(n->child, p));
       }
       return 0;
     }
 
-    Dual eval_dual(const std::shared_ptr<Node>& n, const Point& p, int var, double h) const
+    Dual
+    eval_dual(const std::shared_ptr<Node>& n, const Point& p, int var, double h) const
     {
       // Dual with dval = 1 for var, 0 else
       switch (n->type)
       {
-        case Node::Const: return {n->cval, 0};
-        case Node::Var: return {p[n->var], (n->var == var) ? 1.0 : 0.0};
-        case Node::Add: { auto a = eval_dual(n->left, p, var, h); auto b = eval_dual(n->right, p, var, h); return a + b; }
-        case Node::Sub: { auto a = eval_dual(n->left, p, var, h); auto b = eval_dual(n->right, p, var, h); return a - b; }
-        case Node::Mul: { auto a = eval_dual(n->left, p, var, h); auto b = eval_dual(n->right, p, var, h); return a * b; }
-        case Node::Div: { auto a = eval_dual(n->left, p, var, h); auto b = eval_dual(n->right, p, var, h); return a / b; }
-        case Node::Pow: {
+        case Node::Const:
+          return {n->cval, 0};
+        case Node::Var:
+          return {p[n->var], (n->var == var) ? 1.0 : 0.0};
+        case Node::Add:
+        {
+          auto a = eval_dual(n->left, p, var, h);
+          auto b = eval_dual(n->right, p, var, h);
+          return a + b;
+        }
+        case Node::Sub:
+        {
+          auto a = eval_dual(n->left, p, var, h);
+          auto b = eval_dual(n->right, p, var, h);
+          return a - b;
+        }
+        case Node::Mul:
+        {
+          auto a = eval_dual(n->left, p, var, h);
+          auto b = eval_dual(n->right, p, var, h);
+          return a * b;
+        }
+        case Node::Div:
+        {
+          auto a = eval_dual(n->left, p, var, h);
+          auto b = eval_dual(n->right, p, var, h);
+          return a / b;
+        }
+        case Node::Pow:
+        {
           auto a = eval_dual(n->left, p, var, h);
           auto b = eval_dual(n->right, p, var, h);
           // if exponent is const, use pow(a,n)
-          if (n->right->type == Node::Const) return pow(a, n->right->cval);
+          if (n->right->type == Node::Const)
+            return pow(a, n->right->cval);
           return pow(a, b);
         }
-        case Node::Sin: { auto a = eval_dual(n->child, p, var, h); return sin(a); }
-        case Node::Cos: { auto a = eval_dual(n->child, p, var, h); return cos(a); }
-        case Node::Exp: { auto a = eval_dual(n->child, p, var, h); return exp(a); }
-        case Node::Log: { auto a = eval_dual(n->child, p, var, h); return log(a); }
+        case Node::Sin:
+        {
+          auto a = eval_dual(n->child, p, var, h);
+          return sin(a);
+        }
+        case Node::Cos:
+        {
+          auto a = eval_dual(n->child, p, var, h);
+          return cos(a);
+        }
+        case Node::Exp:
+        {
+          auto a = eval_dual(n->child, p, var, h);
+          return exp(a);
+        }
+        case Node::Log:
+        {
+          auto a = eval_dual(n->child, p, var, h);
+          return log(a);
+        }
       }
       return {0, 0};
     }
@@ -312,23 +439,28 @@ namespace np::differential
     {
       switch (n->type)
       {
-        case Node::Const: return make_const(0);
-        case Node::Var: return make_const(n->var == var ? 1 : 0);
-        case Node::Add: {
+        case Node::Const:
+          return make_const(0);
+        case Node::Var:
+          return make_const(n->var == var ? 1 : 0);
+        case Node::Add:
+        {
           auto o = std::make_shared<Node>();
           o->type = Node::Add;
           o->left = diff_node(n->left, var);
           o->right = diff_node(n->right, var);
           return o;
         }
-        case Node::Sub: {
+        case Node::Sub:
+        {
           auto o = std::make_shared<Node>();
           o->type = Node::Sub;
           o->left = diff_node(n->left, var);
           o->right = diff_node(n->right, var);
           return o;
         }
-        case Node::Mul: {
+        case Node::Mul:
+        {
           // (f g)' = f' g + f g'
           auto o = std::make_shared<Node>();
           o->type = Node::Add;
@@ -344,7 +476,8 @@ namespace np::differential
           o->right = b;
           return o;
         }
-        case Node::Div: {
+        case Node::Div:
+        {
           // (f/g)' = (f' g - f g')/g^2
           auto num = std::make_shared<Node>();
           num->type = Node::Sub;
@@ -368,7 +501,8 @@ namespace np::differential
           o->right = den;
           return o;
         }
-        case Node::Pow: {
+        case Node::Pow:
+        {
           if (n->right->type == Node::Const)
           {
             double c = n->right->cval;
@@ -391,7 +525,8 @@ namespace np::differential
           // general a^b: use exp(b log a)
           return diff_node(n, var); // fallback to AD
         }
-        case Node::Sin: {
+        case Node::Sin:
+        {
           auto o = std::make_shared<Node>();
           o->type = Node::Mul;
           auto c = std::make_shared<Node>();
@@ -401,7 +536,8 @@ namespace np::differential
           o->right = diff_node(n->child, var);
           return o;
         }
-        case Node::Cos: {
+        case Node::Cos:
+        {
           auto o = std::make_shared<Node>();
           o->type = Node::Mul;
           auto s = std::make_shared<Node>();
@@ -415,14 +551,16 @@ namespace np::differential
           o->right = diff_node(n->child, var);
           return o;
         }
-        case Node::Exp: {
+        case Node::Exp:
+        {
           auto o = std::make_shared<Node>();
           o->type = Node::Mul;
           o->left = n;
           o->right = diff_node(n->child, var);
           return o;
         }
-        case Node::Log: {
+        case Node::Log:
+        {
           auto o = std::make_shared<Node>();
           o->type = Node::Div;
           o->left = diff_node(n->child, var);
@@ -435,14 +573,17 @@ namespace np::differential
 
   public:
     VM() = default;
-    VM(const std::string& e, const std::vector<std::string>& vs = std::vector<std::string>{"x"})
+    VM(const std::string& e,
+       const std::vector<std::string>& vs = std::vector<std::string>{"x"})
         : expr(e), vars(vs)
     {
-      for (size_t i = 0; i < vars.size(); ++i) var_index[vars[i]] = static_cast<int>(i);
+      for (size_t i = 0; i < vars.size(); ++i)
+        var_index[vars[i]] = static_cast<int>(i);
       pos = 0;
       root = parse_expr();
       skip();
-      if (pos != expr.size()) throw std::invalid_argument("VM: trailing chars");
+      if (pos != expr.size())
+        throw std::invalid_argument("VM: trailing chars");
 #if NP_HAS_LLVM_JIT
       // Optional LLVM JIT: build module for root (header-only fallback keeps interpreter)
 #endif
@@ -451,23 +592,46 @@ namespace np::differential
     // ── Ergonomic eval ──────────────────────────────────────────────────
     double eval(const Point& p) const
     {
-      if (!root) throw std::runtime_error("VM: empty");
+      if (!root)
+        throw std::runtime_error("VM: empty");
       return eval_node(root, p);
     }
-    double operator()(const Point& p) const { return eval(p); }
-    double operator()(double x) const { return eval(Point{x}); }
-    double operator()(double x, double y) const { return eval(Point{x, y}); }
-    double operator()(double x, double y, double z) const { return eval(Point{x, y, z}); }
+    double operator()(const Point& p) const
+    {
+      return eval(p);
+    }
+    double operator()(double x) const
+    {
+      return eval(Point{x});
+    }
+    double operator()(double x, double y) const
+    {
+      return eval(Point{x, y});
+    }
+    double operator()(double x, double y, double z) const
+    {
+      return eval(Point{x, y, z});
+    }
 
-    int dim() const noexcept { return static_cast<int>(vars.size()); }
-    const std::vector<std::string>& variables() const noexcept { return vars; }
+    int dim() const noexcept
+    {
+      return static_cast<int>(vars.size());
+    }
+    const std::vector<std::string>& variables() const noexcept
+    {
+      return vars;
+    }
 
     // Dual AD derivative w.r.t var index
-    double derivative(const Point& p, int var) const { return eval_dual(root, p, var, 0).dval; }
+    double derivative(const Point& p, int var) const
+    {
+      return eval_dual(root, p, var, 0).dval;
+    }
     double derivative(const Point& p, const std::string& var) const
     {
       auto it = var_index.find(var);
-      if (it == var_index.end()) throw std::invalid_argument("VM: unknown var " + var);
+      if (it == var_index.end())
+        throw std::invalid_argument("VM: unknown var " + var);
       return derivative(p, it->second);
     }
 
@@ -483,31 +647,42 @@ namespace np::differential
     VM derivative_vm(const std::string& var) const
     {
       auto it = var_index.find(var);
-      if (it == var_index.end()) throw std::invalid_argument("VM: unknown var " + var);
+      if (it == var_index.end())
+        throw std::invalid_argument("VM: unknown var " + var);
       return derivative_vm(it->second);
     }
     // Shorthand d/dx, d/dy
-    VM dx() const { return derivative_vm(0); }
+    VM dx() const
+    {
+      return derivative_vm(0);
+    }
     VM dy() const
     {
-      if (vars.size() < 2) throw std::invalid_argument("VM::dy need dim>=2");
+      if (vars.size() < 2)
+        throw std::invalid_argument("VM::dy need dim>=2");
       return derivative_vm(1);
     }
 
-    std::string to_string() const { return expr; }
+    std::string to_string() const
+    {
+      return expr;
+    }
 
     // Evaluate on ndarray points: each row is a point
     ndarray<double> eval_batch(const ndarray<double>& pts) const
     {
       // pts shape [N, dim]
-      if (pts.ndim() != 2) throw std::invalid_argument("VM::eval_batch need 2D");
+      if (pts.ndim() != 2)
+        throw std::invalid_argument("VM::eval_batch need 2D");
       int N = pts.shape[0], D = pts.shape[1];
-      if (D != (int)vars.size()) throw std::invalid_argument("VM::eval_batch dim mismatch");
+      if (D != (int)vars.size())
+        throw std::invalid_argument("VM::eval_batch dim mismatch");
       ndarray<double> out(std::vector<int>{N});
       for (int i = 0; i < N; ++i)
       {
         Point p(D);
-        for (int j = 0; j < D; ++j) p[j] = pts(i, j);
+        for (int j = 0; j < D; ++j)
+          p[j] = pts(i, j);
         out[i] = eval(p);
       }
       return out;
@@ -515,10 +690,12 @@ namespace np::differential
     // Single-value batch for 1D
     ndarray<double> eval_batch_1d(const ndarray<double>& xs) const
     {
-      if (xs.ndim() != 1) throw std::invalid_argument("eval_batch_1d need 1D");
+      if (xs.ndim() != 1)
+        throw std::invalid_argument("eval_batch_1d need 1D");
       int N = xs.shape[0];
       ndarray<double> out(std::vector<int>{N});
-      for (int i = 0; i < N; ++i) out[i] = eval(Point{xs[i]});
+      for (int i = 0; i < N; ++i)
+        out[i] = eval(Point{xs[i]});
       return out;
     }
   };
@@ -535,7 +712,8 @@ namespace np::differential
       // Use dual AD if f is from VM? For generic std::function, use finite difference
       // Here we capture f and use central difference
       ScalarField df(
-          [f, i](const Point& p) -> double {
+          [f, i](const Point& p) -> double
+          {
             double h = 1e-7;
             Point pp = p, pm = p;
             pp[i] += h;
@@ -564,7 +742,8 @@ namespace np::differential
     }
     return out;
   }
-  NP_NODISCARD inline OneForm exterior_derivative_vm(const VM& vm, const std::vector<std::string>& vars)
+  NP_NODISCARD inline OneForm
+  exterior_derivative_vm(const VM& vm, const std::vector<std::string>& vars)
   {
     OneForm out;
     out.dim = static_cast<int>(vars.size());
@@ -580,12 +759,19 @@ namespace np::differential
     return out;
   }
   // Alias d for exterior_derivative
-  NP_NODISCARD inline OneForm d(const ScalarField& f) { return exterior_derivative(f); }
-  NP_NODISCARD inline OneForm d(const VM& vm) { return exterior_derivative(vm); }
+  NP_NODISCARD inline OneForm d(const ScalarField& f)
+  {
+    return exterior_derivative(f);
+  }
+  NP_NODISCARD inline OneForm d(const VM& vm)
+  {
+    return exterior_derivative(vm);
+  }
 
   NP_NODISCARD inline KForm wedge(const OneForm& a, const OneForm& b)
   {
-    if (a.dim != b.dim) throw std::invalid_argument("wedge: dim mismatch");
+    if (a.dim != b.dim)
+      throw std::invalid_argument("wedge: dim mismatch");
     KForm out;
     out.k = 2;
     out.dim = a.dim;
@@ -595,7 +781,8 @@ namespace np::differential
         std::vector<int> idx = {i, j};
         // coeff = a_i * b_j - a_j * b_i
         ScalarField cf(
-            [a, b, i, j](const Point& p) { return a.comps[i](p) * b.comps[j](p) - a.comps[j](p) * b.comps[i](p); },
+            [a, b, i, j](const Point& p)
+            { return a.comps[i](p) * b.comps[j](p) - a.comps[j](p) * b.comps[i](p); },
             a.dim);
         out.coeffs[idx] = cf;
       }
@@ -610,7 +797,8 @@ namespace np::differential
     // This helper is used by variety de_rham
     std::vector<int> betti(dim + 1, 0);
     betti[0] = 1;
-    if (dim >= 1) betti[dim] = 1;
+    if (dim >= 1)
+      betti[dim] = 1;
     return betti;
   }
 

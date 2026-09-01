@@ -31,7 +31,7 @@ class ndarray {
 
 ## 2. Umbrella and modules
 
-`np.hpp:13` (46 LOC) includes 22 headers in dependency order. `random.hpp` + `concatenate.hpp` excluded (ADL clash) — include explicitly.
+`np.hpp:13` (58 LOC) includes 26 headers in dependency order. `random.hpp` + `concatenate.hpp` excluded (ADL clash) — include explicitly.
 
 ```
 np → ndarray → creation → manipulation → linalg → fft → ...
@@ -57,7 +57,7 @@ np → ndarray → creation → manipulation → linalg → fft → ...
 
 ## 5. Testing
 
-`tests/test_util.hpp:48` — `test::check`, `approx`, `approx_c`. `tests/CMakeLists.txt` 22 targets + `bench_math` (AVX, not in ctest). All 22 pass on `dev`.
+`tests/test_util.hpp:48` — `test::check`, `approx`, `approx_c`. `tests/CMakeLists.txt` 29 targets + `bench_math` (AVX, not in ctest). All 29 pass on `dev` (incl. `test_higher` for cohomology/bundle/persistent/spectral).
 
 ## 6. File:line map (hot)
 
