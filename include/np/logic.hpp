@@ -29,6 +29,7 @@
 
 #include "api_macros.hpp"
 #include "ndarray.hpp"
+#include "pqc.hpp"
 
 namespace np
 {
@@ -610,18 +611,24 @@ namespace np
         set.insert(test_elements.data()[test_elements._flat_logical(i)]);
       if (element.is_contiguous()) [[likely]]
       {
-        auto &d_vec = out.data();
-        if constexpr (std::is_same_v<T, bool>) {
-          auto &s_vec = element.data();
+        auto& d_vec = out.data();
+        if constexpr (std::is_same_v<T, bool>)
+        {
+          auto& s_vec = element.data();
           std::size_t n = element.size();
-          for (std::size_t i = 0; i < n; ++i) {
-            bool found = set.find(static_cast<U>(static_cast<bool>(s_vec[i]))) != set.end();
+          for (std::size_t i = 0; i < n; ++i)
+          {
+            bool found =
+                set.find(static_cast<U>(static_cast<bool>(s_vec[i]))) != set.end();
             d_vec[i] = invert ? !found : found;
           }
-        } else {
+        }
+        else
+        {
           const T* __restrict s = element.data().data();
           std::size_t n = element.size();
-          for (std::size_t i = 0; i < n; ++i) {
+          for (std::size_t i = 0; i < n; ++i)
+          {
             bool found = set.find(static_cast<U>(s[i])) != set.end();
             d_vec[i] = invert ? !found : found;
           }
@@ -644,19 +651,26 @@ namespace np
     sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
     if (element.is_contiguous()) [[likely]]
     {
-      auto &d_vec = out.data();
-      if constexpr (std::is_same_v<T, bool>) {
-        auto &s_vec = element.data();
+      auto& d_vec = out.data();
+      if constexpr (std::is_same_v<T, bool>)
+      {
+        auto& s_vec = element.data();
         std::size_t n = element.size();
-        for (std::size_t i = 0; i < n; ++i) {
-          bool found = std::binary_search(sorted.begin(), sorted.end(), static_cast<U>(static_cast<bool>(s_vec[i])));
+        for (std::size_t i = 0; i < n; ++i)
+        {
+          bool found = std::binary_search(
+              sorted.begin(), sorted.end(), static_cast<U>(static_cast<bool>(s_vec[i])));
           d_vec[i] = invert ? !found : found;
         }
-      } else {
+      }
+      else
+      {
         const T* __restrict s = element.data().data();
         std::size_t n = element.size();
-        for (std::size_t i = 0; i < n; ++i) {
-          bool found = std::binary_search(sorted.begin(), sorted.end(), static_cast<U>(s[i]));
+        for (std::size_t i = 0; i < n; ++i)
+        {
+          bool found =
+              std::binary_search(sorted.begin(), sorted.end(), static_cast<U>(s[i]));
           d_vec[i] = invert ? !found : found;
         }
       }
@@ -899,6 +913,141 @@ namespace np
       }
     }
     return true;
+  }
+
+  /**
+   * @brief Constant-time array equality (PQC-hardened).
+   *
+   * Compares raw bytes with `pqc::ct_memequal` (branch-free, no
+   * secret-dependent early exit). Returns 1 if equal, 0 otherwise.
+   * For non-contiguous arrays falls back to element-wise constant-time
+   * accumulation. Prevents timing oracle on key material (ML-KEM/ML-DSA).
+   *
+   * Reference: pqc.hpp:ct_memequal, NIST FIPS 203
+   * @tparam T Element type of a1.
+   * @tparam U Element type of a2.
+   * @param a1 First array.
+   * @param a2 Second array.
+   * @return true if byte-wise equal in constant time.
+   */
+  NP_API template <typename T, typename U>
+  bool array_equal_ct(const ndarray<T>& a1, const ndarray<U>& a2) noexcept
+  {
+    if (a1.shape != a2.shape || a1.nbytes() != a2.nbytes())
+    {
+      return false;
+    }
+    if constexpr (std::is_same_v<T, U>)
+    {
+      if (a1.is_contiguous() && a2.is_contiguous())
+      {
+        pqc::ct_barrier();
+        int eq = pqc::ct_memequal(
+            static_cast<const void*>(a1.data().data()),
+            static_cast<const void*>(a2.data().data()),
+            a1.nbytes());
+        pqc::ct_barrier();
+        return eq == 1;
+      }
+    }
+    // Fallback: constant-time accumulation over logical elements
+    pqc::ct_barrier();
+    unsigned char diff = 0;
+    for (std::size_t i = 0; i < a1.size(); ++i)
+    {
+      T v1 = a1.data()[a1._flat_logical(i)];
+      U v2 = a2.data()[a2._flat_logical(i)];
+      // compare byte-wise via memcmp-style accumulation
+      const unsigned char* p1 = reinterpret_cast<const unsigned char*>(&v1);
+      const unsigned char* p2 = reinterpret_cast<const unsigned char*>(&v2);
+      for (std::size_t b = 0; b < sizeof(T) && b < sizeof(U); ++b)
+      {
+        diff |= p1[b] ^ p2[b];
+      }
+      if constexpr (sizeof(T) != sizeof(U))
+      {
+        // different sizes → not equal if sizes differ
+        if (sizeof(T) != sizeof(U))
+        {
+          diff |= 1;
+        }
+      }
+    }
+    int eq = pqc::ct_eq_u32(static_cast<std::uint32_t>(diff), 0);
+    pqc::ct_barrier();
+    return eq == 1;
+  }
+
+  /**
+   * @brief Constant-time broadcasted equality (PQC-hardened array_equiv).
+   *
+   * Broadcasts like `array_equiv` but accumulates differences in constant
+   * time without early exit. Returns false if shapes are not broadcastable.
+   * @tparam T Element type.
+   * @tparam U Element type.
+   * @return true if broadcast-equal in constant time.
+   */
+  NP_API template <typename T, typename U>
+  bool array_equiv_ct(const ndarray<T>& a1, const ndarray<U>& a2) noexcept
+  {
+    try
+    {
+      const auto out_shape = detail::broadcast_shapes(a1.shape, a2.shape);
+      const auto ndim_out = out_shape.size();
+      std::size_t total_elems = 1;
+      for (int d : out_shape)
+      {
+        total_elems *= static_cast<std::size_t>(d);
+      }
+      pqc::ct_barrier();
+      unsigned char diff = 0;
+      std::vector<std::size_t> idx(ndim_out, 0);
+      for (std::size_t i = 0; i < total_elems; ++i)
+      {
+        std::vector<std::size_t> idx1(a1.ndim(), 0);
+        std::vector<std::size_t> idx2(a2.ndim(), 0);
+        for (std::size_t d = 0; d < ndim_out; ++d)
+        {
+          if (d >= ndim_out - a1.ndim())
+          {
+            const auto d1 = d - (ndim_out - a1.ndim());
+            idx1[d1] = (a1.shape[d1] == 1) ? 0 : idx[d];
+          }
+          if (d >= ndim_out - a2.ndim())
+          {
+            const auto d2 = d - (ndim_out - a2.ndim());
+            idx2[d2] = (a2.shape[d2] == 1) ? 0 : idx[d];
+          }
+        }
+        T v1 = a1.get(idx1);
+        U v2 = static_cast<U>(a2.get(idx2));
+        // constant-time byte compare
+        const unsigned char* p1 = reinterpret_cast<const unsigned char*>(&v1);
+        const unsigned char* p2 = reinterpret_cast<const unsigned char*>(&v2);
+        for (std::size_t b = 0; b < sizeof(T) && b < sizeof(U); ++b)
+        {
+          diff |= p1[b] ^ p2[b];
+        }
+        if constexpr (sizeof(T) != sizeof(U))
+        {
+          diff |= 1;
+        }
+        for (std::size_t d = ndim_out; d-- > 0;)
+        {
+          if (++idx[d] < static_cast<std::size_t>(out_shape[d]))
+          {
+            break;
+          }
+          idx[d] = 0;
+        }
+      }
+      pqc::ct_barrier();
+      return pqc::ct_eq_u32(static_cast<std::uint32_t>(diff), 0) == 1;
+    }
+    catch (...)
+    {
+      return false;
+    }
   }
 
   /** @brief True if two arrays are element-wise equal within a tolerance.

@@ -27,6 +27,7 @@
 #include "api_macros.hpp"
 #include "exceptions.hpp"
 #include "ndarray.hpp"
+#include "pqc.hpp"
 
 namespace np::random
 {
@@ -50,8 +51,49 @@ namespace np::random
      * @param seed Random seed (uses random_device if not provided)
      */
     explicit Generator(std::optional<std::uint64_t> seed = std::nullopt)
-        : engine_(seed.has_value() ? *seed : std::random_device{}())
+        : engine_(
+              [&]() -> engine_type
+              {
+                if (seed.has_value())
+                {
+                  pqc::SecureSeed<std::uint64_t> ss(*seed);
+                  return engine_type(ss.get());
+                }
+                return engine_type(std::random_device{}());
+              }())
     {
+    }
+
+    ~Generator()
+    {
+      // PQC: zeroize engine state on destruction (key material may have
+      // been generated via this engine). Not elided due to volatile fence.
+      pqc::secure_zero(&engine_, sizeof(engine_));
+      pqc::ct_barrier();
+    }
+
+    Generator(const Generator& other) : engine_(other.engine_)
+    {
+    }
+    Generator& operator=(const Generator& other)
+    {
+      if (this != &other)
+      {
+        engine_ = other.engine_;
+      }
+      return *this;
+    }
+    Generator(Generator&&) noexcept = default;
+    Generator& operator=(Generator&&) noexcept = default;
+
+    /**
+     * @brief Securely clear the generator state (zeroize engine).
+     * Reference: pqc.hpp:secure_zero
+     */
+    void secure_clear() noexcept
+    {
+      pqc::secure_zero(&engine_, sizeof(engine_));
+      pqc::ct_barrier();
     }
 
     // Simple Random Data
@@ -126,6 +168,22 @@ namespace np::random
         byte = static_cast<std::uint8_t>(dist(engine_));
       }
       return result;
+    }
+
+    /**
+     * @brief PQC-hardened random bytes (constant-time, zeroizes temp).
+     *
+     * Like `bytes()` but wraps the generation in `pqc::ct_barrier`
+     * to prevent reordering across the secret boundary. Caller should
+     * `pqc::secure_zero` the returned vector when done.
+     * Reference: pqc.hpp:ct_barrier, secure_zero
+     */
+    auto bytes_secure(std::size_t length) -> std::vector<std::uint8_t>
+    {
+      pqc::ct_barrier();
+      auto out = bytes(length);
+      pqc::ct_barrier();
+      return out;
     }
 
     // Permutations
@@ -1433,17 +1491,31 @@ namespace np::random
     {
     }
 
+    ~SeedSequence()
+    {
+      pqc::secure_zero(&seed, sizeof(seed));
+      pqc::ct_barrier();
+    }
+
     template <typename T>
     void generate(T* start, T* end) const
     {
+      pqc::SecureSeed<std::uint64_t> ss(seed);
       std::seed_seq s(
-          {static_cast<std::uint32_t>(seed), static_cast<std::uint32_t>(seed >> 32)});
+          {static_cast<std::uint32_t>(ss.get()),
+           static_cast<std::uint32_t>(ss.get() >> 32)});
       s.generate(start, end);
     }
 
     std::uint64_t generate() const
     {
       return seed;
+    }
+
+    void secure_clear() noexcept
+    {
+      pqc::secure_zero(&seed, sizeof(seed));
+      pqc::ct_barrier();
     }
   };
 
@@ -1457,6 +1529,13 @@ namespace np::random
     {
     }
 
+    ~BitGenerator()
+    {
+      pqc::secure_zero(&state, sizeof(state));
+      pqc::secure_zero(&engine, sizeof(engine));
+      pqc::ct_barrier();
+    }
+
     std::uint64_t random_raw()
     {
       return engine();
@@ -1466,6 +1545,13 @@ namespace np::random
     {
       for (std::uint64_t i = 0; i < delta; ++i)
         (void)engine();
+    }
+
+    void secure_clear() noexcept
+    {
+      pqc::secure_zero(&state, sizeof(state));
+      pqc::secure_zero(&engine, sizeof(engine));
+      pqc::ct_barrier();
     }
   };
 
@@ -1477,6 +1563,12 @@ namespace np::random
     explicit PCG64(std::uint64_t s = 0) : state(s), engine(s)
     {
     }
+    ~PCG64()
+    {
+      pqc::secure_zero(&state, sizeof(state));
+      pqc::secure_zero(&engine, sizeof(engine));
+      pqc::ct_barrier();
+    }
     std::uint64_t random_raw()
     {
       return engine();
@@ -1485,6 +1577,12 @@ namespace np::random
     {
       for (std::uint64_t i = 0; i < delta; ++i)
         (void)engine();
+    }
+    void secure_clear() noexcept
+    {
+      pqc::secure_zero(&state, sizeof(state));
+      pqc::secure_zero(&engine, sizeof(engine));
+      pqc::ct_barrier();
     }
   };
 
@@ -1497,6 +1595,12 @@ namespace np::random
         : state(s), engine32(static_cast<std::uint32_t>(s))
     {
     }
+    ~MT19937()
+    {
+      pqc::secure_zero(&state, sizeof(state));
+      pqc::secure_zero(&engine32, sizeof(engine32));
+      pqc::ct_barrier();
+    }
     std::uint64_t random_raw()
     {
       return static_cast<std::uint64_t>(engine32()) << 32 | engine32();
@@ -1505,6 +1609,12 @@ namespace np::random
     {
       for (std::uint64_t i = 0; i < delta; ++i)
         (void)engine32();
+    }
+    void secure_clear() noexcept
+    {
+      pqc::secure_zero(&state, sizeof(state));
+      pqc::secure_zero(&engine32, sizeof(engine32));
+      pqc::ct_barrier();
     }
   };
 
@@ -1516,6 +1626,12 @@ namespace np::random
     explicit Philox(std::uint64_t s = 0) : state(s), engine(s ^ 0x9e3779b97f4a7c15ULL)
     {
     }
+    ~Philox()
+    {
+      pqc::secure_zero(&state, sizeof(state));
+      pqc::secure_zero(&engine, sizeof(engine));
+      pqc::ct_barrier();
+    }
     std::uint64_t random_raw()
     {
       return engine();
@@ -1524,6 +1640,12 @@ namespace np::random
     {
       for (std::uint64_t i = 0; i < delta; ++i)
         (void)engine();
+    }
+    void secure_clear() noexcept
+    {
+      pqc::secure_zero(&state, sizeof(state));
+      pqc::secure_zero(&engine, sizeof(engine));
+      pqc::ct_barrier();
     }
   };
 
@@ -1535,6 +1657,12 @@ namespace np::random
     explicit SFC64(std::uint64_t s = 0) : state(s), engine(s ^ 0xdeadbeefcafeULL)
     {
     }
+    ~SFC64()
+    {
+      pqc::secure_zero(&state, sizeof(state));
+      pqc::secure_zero(&engine, sizeof(engine));
+      pqc::ct_barrier();
+    }
     std::uint64_t random_raw()
     {
       return engine();
@@ -1543,6 +1671,12 @@ namespace np::random
     {
       for (std::uint64_t i = 0; i < delta; ++i)
         (void)engine();
+    }
+    void secure_clear() noexcept
+    {
+      pqc::secure_zero(&state, sizeof(state));
+      pqc::secure_zero(&engine, sizeof(engine));
+      pqc::ct_barrier();
     }
   };
 

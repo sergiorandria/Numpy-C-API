@@ -40,6 +40,7 @@
 #include "detail/proxy.hpp"
 #include "dtype.hpp"
 #include "exceptions.hpp"
+#include "pqc.hpp"
 
 #ifdef NP_USE_THREADING
 #include "threadpool.hpp"
@@ -1303,6 +1304,28 @@ namespace np
      * @complexity O(n).
      */
     void fill(const value_type& value);
+
+    /**
+     * @brief Securely zero the underlying storage (constant-time, not elided).
+     *
+     * Uses `pqc::secure_zero` (volatile + compiler fence) to ensure the
+     * zeroing is not optimized away. For `vector<bool>` each bit is cleared
+     * via fill(false). Intended for key material (ML-KEM/ML-DSA).
+     *
+     * Reference: pqc.hpp:secure_zero, NIST FIPS 203/204
+     * @complexity O(n).
+     */
+    void secure_zero() noexcept;
+
+    /**
+     * @brief Securely zero and reset shape to empty (constant-time erasure).
+     *
+     * Zeroes the backing store via `secure_zero()` then clears shape/strides
+     * and releases the buffer. Use when an array held secret key material
+     * and must not linger in memory.
+     * @complexity O(n).
+     */
+    void secure_clear() noexcept;
 
     /**
      * @brief Deep copy of the array.
@@ -5089,6 +5112,41 @@ namespace np
     }
     _for_each_indexed([&](const std::vector<std::size_t>& idx, const value_type&)
                       { (*data_)[_flat(idx)] = value; });
+  }
+
+  template <typename T>
+  void ndarray<T>::secure_zero() noexcept
+  {
+    if (!data_ || data_->empty())
+    {
+      return;
+    }
+    pqc::ct_barrier();
+    if constexpr (std::is_same_v<value_type, bool>)
+    {
+      // vector<bool> is bit-packed — fill via volatile proxy to avoid elision
+      std::fill(data_->begin(), data_->end(), false);
+      pqc::ct_barrier();
+    }
+    else
+    {
+      static_assert(
+          std::is_trivially_copyable_v<value_type>
+              || std::is_same_v<value_type, std::string> == false,
+          "secure_zero: non-trivially-copyable type");
+      pqc::secure_zero(data_->data(), data_->size() * sizeof(value_type));
+    }
+    pqc::ct_barrier();
+  }
+
+  template <typename T>
+  void ndarray<T>::secure_clear() noexcept
+  {
+    secure_zero();
+    shape = std::vector<int>{0};
+    strides.clear();
+    offset = 0;
+    data_.reset();
   }
 
   template <typename T>

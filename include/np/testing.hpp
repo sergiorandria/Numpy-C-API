@@ -32,6 +32,7 @@
 
 #include "api_macros.hpp"
 #include "ndarray.hpp"
+#include "pqc.hpp"
 
 namespace np
 {
@@ -252,6 +253,66 @@ namespace np
         bool strict = false)
     {
       assert_equal(actual, desired, err_msg, verbose, strict);
+    }
+
+    /**
+     * @brief Constant-time assert array equal (PQC-hardened).
+     *
+     * Uses `pqc::ct_memequal` for branch-free comparison to avoid timing
+     * leaks when asserting on secret material. Reports failure without
+     * early exit on first mismatch.
+     * Reference: pqc.hpp:ct_memequal
+     */
+    NP_API template <typename T>
+    inline void assert_array_equal_ct(
+        const ndarray<T>& actual,
+        const ndarray<T>& desired,
+        const std::string& err_msg = "",
+        bool verbose = true,
+        bool strict = false)
+    {
+      (void)verbose;
+      (void)strict;
+      if (actual.shape != desired.shape)
+      {
+        detail::fail(err_msg.empty() ? "shape mismatch (ct)" : err_msg);
+      }
+      bool equal = false;
+      if (actual.is_contiguous() && desired.is_contiguous()
+          && actual.nbytes() == desired.nbytes())
+      {
+        pqc::ct_barrier();
+        int eq = pqc::ct_memequal(
+            static_cast<const void*>(actual.data().data()),
+            static_cast<const void*>(desired.data().data()),
+            actual.nbytes());
+        pqc::ct_barrier();
+        equal = (eq == 1);
+      }
+      else
+      {
+        // fallback: constant-time accumulation
+        unsigned char diff = 0;
+        pqc::ct_barrier();
+        for (std::size_t i = 0; i < actual.size(); ++i)
+        {
+          T av = actual.data()[actual._flat_logical(i)];
+          T dv = desired.data()[desired._flat_logical(i)];
+          const unsigned char* pa = reinterpret_cast<const unsigned char*>(&av);
+          const unsigned char* pb = reinterpret_cast<const unsigned char*>(&dv);
+          for (std::size_t b = 0; b < sizeof(T); ++b)
+          {
+            diff |= pa[b] ^ pb[b];
+          }
+        }
+        equal = (pqc::ct_eq_u32(static_cast<std::uint32_t>(diff), 0) == 1);
+        pqc::ct_barrier();
+      }
+      if (!equal)
+      {
+        detail::fail(
+            err_msg.empty() ? "array_equal_ct failed (constant-time mismatch)" : err_msg);
+      }
     }
 
     /**
