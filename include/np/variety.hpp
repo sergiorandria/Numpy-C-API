@@ -26,6 +26,7 @@
 
 #include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "api_macros.hpp"
@@ -297,6 +298,51 @@ namespace np::variety
       return e;
     }
   };
+
+  // ── Value-semantic helpers (easy to use, no unique_ptr) ─────────────────
+
+  NP_NODISCARD inline SphereVariety make_sphere(int n) { return SphereVariety(n); }
+  NP_NODISCARD inline TorusVariety make_torus(int d = 2) { return TorusVariety(d); }
+  NP_NODISCARD inline ProjectiveVariety make_real_projective(int n) { return ProjectiveVariety("R", n); }
+  NP_NODISCARD inline ProjectiveVariety make_complex_projective(int n) { return ProjectiveVariety("C", n); }
+
+  // AnyVariety variant for value semantics
+  using AnyVariety = std::variant<SphereVariety, TorusVariety, ProjectiveVariety>;
+
+  NP_NODISCARD inline std::vector<homology::HomologyGroup> homology(const AnyVariety& v)
+  {
+    return std::visit([](auto& x) { return x.homology(); }, v);
+  }
+  NP_NODISCARD inline homology::HomologyGroup homology(const AnyVariety& v, int k)
+  {
+    return std::visit([k](auto& x) { return x.homology(k); }, v);
+  }
+  NP_NODISCARD inline int euler_characteristic(const AnyVariety& v)
+  {
+    return std::visit([](auto& x) { return x.euler_characteristic(); }, v);
+  }
+  NP_NODISCARD inline std::string name(const AnyVariety& v) { return std::visit([](auto& x) { return x.name(); }, v); }
+
+  // ── Quick constructors for common varieties ──────────────────────────────
+
+  NP_NODISCARD inline homology::SimplicialComplex sphere_complex(int n) { return SphereVariety(n).to_simplicial(); }
+  NP_NODISCARD inline homology::SimplicialComplex torus_complex(int d = 2) { return TorusVariety(d).to_simplicial(); }
+
+  // ── Ergonomic free functions for AnyVariety / AbstractVariety ─────────
+
+  NP_NODISCARD inline bool is_homotopy_equivalent(const AbstractVariety& A, const AbstractVariety& B)
+  {
+    return homotopy::is_homotopy_equivalent(A.to_simplicial(), B.to_simplicial()).equivalent;
+  }
+  NP_NODISCARD inline bool is_homotopy_equivalent(const AnyVariety& A, const AnyVariety& B)
+  {
+    return std::visit(
+        [](auto& a, auto& b) -> bool {
+          // Different types: compare via simplicial
+          return homotopy::is_homotopy_equivalent(a.to_simplicial(), b.to_simplicial()).equivalent;
+        },
+        A, B);
+  }
 
 } // namespace np::variety
 
