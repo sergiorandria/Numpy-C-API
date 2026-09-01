@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
-project(np CXX)
+project(numpy-cpp
+  VERSION 2.2.0
+  DESCRIPTION "Header-only C++20 NumPy 2.2 — 712 routines, zero Python runtime"
+  HOMEPAGE_URL "https://github.com/anomalyco/Numpy-C-API"
+  LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -171,33 +175,63 @@ endif()
 # If building on powerful machine, allow more jobs via CMAKE_BUILD_PARALLEL_LEVEL
 # (no flag needed – CMake respects -j).
 
-add_library(np INTERFACE)
-add_library(np::np ALIAS np)
-target_include_directories(np INTERFACE
+add_library(numpy-cpp INTERFACE)
+add_library(numpy-cpp::numpy-cpp ALIAS numpy-cpp)
+target_include_directories(numpy-cpp INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
 find_package(Threads REQUIRED)
-target_link_libraries(np INTERFACE Threads::Threads)
+target_link_libraries(numpy-cpp INTERFACE Threads::Threads)
 if(NP_ENABLE_GMP AND GMP_LIB)
-    target_link_libraries(np INTERFACE ${GMP_LIB})
-    target_include_directories(np INTERFACE ${GMP_INCLUDE_DIR})
-    target_compile_definitions(np INTERFACE NP_HAS_GMP=1 NP_HAS_GMP_H=1)
+    target_link_libraries(numpy-cpp INTERFACE ${GMP_LIB})
+    target_include_directories(numpy-cpp INTERFACE ${GMP_INCLUDE_DIR})
+    target_compile_definitions(numpy-cpp INTERFACE NP_HAS_GMP=1 NP_HAS_GMP_H=1)
 endif()
 if(NP_ENABLE_BIGINT)
-    target_compile_definitions(np INTERFACE NP_HAS_BIGINT=1)
+    target_compile_definitions(numpy-cpp INTERFACE NP_HAS_BIGINT=1)
     find_package(Boost QUIET)
     if(Boost_FOUND)
-        target_include_directories(np INTERFACE ${Boost_INCLUDE_DIRS})
+        target_include_directories(numpy-cpp INTERFACE ${Boost_INCLUDE_DIRS})
     endif()
 endif()
 # ── LLVM JIT for differential VM (optional, header-only fallback) ─────
 # No find_package needed: differential.hpp uses __has_include(<llvm/IR/IRBuilder.h>)
 # to enable JIT when LLVM headers are present. No link required for fallback.
 if(NP_USE_THREADING)
-  target_compile_definitions(np INTERFACE NP_USE_THREADING)
+  target_compile_definitions(numpy-cpp INTERFACE NP_USE_THREADING)
 endif()
 
+# ── Legacy alias: keep `np::np` working for existing downstream code ──
+add_library(np INTERFACE)
+target_link_libraries(np INTERFACE numpy-cpp)
+add_library(np::np ALIAS np)
+
+# ── Install & package (header-only) ─────────────────────────────────────
+include(GNUInstallDirs)
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(TARGETS numpy-cpp np
+        EXPORT numpy-cppTargets)
+install(EXPORT numpy-cppTargets
+        FILE numpy-cppTargets.cmake
+        NAMESPACE numpy-cpp::
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/numpy-cpp")
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/numpy-cppConfigVersion.cmake"
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY SameMajorVersion)
+configure_package_config_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/numpy-cppConfig.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/numpy-cppConfig.cmake"
+  INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/numpy-cpp")
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/numpy-cppConfig.cmake"
+  "${CMAKE_CURRENT_BINARY_DIR}/numpy-cppConfigVersion.cmake"
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/numpy-cpp")
+
 include(CTest)
-if(BUILD_TESTING)
+# Only build tests when this is the top-level project (avoids building tests
+# for every FetchContent / add_subdirectory consumer).
+if(BUILD_TESTING AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     add_subdirectory(tests)
 endif()
