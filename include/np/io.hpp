@@ -29,6 +29,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -38,6 +39,7 @@
 #include "api_macros.hpp"
 #include "dtype.hpp"
 #include "ndarray.hpp"
+#include "pqc.hpp"
 
 namespace np
 {
@@ -709,6 +711,15 @@ namespace np
     detail::write_le32(os, cd_size);
     detail::write_le32(os, cd_offset);
     detail::write_le16(os, 0);
+    // PQC: wipe temporary npy buffers that may have held key material
+    for (auto& e : entries)
+    {
+      if (!e.data.empty())
+      {
+        pqc::secure_zero(e.data.data(), e.data.size());
+      }
+    }
+    pqc::ct_barrier();
   }
 
   /** @brief Compressed npz – uses zlib deflate when available, else STORE fallback.
@@ -807,6 +818,14 @@ namespace np
     detail::write_le32(os, cd_size);
     detail::write_le32(os, cd_offset);
     detail::write_le16(os, 0);
+    for (auto& e : entries)
+    {
+      if (!e.comp.empty())
+      {
+        pqc::secure_zero(e.comp.data(), e.comp.size());
+      }
+    }
+    pqc::ct_barrier();
 #else
     savez(filename, arrays);
 #endif
@@ -1125,6 +1144,47 @@ namespace np
     is.seekg(static_cast<std::streamoff>(offset));
     ndarray<T> out(out_shape);
     is.read(reinterpret_cast<char*>(out.data().data()), n * sizeof(T));
+    return out;
+  }
+
+  /**
+   * @brief Securely wipe a byte buffer (PQC constant-time erasure).
+   *
+   * Uses `pqc::secure_zero` to ensure the wipe is not elided.
+   * Reference: pqc.hpp:secure_zero
+   */
+  NP_API inline void secure_wipe(std::string& buf) noexcept
+  {
+    if (!buf.empty())
+    {
+      pqc::secure_zero(buf.data(), buf.size());
+      pqc::ct_barrier();
+    }
+  }
+
+  NP_API inline void secure_wipe(std::vector<std::uint8_t>& buf) noexcept
+  {
+    if (!buf.empty())
+    {
+      pqc::secure_zero(buf.data(), buf.size() * sizeof(std::uint8_t));
+      pqc::ct_barrier();
+    }
+  }
+
+  /**
+   * @brief PQC-hardened npy serialization: builds bytes then wipes temp on caller demand.
+   *
+   * Like `npy_bytes_for_array` but documents that the caller holds key
+   * material and should `secure_wipe` the returned string after writing.
+   * The call is fenced with `ct_barrier` to prevent reordering of secret loads.
+   * Reference: pqc.hpp:ct_barrier, secure_zero
+   */
+  template <typename T>
+  NP_NODISCARD inline std::string npy_bytes_for_array_secure(const ndarray<T>& arr)
+  {
+    pqc::ct_barrier();
+    std::string out = npy_bytes_for_array(arr);
+    pqc::ct_barrier();
     return out;
   }
 
