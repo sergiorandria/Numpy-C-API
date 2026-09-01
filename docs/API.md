@@ -1,4 +1,4 @@
-# API — dev (760+ routines)
+#API — dev(760 + routines)
 
 Umbrella `include/np/np.hpp:13` (28 includes; all integrated). Every `np::` has Doxygen `Reference: numpy-reference/...` or Bott–Tu/Hatcher.
 
@@ -40,7 +40,8 @@ Umbrella `include/np/np.hpp:13` (28 includes; all integrated). Every `np::` has 
 | **Modular** | `modular.hpp:232` | `ModularForm, Hecke` | `Diamond–Shurman` |
 | **Manifold** | `manifold.hpp:583` | `AbstractManifold, Sphere/Torus/Projective/Klein, de_rham, simplicial` | `Lee` |
 | **Variety** | `variety.hpp` | `deprecated alias of manifold.hpp` | `—` |
-| **Differential** | `differential.hpp:438` | `VM, ScalarField, KForm, exterior_derivative, wedge, pullback` | `Bott–Tu` |
+| **Differential** | `differential.hpp:438` | `VM, ScalarField, KForm, exterior_derivative, wedge, pullback, kernel::gradient/hessian/laplacian` | `Bott–Tu` |
+| **Lattice** | `lattice.hpp:143` | `Lattice, PosetLattice, meet/join, dual, lll/bkz, gram, volume, shortest/closest, LatticeFactory, Builder, Strategy, Visitor, Observer, Decorator` | `Micciancio–Goldwasser, Lenstra–Lenstra–Lovász` |
 | **Cohomology** | `cohomology.hpp:191` | `cohomology_groups, cohomology_ring, cup_product, poincare_pairing, intersection_form, kunneth` | `Hatcher Ch.3` |
 | **Bundle** | `bundle.hpp:103` | `VectorBundle, tangent/cotangent, chern/stiefel/euler/pontryagin, whitney_sum, HodgeStar` | `Milnor–Stasheff` |
 | **Persistent** | `persistent.hpp:94` | `FilteredSimplex, Filtration, persistence_barcode, bottleneck_distance, vietoris_rips` | `Edelsbrunner–Harer` |
@@ -53,14 +54,19 @@ Count `712` base + ~50 higher-math (homology/bundle/persistent/spectral) + alias
 ```cpp
 // ndarray
 auto a = np::zeros<double>({3,4}); // creation.hpp
-a.shape; a.strides; a.offset; a.data(); // ndarray.hpp
-a.sum(); a.mean(axis); a.sort(); // ndarray + sorting
-np::copyto(dst,src); // manipulation.hpp:1980
-np::is_busday(dates); // datetime.hpp:192
-np::isin(a,b); // logic.hpp:590
-np::linalg::dot(a,b); // linalg.hpp:2669
-np::fft::fft(in); // fft/fft_core.hpp:244
-np::testing::assert_allclose(a,b); // testing.hpp
+a.shape;
+a.strides;
+a.offset;
+a.data(); // ndarray.hpp
+a.sum();
+a.mean(axis);
+a.sort();                           // ndarray + sorting
+np::copyto(dst, src);               // manipulation.hpp:1980
+np::is_busday(dates);               // datetime.hpp:192
+np::isin(a, b);                     // logic.hpp:590
+np::linalg::dot(a, b);              // linalg.hpp:2669
+np::fft::fft(in);                   // fft/fft_core.hpp:244
+np::testing::assert_allclose(a, b); // testing.hpp
 ```
 
 See `../README.md` quick start and `numpy-reference/` for Python semantics.

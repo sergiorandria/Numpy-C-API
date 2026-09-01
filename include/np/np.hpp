@@ -53,6 +53,7 @@
 #include "bundle.hpp"
 #include "persistent.hpp"
 #include "spectral.hpp"
+#include "lattice.hpp"
 #include "random.hpp"
 
 // Suppress -Wbraced-scalar-init for NDProxy braced-init (e.g. {{{1},{2},{3}},{{1},{2},{3}}} shape 2×3×1)
