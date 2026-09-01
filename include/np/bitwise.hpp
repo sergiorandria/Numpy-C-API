@@ -25,6 +25,7 @@
 
 #include "api_macros.hpp"
 #include "ndarray.hpp"
+#include "pqc.hpp"
 
 namespace np
 {
@@ -502,6 +503,36 @@ namespace np
    * @brief Binary representation of integer as string (np.binary_repr).
    * Reference: numpy-reference/reference/generated/numpy.binary_repr.html
    */
+  /**
+   * @brief Constant-time select for bitwise mux (PQC).
+   *
+   * Uses `pqc::ct_select` to choose between two integral values without
+   * branching. Suitable for McEliece conditional swaps on secret indices.
+   * Reference: pqc.hpp:ct_select
+   */
+  NP_API template <typename T>
+  NP_NODISCARD inline T ct_select(int cond, T a, T b) noexcept
+  {
+    return pqc::ct_select(cond, a, b);
+  }
+
+  /**
+   * @brief Constant-time bitwise XOR for secret arrays (PQC-hardened).
+   *
+   * Wraps `bitwise_xor` with `ct_barrier` fences to prevent speculative
+   * reordering. Use for key material (e.g., ML-KEM ciphertext xor).
+   * Reference: pqc.hpp:ct_barrier
+   */
+  NP_API template <typename T, typename U>
+  NP_NODISCARD inline auto bitwise_xor_ct(const ndarray<T>& x1, const ndarray<U>& x2)
+      -> ndarray<std::common_type_t<T, U>>
+  {
+    pqc::ct_barrier();
+    auto out = bitwise_xor(x1, x2);
+    pqc::ct_barrier();
+    return out;
+  }
+
   NP_API inline auto binary_repr(long long num, std::optional<int> width = std::nullopt)
       -> std::string
   {

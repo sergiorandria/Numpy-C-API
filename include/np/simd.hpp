@@ -16,6 +16,8 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "pqc.hpp"
+
 // Detect SIMD capabilities at compile time
 // AVX512 implies AVX2 and AVX, AVX2 implies AVX – define all lower levels
 // so kernels gated on NP_SIMD_AVX are visible in AVX2/AVX-512 builds.
@@ -1358,6 +1360,37 @@ namespace np
           out[i] = a[i] / b[i];
         }
       }
+    }
+
+    /**
+     * @brief Constant-time barrier wrappers for SIMD kernels (PQC).
+     *
+     * Ensures vector loads/stores are not reordered across a PQC boundary.
+     * Wraps `pqc::ct_barrier` around an existing vectorized call.
+     * Reference: pqc.hpp:ct_barrier
+     */
+    template <typename T>
+    inline void add_vectorized_ct(const T* a, const T* b, T* out, std::size_t n)
+    {
+      pqc::ct_barrier();
+      add_vectorized(a, b, out, n);
+      pqc::ct_barrier();
+    }
+
+    template <typename T>
+    inline void mul_vectorized_ct(const T* a, const T* b, T* out, std::size_t n)
+    {
+      pqc::ct_barrier();
+      mul_vectorized(a, b, out, n);
+      pqc::ct_barrier();
+    }
+
+    template <typename T>
+    inline void sub_vectorized_ct(const T* a, const T* b, T* out, std::size_t n)
+    {
+      pqc::ct_barrier();
+      sub_vectorized(a, b, out, n);
+      pqc::ct_barrier();
     }
 
   } // namespace simd
