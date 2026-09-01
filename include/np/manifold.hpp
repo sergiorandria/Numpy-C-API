@@ -645,11 +645,23 @@ namespace np::manifold
         return homology::circle_complex();
       if (dim == 2)
       {
-        return homology::SimplicialComplex{
-            {{{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}},
-             {{0, 1}, {1, 2}, {2, 0}, {3, 4}, {4, 5}, {5, 3}, {0, 3}, {1, 4}, {2, 5}},
-             {{0, 1, 4}, {0, 4, 3}, {1, 2, 5}, {1, 5, 4}, {2, 0, 3}, {2, 3, 5}},
-             {}}};
+        // Correct 9-vertex triangulation of T^2: 3×3 grid with identifications,
+        // 18 triangles, 27 edges, χ=0, H=[1,2,1].
+        std::vector<std::vector<int>> tris;
+        auto vid = [](int i, int j) { return (i % 3) * 3 + (j % 3); };
+        for (int i = 0; i < 3; ++i)
+          for (int j = 0; j < 3; ++j)
+          {
+            int v00 = vid(i, j);
+            int v10 = vid(i + 1, j);
+            int v01 = vid(i, j + 1);
+            int v11 = vid(i + 1, j + 1);
+            tris.push_back({v00, v10, v11});
+            tris.push_back({v00, v11, v01});
+          }
+        homology::SimplicialComplexBuilder b;
+        for (auto& t : tris) b.add_simplex(t);
+        return b.build();
       }
       // For dim>2, build wedge-like product placeholder whose homology matches
       // Betti numbers via builder but not faithful triangulation; we note this

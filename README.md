@@ -117,7 +117,7 @@ set(CMAKE_CXX_STANDARD 20)
 add_subdirectory(numpy-cpp)
 # Option B: FetchContent
 include(FetchContent)
-FetchContent_Declare(numpy-cpp GIT_REPOSITORY https://github.com/anomalyco/Numpy-C-API.git GIT_TAG dev)
+FetchContent_Declare(numpy-cpp GIT_REPOSITORY https://github.com/sergiorandria/numpy-cpp.git GIT_TAG dev)
 FetchContent_MakeAvailable(numpy-cpp)
 
 add_executable(my_app main.cpp)

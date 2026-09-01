@@ -48,6 +48,10 @@
 #include "manifold.hpp"
 #include "variety.hpp"
 #include "differential.hpp"
+#include "cohomology.hpp"
+#include "bundle.hpp"
+#include "persistent.hpp"
+#include "spectral.hpp"
 // Note: random.hpp and concatenate.hpp are not included by default.
 // Include them explicitly if needed to avoid template conflicts.
 

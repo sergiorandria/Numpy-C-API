@@ -40,7 +40,7 @@
 #include "api_macros.hpp"
 #include "ndarray.hpp"
 
-#if __has_include(<llvm/IR/IRBuilder.h>)
+#if defined(NP_ENABLE_LLVM) && __has_include(<llvm/IR/IRBuilder.h>)
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/GenericValue.h>
 #include <llvm/IR/IRBuilder.h>
