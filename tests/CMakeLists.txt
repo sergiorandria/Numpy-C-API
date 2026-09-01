@@ -18,7 +18,11 @@ set(NP_TESTS
     test_char
     test_chararray
     test_unimplemented
-    test_threadpool)
+    test_threadpool
+    test_bigint
+    test_abstract
+    test_variety
+    test_differential)
 
 if(NP_COMPILED_UNITS)
     list(APPEND NP_TESTS test_constexpr test_compile_time)

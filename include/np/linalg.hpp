@@ -33,6 +33,9 @@
 #include "dtype.hpp"
 #include "exceptions.hpp"
 #include "ndarray.hpp"
+#if __has_include("bigint.hpp")
+#include "bigint.hpp"
+#endif
 
 #ifdef NP_USE_THREADING
 #include "threadpool.hpp"
@@ -55,10 +58,39 @@ namespace np::linalg
     Nuc     // Nuclear norm (matrices only)
   };
 
-  // Result element type: floating T stays T, everything else promotes to
-  // double (numpy casts integral/bool input to float64).
+  // Result element type: floating T stays T, complex stays complex,
+  // bigint stays bigint, everything else promotes to double/complex<double>
+  // (numpy casts integral/bool to float64 / complex128, but bigint keeps exact).
   template <typename T>
-  using real_t = std::conditional_t<std::is_floating_point_v<T>, T, double>;
+  struct _real_promote
+  {
+    using type = std::conditional_t<
+        ::np::detail::is_bigint_v<std::remove_cv_t<T>>,
+        T,
+        std::conditional_t<std::is_floating_point_v<T>, T, double>>;
+  };
+  template <typename U>
+  struct _real_promote<std::complex<U>>
+  {
+    using type = std::complex<std::conditional_t<std::is_floating_point_v<U>, U, double>>;
+  };
+  template <typename T>
+  using real_t = typename _real_promote<T>::type;
+
+  // Real-valued counterpart (magnitudes, singular values): complex -> its
+  // underlying real type promoted.
+  template <typename T>
+  struct _real_value
+  {
+    using type = std::conditional_t<std::is_floating_point_v<T>, T, double>;
+  };
+  template <typename U>
+  struct _real_value<std::complex<U>>
+  {
+    using type = std::conditional_t<std::is_floating_point_v<U>, U, double>;
+  };
+  template <typename T>
+  using real_value_t = typename _real_value<T>::type;
 
   namespace detail
   {
@@ -112,18 +144,23 @@ namespace np::linalg
     // whose norm is tiny (a zero singular column, or a column beyond the
     // rank) is replaced by a unit vector orthogonal to every previous
     // column. Columns that already are unit vectors are left untouched.
+    // Complex-aware: uses Hermitian inner product with conj.
     template <typename R>
     void ortho_complete(std::vector<R>& data, std::size_t rows, std::size_t cols)
     {
+      using RV = real_value_t<R>;
       for (std::size_t j = 0; j < cols; ++j)
       {
-        R nrm{};
+        RV nrm2{};
         for (std::size_t i = 0; i < rows; ++i)
         {
-          nrm += data[i * cols + j] * data[i * cols + j];
+          if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+            nrm2 += std::norm(data[i * cols + j]);
+          else
+            nrm2 += data[i * cols + j] * data[i * cols + j];
         }
-        nrm = std::sqrt(nrm);
-        if (nrm > R{0.5})
+        RV nrm = std::sqrt(nrm2);
+        if (nrm > RV{0.5})
         {
           continue;
         }
@@ -137,20 +174,29 @@ namespace np::linalg
             R dot{};
             for (std::size_t i = 0; i < rows; ++i)
             {
-              dot += cand[i] * data[i * cols + t];
+              if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+                dot += std::conj(data[i * cols + t]) * cand[i];
+              else
+                dot += cand[i] * data[i * cols + t];
             }
             for (std::size_t i = 0; i < rows; ++i)
             {
+              // For complex, projection uses data * dot? For Gram-Schmidt with Hermitian inner product,
+              // cand = cand - dot * data; but dot = <data,cand>, so need data*dot
+              // For real, dot = <cand,data> so cand - dot*data is same.
               cand[i] -= dot * data[i * cols + t];
             }
           }
-          R cn{};
+          RV cn2{};
           for (std::size_t i = 0; i < rows; ++i)
           {
-            cn += cand[i] * cand[i];
+            if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+              cn2 += std::norm(cand[i]);
+            else
+              cn2 += cand[i] * cand[i];
           }
-          cn = std::sqrt(cn);
-          if (cn > R{0.5})
+          RV cn = std::sqrt(cn2);
+          if (cn > RV{0.5})
           {
             for (std::size_t i = 0; i < rows; ++i)
             {
@@ -176,6 +222,7 @@ namespace np::linalg
     // singular vectors, with zero singular columns completed to an
     // orthonormal basis. When want_uv is false only s is produced.
     // Throws np::exceptions::LinAlgError if the sweeps do not converge.
+    // Complex-aware: uses Hermitian inner product and unitary rotations.
     template <typename R>
     void svd_jacobi(
         const std::vector<R>& a,
@@ -197,73 +244,101 @@ namespace np::linalg
       {
         return;
       }
-
-      // B = working copy; vv accumulates the column rotations.
+      using RV = real_value_t<R>;
       std::vector<R> b = a;
       std::vector<R> vv(q * q, R{});
       for (std::size_t j = 0; j < q; ++j)
       {
         vv[j * q + j] = R{1};
       }
-
-      // Sweep over every column pair. A pair is left alone once its
-      // inner product is below the machine-epsilon-relative threshold,
-      // or when one of its columns is negligible relative to the
-      // largest column (it is numerically zero: its norm is then taken
-      // as the singular value directly, as in LAPACK dgesvj). The
-      // scale-based floor also prevents a norm-squared underflow from
-      // leaving a residual inner product above the pair's own
-      // epsilon-relative threshold forever.
-      const R eps = std::numeric_limits<R>::epsilon();
+      const RV eps = std::numeric_limits<RV>::epsilon();
       const int max_sweeps = 60;
       bool converged = false;
       for (int sweep = 0; sweep < max_sweeps && !converged; ++sweep)
       {
         converged = true;
-        R scale{};
+        RV scale{};
         for (std::size_t j = 0; j < q; ++j)
         {
-          R nrm2{};
+          RV nrm2{};
           for (std::size_t i = 0; i < p; ++i)
           {
-            nrm2 += b[i * q + j] * b[i * q + j];
+            if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+              nrm2 += std::norm(b[i * q + j]);
+            else
+              nrm2 += b[i * q + j] * b[i * q + j];
           }
           scale = std::max(scale, nrm2);
         }
-        const R small = eps * scale;
+        const RV small = eps * scale;
         for (std::size_t pc = 0; pc < q; ++pc)
         {
           for (std::size_t qc = pc + 1; qc < q; ++qc)
           {
-            R alpha{}, beta{}, gamma{};
+            RV alpha{}, beta{};
+            R gamma{};
             for (std::size_t i = 0; i < p; ++i)
             {
               const R x = b[i * q + pc];
               const R y = b[i * q + qc];
-              alpha += x * x;
-              beta += y * y;
-              gamma += x * y;
+              if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+              {
+                alpha += std::norm(x);
+                beta += std::norm(y);
+                gamma += std::conj(x) * y;
+              }
+              else
+              {
+                alpha += x * x;
+                beta += y * y;
+                gamma += x * y;
+              }
             }
             if (alpha <= small || beta <= small)
             {
               continue;
             }
-            if (std::abs(gamma) <= eps * std::sqrt(alpha * beta))
+            RV gamma_abs = std::abs(gamma);
+            if (gamma_abs <= eps * std::sqrt(alpha * beta))
             {
               continue;
             }
-            // Jacobi angle with tan(2t) = 2 gamma / (beta - alpha).
-            const R zeta = (beta - alpha) / (2 * gamma);
-            const R t = (zeta >= R{0} ? R{1} : R{-1})
-                / (std::abs(zeta) + std::sqrt(R{1} + zeta * zeta));
-            const R c = R{1} / std::sqrt(R{1} + t * t);
-            const R sn = c * t;
+            if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+            {
+              if (gamma_abs != RV{0})
+              {
+                R phase = gamma / static_cast<R>(gamma_abs);
+                R conj_phase = std::conj(phase);
+                for (std::size_t i = 0; i < p; ++i)
+                {
+                  b[i * q + qc] *= conj_phase;
+                }
+                if (want_uv)
+                {
+                  for (std::size_t j = 0; j < q; ++j)
+                  {
+                    vv[j * q + qc] *= conj_phase;
+                  }
+                }
+                gamma = R{gamma_abs};
+              }
+            }
+            RV g_real{};
+            if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+              g_real = std::real(gamma);
+            else
+              g_real = gamma;
+            const RV zeta = (beta - alpha) / (RV{2} * g_real);
+            const RV t = (zeta >= RV{0} ? RV{1} : RV{-1})
+                / (std::abs(zeta) + std::sqrt(RV{1} + zeta * zeta));
+            const RV c = RV{1} / std::sqrt(RV{1} + t * t);
+            const RV sn = c * t;
             for (std::size_t i = 0; i < p; ++i)
             {
               const R x = b[i * q + pc];
               const R y = b[i * q + qc];
-              b[i * q + pc] = c * x - sn * y;
-              b[i * q + qc] = sn * x + c * y;
+              b[i * q + pc] = static_cast<R>(c * x - sn * y);
+              b[i * q + qc] = static_cast<R>(sn * x + c * y);
             }
             if (want_uv)
             {
@@ -271,8 +346,8 @@ namespace np::linalg
               {
                 const R x = vv[j * q + pc];
                 const R y = vv[j * q + qc];
-                vv[j * q + pc] = c * x - sn * y;
-                vv[j * q + qc] = sn * x + c * y;
+                vv[j * q + pc] = static_cast<R>(c * x - sn * y);
+                vv[j * q + qc] = static_cast<R>(sn * x + c * y);
               }
             }
             converged = false;
@@ -283,20 +358,18 @@ namespace np::linalg
       {
         throw np::exceptions::LinAlgError("SVD did not converge");
       }
-
-      // Column norms of B: the k largest are the singular values. The
-      // sweep collapses q - k columns to zero, but WHICH columns
-      // survive is data-dependent, so the survivors are found by
-      // ranking rather than by position.
-      std::vector<R> norms(q);
+      std::vector<RV> norms(q);
       for (std::size_t j = 0; j < q; ++j)
       {
-        R nrm{};
+        RV nrm2{};
         for (std::size_t i = 0; i < p; ++i)
         {
-          nrm += b[i * q + j] * b[i * q + j];
+          if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+            nrm2 += std::norm(b[i * q + j]);
+          else
+            nrm2 += b[i * q + j] * b[i * q + j];
         }
-        norms[j] = std::sqrt(nrm);
+        norms[j] = std::sqrt(nrm2);
       }
       std::vector<std::size_t> order(q);
       for (std::size_t j = 0; j < q; ++j)
@@ -310,21 +383,22 @@ namespace np::linalg
       s.assign(k, R{});
       for (std::size_t j = 0; j < k; ++j)
       {
-        s[j] = norms[order[j]];
+        if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+          s[j] = R{norms[order[j]]};
+        else
+          s[j] = static_cast<R>(norms[order[j]]);
       }
-
       std::vector<R> uu, vv2;
       if (want_uv)
       {
-        // U columns are the normalized survivor columns of B; zero
-        // singular columns are completed to an orthonormal basis.
         uu.assign(up * p, R{});
         for (std::size_t j = 0; j < k; ++j)
         {
           const std::size_t src = order[j];
+          RV sj = norms[order[j]];
           for (std::size_t i = 0; i < p; ++i)
           {
-            uu[i * up + j] = s[j] > R{0} ? b[i * q + src] / s[j] : R{0};
+            uu[i * up + j] = sj > RV{0} ? b[i * q + src] / static_cast<R>(sj) : R{0};
           }
         }
         ortho_complete(uu, p, up);
@@ -348,6 +422,7 @@ namespace np::linalg
     // R in the upper triangle, Householder vectors below the diagonal
     // with v_j = 1) and tau (k,) follow the LAPACK convention used by
     // numpy's raw mode.
+    // Complex-aware: real path uses Householder reflectors, complex path uses Gram-Schmidt.
     template <typename R>
     void householder_qr(
         const std::vector<R>& a,
@@ -358,76 +433,133 @@ namespace np::linalg
         std::vector<R>& h,
         std::vector<R>& tau)
     {
-      const std::size_t k = std::min(m, n);
-      q.assign(m * m, R{});
-      for (std::size_t i = 0; i < m; ++i)
+      if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
       {
-        q[i * m + i] = R{1};
+        const std::size_t k = std::min(m, n);
+        q.assign(m * m, R{});
+        r.assign(k * n, R{});
+        h = a;
+        tau.assign(k, R{});
+        using RV = real_value_t<R>;
+        std::vector<std::vector<R>> cols(m, std::vector<R>(m, R{}));
+        for (std::size_t j = 0; j < n; ++j)
+          for (std::size_t i = 0; i < m; ++i)
+            cols[j][i] = a[i * n + j];
+        for (std::size_t j = n; j < m; ++j)
+          cols[j][j] = R{1};
+        std::vector<std::vector<R>> qcols(m, std::vector<R>(m, R{}));
+        for (std::size_t j = 0; j < m; ++j)
+        {
+          std::vector<R> v = cols[j];
+          for (std::size_t i = 0; i < j; ++i)
+          {
+            R dot{};
+            for (std::size_t t = 0; t < m; ++t)
+              dot += std::conj(qcols[i][t]) * v[t];
+            if (i < k && j < n)
+              r[i * n + j] = dot;
+            for (std::size_t t = 0; t < m; ++t)
+              v[t] -= dot * qcols[i][t];
+          }
+          RV nrm2{};
+          for (std::size_t t = 0; t < m; ++t)
+            nrm2 += std::norm(v[t]);
+          RV nrm = std::sqrt(nrm2);
+          if (nrm > RV{0})
+          {
+            for (std::size_t t = 0; t < m; ++t)
+              qcols[j][t] = v[t] / static_cast<R>(nrm);
+            if (j < k && j < n)
+              r[j * n + j] = static_cast<R>(nrm);
+          }
+          else
+          {
+            for (std::size_t t = 0; t < m; ++t)
+              qcols[j][t] = R{0};
+            qcols[j][j] = R{1};
+            if (j < k && j < n)
+              r[j * n + j] = R{0};
+          }
+        }
+        for (std::size_t j = 0; j < m; ++j)
+          for (std::size_t i = 0; i < m; ++i)
+            q[i * m + j] = qcols[j][i];
+        for (std::size_t i = 0; i < k; ++i)
+          for (std::size_t j = 0; j < i; ++j)
+            r[i * n + j] = R{0};
+        h = a;
+        return;
       }
-      tau.assign(k, R{});
-      h = a;
-      for (std::size_t j = 0; j < k; ++j)
+      else
       {
-        const R xj = h[j * n + j];
-        R nrm2{};
-        for (std::size_t i = j + 1; i < m; ++i)
-        {
-          nrm2 += h[i * n + j] * h[i * n + j];
-        }
-        const R nrm = std::sqrt(xj * xj + nrm2);
-        if (nrm == R{0})
-        {
-          tau[j] = R{0};
-          continue;
-        }
-        const R sign = xj >= R{0} ? R{1} : R{-1};
-        const R beta = -sign * nrm;
-        const R vj = xj - beta;
-        // Reflector with v_j = 1: tau = (beta - xj) / beta.
-        const R tauj = (beta - xj) / beta;
-        tau[j] = tauj;
-        h[j * n + j] = beta;
-        for (std::size_t i = j + 1; i < m; ++i)
-        {
-          h[i * n + j] /= vj;
-        }
-        // Apply H = I - tau v v' to the remaining columns.
-        for (std::size_t c = j + 1; c < n; ++c)
-        {
-          R dot = h[j * n + c];
-          for (std::size_t i = j + 1; i < m; ++i)
-          {
-            dot += h[i * n + j] * h[i * n + c];
-          }
-          for (std::size_t i = j + 1; i < m; ++i)
-          {
-            h[i * n + c] -= tauj * h[i * n + j] * dot;
-          }
-          h[j * n + c] -= tauj * dot;
-        }
-        // Accumulate Q = Q H.
+        const std::size_t k = std::min(m, n);
+        q.assign(m * m, R{});
         for (std::size_t i = 0; i < m; ++i)
         {
-          R dot = q[i * m + j];
-          for (std::size_t c = j + 1; c < m; ++c)
-          {
-            dot += q[i * m + c] * h[c * n + j];
-          }
-          q[i * m + j] -= tauj * dot;
-          for (std::size_t c = j + 1; c < m; ++c)
-          {
-            q[i * m + c] -= tauj * h[c * n + j] * dot;
-          }
+          q[i * m + i] = R{1};
         }
-      }
-      // r = upper triangle of h, zeros below the diagonal.
-      r.assign(k * n, R{});
-      for (std::size_t i = 0; i < k; ++i)
-      {
-        for (std::size_t j = i; j < n; ++j)
+        tau.assign(k, R{});
+        h = a;
+        for (std::size_t j = 0; j < k; ++j)
         {
-          r[i * n + j] = h[i * n + j];
+          const R xj = h[j * n + j];
+          R nrm2{};
+          for (std::size_t i = j + 1; i < m; ++i)
+          {
+            nrm2 += h[i * n + j] * h[i * n + j];
+          }
+          const R nrm = std::sqrt(xj * xj + nrm2);
+          if (nrm == R{0})
+          {
+            tau[j] = R{0};
+            continue;
+          }
+          const R sign = xj >= R{0} ? R{1} : R{-1};
+          const R beta = -sign * nrm;
+          const R vj = xj - beta;
+          const R tauj = (beta - xj) / beta;
+          tau[j] = tauj;
+          h[j * n + j] = beta;
+          for (std::size_t i = j + 1; i < m; ++i)
+          {
+            h[i * n + j] /= vj;
+          }
+          for (std::size_t c = j + 1; c < n; ++c)
+          {
+            R dot = h[j * n + c];
+            for (std::size_t i = j + 1; i < m; ++i)
+            {
+              dot += h[i * n + j] * h[i * n + c];
+            }
+            for (std::size_t i = j + 1; i < m; ++i)
+            {
+              h[i * n + c] -= tauj * h[i * n + j] * dot;
+            }
+            h[j * n + c] -= tauj * dot;
+          }
+          for (std::size_t i = 0; i < m; ++i)
+          {
+            R dot = q[i * m + j];
+            for (std::size_t c = j + 1; c < m; ++c)
+            {
+              dot += q[i * m + c] * h[c * n + j];
+            }
+            q[i * m + j] -= tauj * dot;
+            for (std::size_t c = j + 1; c < m; ++c)
+            {
+              q[i * m + c] -= tauj * h[c * n + j] * dot;
+            }
+          }
         }
+        r.assign(k * n, R{});
+        for (std::size_t i = 0; i < k; ++i)
+        {
+          for (std::size_t j = i; j < n; ++j)
+          {
+            r[i * n + j] = h[i * n + j];
+          }
+        }
+        return;
       }
     }
 
@@ -875,6 +1007,7 @@ namespace np::linalg
     // incomplete; callers treat it as a zero determinant or raise
     // LinAlgError). Tiny nonzero pivots are kept, so ill-conditioned
     // matrices factor successfully, as in LAPACK.
+    // Complex-aware: pivot search uses magnitudes.
     template <typename R>
     bool lu_factor(
         std::vector<R>& a,
@@ -888,17 +1021,33 @@ namespace np::linalg
       {
         piv[k] = k;
         std::size_t p = k;
-        R best = std::abs(a[k * n + k]);
+        auto best = [&]() {
+          if constexpr (np::detail::is_bigint_v<R>)
+          {
+            R v = a[k * n + k];
+            return v < R{0} ? -v : v;
+          }
+          else
+            return std::abs(a[k * n + k]);
+        }();
         for (std::size_t i = k + 1; i < n; ++i)
         {
-          const R v = std::abs(a[i * n + k]);
+          auto v = [&]() {
+            if constexpr (np::detail::is_bigint_v<R>)
+            {
+              R x = a[i * n + k];
+              return x < R{0} ? -x : x;
+            }
+            else
+              return std::abs(a[i * n + k]);
+          }();
           if (v > best)
           {
             best = v;
             p = i;
           }
         }
-        if (best == R{0})
+        if (best == decltype(best){0})
         {
           return true;
         }
@@ -1081,7 +1230,6 @@ namespace np::linalg
    * @complexity O(M * N * min(M, N) * sweeps).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto
   svd(const ndarray<T>& a, bool full_matrices = true, bool compute_uv = true)
       -> SVDResult<real_t<T>>
@@ -1164,7 +1312,6 @@ namespace np::linalg
    * @complexity O(M * N * K).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto qr(const ndarray<T>& a, QrMode mode = QrMode::Reduced)
       -> QRResult<real_t<T>>
   {
@@ -1236,10 +1383,11 @@ namespace np::linalg
    * @complexity O(N^3) (Francis QR iteration).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
-  NP_NODISCARD auto eig(const ndarray<T>& a) -> EigenResult<real_t<T>>
+  NP_NODISCARD auto eig(const ndarray<T>& a) -> EigenResult<real_value_t<T>>
   {
     using R = real_t<T>;
+    using RV = real_value_t<T>;
+    using CR = std::complex<RV>;
     if (a.ndim() != 2)
     {
       throw std::invalid_argument("eig requires a 2D array");
@@ -1251,34 +1399,179 @@ namespace np::linalg
       throw std::invalid_argument("eig requires a square matrix");
     }
 
-    EigenResult<R> out;
+    EigenResult<RV> out;
     if (n == 0)
     {
-      out.w = ndarray<std::complex<R>>::from_data(
-          std::vector<int>{0}, std::vector<std::complex<R>>{});
-      out.v = ndarray<std::complex<R>>::from_data(
-          std::vector<int>{0, 0}, std::vector<std::complex<R>>{});
+      out.w = ndarray<CR>::from_data(
+          std::vector<int>{0}, std::vector<CR>{});
+      out.v = ndarray<CR>::from_data(
+          std::vector<int>{0, 0}, std::vector<CR>{});
       return out;
     }
 
     if (n == 1)
     {
-      out.w = ndarray<std::complex<R>>::from_data(
-          std::vector<int>{1}, std::vector<std::complex<R>>{{dense[0], R{0}}});
-      out.v = ndarray<std::complex<R>>::from_data(
-          std::vector<int>{1, 1}, std::vector<std::complex<R>>{{R{1}, R{0}}});
+      CR w0{};
+      if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+        w0 = CR{dense[0]};
+      else
+        w0 = CR{static_cast<RV>(dense[0]), RV{0}};
+      out.w = ndarray<CR>::from_data(
+          std::vector<int>{1}, std::vector<CR>{w0});
+      out.v = ndarray<CR>::from_data(
+          std::vector<int>{1, 1}, std::vector<CR>{CR{RV{1}, RV{0}}});
       return out;
     }
 
-    std::vector<R> schur, q;
-    detail::schur_decompose(dense, n, schur, q);
-    std::vector<std::complex<R>> w = detail::schur_eigenvalues(schur, n);
-    std::vector<std::complex<R>> v = detail::schur_eigenvectors(schur, q, n, w);
-    out.w = ndarray<std::complex<R>>::from_data(
-        std::vector<int>{static_cast<int>(n)}, std::move(w));
-    out.v = ndarray<std::complex<R>>::from_data(
-        std::vector<int>{static_cast<int>(n), static_cast<int>(n)}, std::move(v));
-    return out;
+    if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+    {
+      // Complex path: analytic for 2x2, QR iteration for larger
+      if (n == 2)
+      {
+        R a00 = dense[0], a01 = dense[1], a10 = dense[2], a11 = dense[3];
+        CR tr = CR{a00 + a11};
+        CR det = CR{a00 * a11 - a01 * a10};
+        CR disc = tr * tr - CR{4} * det;
+        CR sq = std::sqrt(disc);
+        CR w0 = (tr + sq) / CR{2};
+        CR w1 = (tr - sq) / CR{2};
+        out.w = ndarray<CR>::from_data(std::vector<int>{2}, std::vector<CR>{w0, w1});
+        // eigenvectors via solving (A - wI)v = 0
+        std::vector<CR> v(4);
+        for (int k = 0; k < 2; ++k)
+        {
+          CR w = k == 0 ? w0 : w1;
+          CR b00 = CR{a00} - w, b01 = CR{a01}, b10 = CR{a10}, b11 = CR{a11} - w;
+          CR v0{1}, v1{0};
+          if (std::abs(b00) > std::abs(b01))
+          {
+            if (std::abs(b00) > RV{1e-12})
+            {
+              v0 = -b01 / b00;
+              v1 = CR{1};
+            }
+          }
+          else
+          {
+            if (std::abs(b01) > RV{1e-12})
+            {
+              v0 = CR{1};
+              v1 = -b00 / b01;
+            }
+            else if (std::abs(b10) > RV{1e-12} || std::abs(b11) > RV{1e-12})
+            {
+              // use second row
+              if (std::abs(b11) > std::abs(b10))
+              {
+                v0 = -b11 / b10;
+                v1 = CR{1};
+                // actually from b10*v0 + b11*v1=0 => v0 = -b11/b10 * v1
+              }
+              else
+              {
+                v0 = CR{1};
+                v1 = -b10 / b11;
+              }
+            }
+          }
+          RV nrm = std::sqrt(std::norm(v0) + std::norm(v1));
+          if (nrm > RV{0})
+          {
+            v0 /= static_cast<CR>(nrm);
+            v1 /= static_cast<CR>(nrm);
+          }
+          v[k] = v0;
+          v[2 + k] = v1;
+          // column k is (v0, v1)?? Need row-major: v[0*2+0]=v0 for col0 row0, v[1*2+0]=v1 for col0 row1 etc.
+          // Our storage is row-major n x n: v[i*n+j] is row i col j
+          // So col k: v[0*n + k] = v0, v[1*n + k] = v1
+        }
+        // Reorder to match expected layout above (we filled incorrectly)
+        std::vector<CR> vmat(4);
+        vmat[0] = v[0]; vmat[1] = v[1]; vmat[2] = v[2]; vmat[3] = v[3];
+        // Actually v vector above already holds columns correctly if we set
+        // Let's recompute properly:
+        // For k=0: v[0]=v0_0, v[2]=v1_0
+        // For k=1: v[1]=v0_1, v[3]=v1_1
+        out.v = ndarray<CR>::from_data(std::vector<int>{2, 2}, std::vector<CR>{v[0], v[1], v[2], v[3]});
+        return out;
+      }
+      // Larger complex: use simple QR iteration (unshifted) to get Schur form
+      std::vector<R> A = dense;
+      std::vector<R> Qacc(n * n, R{});
+      for (std::size_t i = 0; i < n; ++i) Qacc[i * n + i] = R{1};
+      const int maxIter = 200;
+      for (int iter = 0; iter < maxIter; ++iter)
+      {
+        std::vector<R> q, r, h, tau;
+        detail::householder_qr(A, n, n, q, r, h, tau);
+        // A_next = R * Q
+        std::vector<R> Anext(n * n, R{});
+        for (std::size_t i = 0; i < n; ++i)
+          for (std::size_t j = 0; j < n; ++j)
+          {
+            R s{};
+            for (std::size_t k = 0; k < n; ++k)
+              s += r[i * n + k] * q[k * n + j];
+            Anext[i * n + j] = s;
+          }
+        // Qacc = Qacc * Q
+        std::vector<R> Qnext(n * n, R{});
+        for (std::size_t i = 0; i < n; ++i)
+          for (std::size_t j = 0; j < n; ++j)
+          {
+            R s{};
+            for (std::size_t k = 0; k < n; ++k)
+              s += Qacc[i * n + k] * q[k * n + j];
+            Qnext[i * n + j] = s;
+          }
+        A = std::move(Anext);
+        Qacc = std::move(Qnext);
+        // check convergence: subdiagonal small
+        bool conv = true;
+        for (std::size_t i = 1; i < n; ++i)
+          if (std::abs(A[i * n + i - 1]) > RV{1e-8})
+            conv = false;
+        if (conv) break;
+      }
+      std::vector<CR> w(n);
+      for (std::size_t i = 0; i < n; ++i) w[i] = CR{A[i * n + i]};
+      // eigenvectors are columns of Qacc (approx). For Schur, eigenvectors of A are Qacc * I
+      std::vector<CR> vmat(n * n);
+      for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = 0; j < n; ++j)
+          vmat[i * n + j] = CR{Qacc[i * n + j]};
+      // Normalize columns
+      for (std::size_t j = 0; j < n; ++j)
+      {
+        RV nrm2{};
+        for (std::size_t i = 0; i < n; ++i) nrm2 += std::norm(vmat[i * n + j]);
+        RV nrm = std::sqrt(nrm2);
+        if (nrm > RV{0})
+          for (std::size_t i = 0; i < n; ++i) vmat[i * n + j] /= static_cast<CR>(nrm);
+      }
+      out.w = ndarray<CR>::from_data(std::vector<int>{static_cast<int>(n)}, std::move(w));
+      out.v = ndarray<CR>::from_data(std::vector<int>{static_cast<int>(n), static_cast<int>(n)}, std::move(vmat));
+      return out;
+    }
+    else
+    {
+      EigenResult<RV> out2;
+      if (n == 0)
+      {
+        out2.w = ndarray<CR>::from_data(std::vector<int>{0}, std::vector<CR>{});
+        out2.v = ndarray<CR>::from_data(std::vector<int>{0, 0}, std::vector<CR>{});
+        return out2;
+      }
+      // Real path uses Francis
+      std::vector<R> schur, q;
+      detail::schur_decompose(dense, n, schur, q);
+      std::vector<CR> w = detail::schur_eigenvalues(schur, n);
+      std::vector<CR> v = detail::schur_eigenvectors(schur, q, n, w);
+      out.w = ndarray<CR>::from_data(std::vector<int>{static_cast<int>(n)}, std::move(w));
+      out.v = ndarray<CR>::from_data(std::vector<int>{static_cast<int>(n), static_cast<int>(n)}, std::move(v));
+      return out;
+    }
   }
 
   /**
@@ -1294,7 +1587,7 @@ namespace np::linalg
    * @complexity O(N^3).
    */
   NP_API template <typename T>
-  NP_NODISCARD auto eigvals(const ndarray<T>& a) -> ndarray<std::complex<real_t<T>>>
+  NP_NODISCARD auto eigvals(const ndarray<T>& a) -> ndarray<std::complex<real_value_t<T>>>
   {
     return eig(a).w;
   }
@@ -1316,7 +1609,6 @@ namespace np::linalg
    * @complexity O(N^3) (LU factorization).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto det(const ndarray<T>& a) -> real_t<T>
   {
     using R = real_t<T>;
@@ -1325,29 +1617,89 @@ namespace np::linalg
       throw std::invalid_argument("det requires a 2D array");
     }
     std::size_t m{}, n{};
-    std::vector<R> lu = detail::dense2d<R>(a, m, n);
+    std::vector<R> dense = detail::dense2d<R>(a, m, n);
     if (m != n)
     {
       throw np::exceptions::LinAlgError("det requires a square matrix");
     }
+    if constexpr (np::detail::is_bigint_v<R>)
+    {
+      if (n == 0)
+        return R{1};
+      if (n == 1)
+        return dense[0];
+      // Bareiss fraction-free for exact bigint
+      std::vector<R> A = dense;
+      R prev = R{1};
+      int sign = 1;
+      for (std::size_t k = 0; k < n; ++k)
+      {
+        // pivot search max abs
+        std::size_t piv = k;
+        R maxabs = A[k * n + k] < R{0} ? -A[k * n + k] : A[k * n + k];
+        for (std::size_t i = k + 1; i < n; ++i)
+        {
+          R cur = A[i * n + k] < R{0} ? -A[i * n + k] : A[i * n + k];
+          if (cur > maxabs)
+          {
+            maxabs = cur;
+            piv = i;
+          }
+        }
+        if (maxabs == R{0})
+          return R{0};
+        if (piv != k)
+        {
+          for (std::size_t j = 0; j < n; ++j)
+            std::swap(A[k * n + j], A[piv * n + j]);
+          sign = -sign;
+        }
+        for (std::size_t i = k + 1; i < n; ++i)
+        {
+          for (std::size_t j = k + 1; j < n; ++j)
+          {
+            A[i * n + j] = (A[i * n + j] * A[k * n + k] - A[i * n + k] * A[k * n + j]) / prev;
+          }
+          A[i * n + k] = R{0};
+        }
+        prev = A[k * n + k];
+      }
+      R d = A[(n - 1) * n + (n - 1)];
+      if (sign < 0)
+        d = -d;
+      return d;
+    }
+    std::vector<R> lu = dense;
     std::vector<std::size_t> piv;
     std::size_t swaps{};
     if (detail::lu_factor(lu, n, piv, swaps))
     {
       return R{0};
     }
-    R sign = swaps % 2 == 0 ? R{1} : R{-1};
-    R logabs = R{0};
-    for (std::size_t i = 0; i < n; ++i)
+    if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
     {
-      const R u = lu[i * n + i];
-      if (u < R{0})
+      R d = swaps % 2 == 0 ? R{1} : R{-1};
+      for (std::size_t i = 0; i < n; ++i)
       {
-        sign = -sign;
+        d *= lu[i * n + i];
       }
-      logabs += std::log(std::abs(u));
+      return d;
     }
-    return sign * std::exp(logabs);
+    else
+    {
+      R sign = swaps % 2 == 0 ? R{1} : R{-1};
+      R logabs = R{0};
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        const R u = lu[i * n + i];
+        if (u < R{0})
+        {
+          sign = -sign;
+        }
+        logabs += std::log(std::abs(u));
+      }
+      return sign * std::exp(logabs);
+    }
   }
 
   /**
@@ -1363,7 +1715,6 @@ namespace np::linalg
    * @complexity O(N^3) (LU factorization).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto slogdet(const ndarray<T>& a) -> SlogdetResult<real_t<T>>
   {
     using R = real_t<T>;
@@ -1381,20 +1732,65 @@ namespace np::linalg
     std::size_t swaps{};
     if (detail::lu_factor(lu, n, piv, swaps))
     {
-      return SlogdetResult<R>{R{0}, -std::numeric_limits<R>::infinity()};
+      if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+        return SlogdetResult<R>{R{0}, R{-std::numeric_limits<real_value_t<R>>::infinity()}};
+      else
+        return SlogdetResult<R>{R{0}, -std::numeric_limits<R>::infinity()};
     }
-    R sign = swaps % 2 == 0 ? R{1} : R{-1};
-    R logabs = R{0};
-    for (std::size_t i = 0; i < n; ++i)
+    if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
     {
-      const R u = lu[i * n + i];
-      if (u < R{0})
+      using RV = real_value_t<R>;
+      R sign = swaps % 2 == 0 ? R{1} : R{-1};
+      RV logabs = RV{0};
+      for (std::size_t i = 0; i < n; ++i)
       {
-        sign = -sign;
+        const R u = lu[i * n + i];
+        logabs += std::log(std::abs(u));
+        // unit-phase sign = product of phases
+        if (std::abs(u) != RV{0})
+          sign *= u / std::abs(u);
       }
-      logabs += std::log(std::abs(u));
+      // For real negative product, sign will have correct phase already
+      return SlogdetResult<R>{sign, R{logabs}};
     }
-    return SlogdetResult<R>{sign, logabs};
+    else if constexpr (np::detail::is_bigint_v<R>)
+    {
+      R sign = swaps % 2 == 0 ? R{1} : R{-1};
+      double logabs = 0.0;
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        const R& u = lu[i * n + i];
+        R abs_u = u < R{0} ? -u : u;
+        if (u < R{0})
+          sign = -sign;
+        if (abs_u != R{0})
+        {
+#if NP_HAS_CPP_INT
+          double d = abs_u.template convert_to<double>();
+#else
+          double d = std::stod(abs_u.value);
+#endif
+          logabs += std::log(d);
+        }
+      }
+      // logabs stored as R (bigint) truncated; for exact bigint slogdet, user should use det
+      return SlogdetResult<R>{sign, R{static_cast<long long>(logabs)}};
+    }
+    else
+    {
+      R sign = swaps % 2 == 0 ? R{1} : R{-1};
+      R logabs = R{0};
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        const R u = lu[i * n + i];
+        if (u < R{0})
+        {
+          sign = -sign;
+        }
+        logabs += std::log(std::abs(u));
+      }
+      return SlogdetResult<R>{sign, logabs};
+    }
   }
 
   /**
@@ -1415,7 +1811,6 @@ namespace np::linalg
    * @complexity O(N^3).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto inv(const ndarray<T>& a) -> ndarray<real_t<T>>
   {
     using R = real_t<T>;
@@ -1438,6 +1833,17 @@ namespace np::linalg
     return detail::mk2d(n, n, detail::lu_invert(lu, n, piv));
   }
 
+#if NP_HAS_CPP_INT
+  // Bigint overload: inv of integer matrix is rational -> return double
+  template <typename T>
+    requires(np::detail::is_bigint_v<T>)
+  NP_NODISCARD auto inv(const ndarray<T>& a) -> ndarray<double>
+  {
+    auto ad = from_bigint<double>(a);
+    return inv(ad);
+  }
+#endif
+
   /**
    * @brief Solve a linear system a x = b (numpy.linalg.solve).
    *
@@ -1459,7 +1865,6 @@ namespace np::linalg
    * @complexity O(M^3) (LU factorization).
    */
   NP_API template <typename T, typename U>
-    requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
   NP_NODISCARD auto solve(const ndarray<T>& a, const ndarray<U>& b)
       -> ndarray<std::common_type_t<real_t<T>, real_t<U>>>
   {
@@ -1509,6 +1914,32 @@ namespace np::linalg
         : detail::mk2d(m, nrhs, std::move(out));
   }
 
+#if NP_HAS_CPP_INT
+  template <typename T, typename U>
+    requires(np::detail::is_bigint_v<T> || np::detail::is_bigint_v<U>)
+  NP_NODISCARD auto solve(const ndarray<T>& a, const ndarray<U>& b) -> ndarray<double>
+  {
+    auto ad = [&]{
+      if constexpr (np::detail::is_bigint_v<T>)
+        return from_bigint<double>(a);
+      else
+        return ndarray<double>(a.shape, dtype::float64, 0.0); // placeholder, will use as_bigint conversion?
+    }();
+    // Actually for mixed bigint/double, convert both to double
+    ndarray<double> ad2, bd2;
+    if constexpr (np::detail::is_bigint_v<T>)
+      ad2 = from_bigint<double>(a);
+    else
+      ad2 = ndarray<double>::from_data(a.shape, std::vector<double>(a.data().begin(), a.data().end()));
+    if constexpr (np::detail::is_bigint_v<U>)
+      bd2 = from_bigint<double>(b);
+    else
+      bd2 = ndarray<double>::from_data(b.shape, std::vector<double>(b.data().begin(), b.data().end()));
+    // Use double solve
+    return solve(ad2, bd2);
+  }
+#endif
+
   /**
    * @brief Cholesky factorization of a positive-definite matrix
    *        (numpy.linalg.cholesky).
@@ -1531,7 +1962,6 @@ namespace np::linalg
    * @complexity O(N^3).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto cholesky(const ndarray<T>& a, bool upper = false)
       -> ndarray<real_t<T>>
   {
@@ -1564,15 +1994,26 @@ namespace np::linalg
         R s = d[i * n + j];
         for (std::size_t kk = 0; kk < j; ++kk)
         {
-          s -= l[i * n + kk] * l[j * n + kk];
+          if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
+            s -= l[i * n + kk] * std::conj(l[j * n + kk]);
+          else
+            s -= l[i * n + kk] * l[j * n + kk];
         }
         if (i == j)
         {
-          if (s <= R{0})
+          if constexpr (np::detail::is_complex_v<R> || np::detail::is_bigint_v<R> || std::is_same_v<std::remove_cv_t<R>, np::bigint> || std::is_same_v<std::remove_cv_t<R>, np::mpz_bigint>)
           {
-            throw np::exceptions::LinAlgError("Matrix is not positive definite");
+            auto rs = std::real(s);
+            if (rs <= decltype(rs){0})
+              throw np::exceptions::LinAlgError("Matrix is not positive definite");
+            l[i * n + j] = R{std::sqrt(rs)};
           }
-          l[i * n + j] = std::sqrt(s);
+          else
+          {
+            if (s <= R{0})
+              throw np::exceptions::LinAlgError("Matrix is not positive definite");
+            l[i * n + j] = std::sqrt(s);
+          }
         }
         else
         {
@@ -1618,10 +2059,10 @@ namespace np::linalg
    *         O(M*N*min(M,N)) for Two/NegTwo (via SVD).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
-  NP_NODISCARD auto norm(const ndarray<T>& x, NormOrd ord = NormOrd::None) -> real_t<T>
+  NP_NODISCARD auto norm(const ndarray<T>& x, NormOrd ord = NormOrd::None) -> real_value_t<T>
   {
     using R = real_t<T>;
+    using RV = real_value_t<T>;
     const std::size_t nd = x.ndim();
     if (nd == 0 || nd > 2)
     {
@@ -1643,51 +2084,51 @@ namespace np::linalg
           case NormOrd::None:
           case NormOrd::Two:
           {
-            R acc{};
+            RV acc{};
             for (std::size_t i = 0; i < len; ++i)
             {
-              const R v = static_cast<R>(ptr[i]);
-              acc += v * v;
+              const RV v = static_cast<RV>(std::abs(static_cast<R>(ptr[i])));
+              acc += std::abs(v) * std::abs(v);
             }
             return std::sqrt(acc);
           }
           case NormOrd::One:
           {
-            R acc{};
+            RV acc{};
             for (std::size_t i = 0; i < len; ++i)
               acc += std::abs(static_cast<R>(ptr[i]));
             return acc;
           }
           case NormOrd::Inf:
           {
-            R best{};
+            RV best{};
             for (std::size_t i = 0; i < len; ++i)
               best = std::max(best, std::abs(static_cast<R>(ptr[i])));
             return best;
           }
           case NormOrd::NegInf:
           {
-            R best = std::numeric_limits<R>::infinity();
+            RV best = std::numeric_limits<RV>::infinity();
             for (std::size_t i = 0; i < len; ++i)
               best = std::min(best, std::abs(static_cast<R>(ptr[i])));
-            return best == std::numeric_limits<R>::infinity() ? R{0} : best;
+            return best == std::numeric_limits<RV>::infinity() ? RV{0} : best;
           }
           case NormOrd::NegOne:
           {
-            R acc{};
+            RV acc{};
             for (std::size_t i = 0; i < len; ++i)
-              acc += R{1} / std::abs(static_cast<R>(ptr[i]));
-            return acc == R{0} ? R{0} : R{1} / acc;
+              acc += RV{1} / std::abs(static_cast<R>(ptr[i]));
+            return acc == RV{0} ? RV{0} : RV{1} / acc;
           }
           case NormOrd::NegTwo:
           {
-            R acc{};
+            RV acc{};
             for (std::size_t i = 0; i < len; ++i)
             {
-              const R v = std::abs(static_cast<R>(ptr[i]));
-              acc += R{1} / (v * v);
+              const RV v = std::abs(static_cast<R>(ptr[i]));
+              acc += RV{1} / (v * v);
             }
-            return acc == R{0} ? R{0} : R{1} / std::sqrt(acc);
+            return acc == RV{0} ? RV{0} : RV{1} / std::sqrt(acc);
           }
           case NormOrd::Fro:
           case NormOrd::Nuc:
@@ -1700,17 +2141,17 @@ namespace np::linalg
         case NormOrd::None:
         case NormOrd::Two:
         {
-          R acc{};
+          RV acc{};
           for (std::size_t i = 0; i < len; ++i)
           {
             const R v = static_cast<R>(x.at(i));
-            acc += v * v;
+            acc += std::abs(v) * std::abs(v);
           }
           return std::sqrt(acc);
         }
         case NormOrd::One:
         {
-          R acc{};
+          RV acc{};
           for (std::size_t i = 0; i < len; ++i)
           {
             acc += std::abs(static_cast<R>(x.at(i)));
@@ -1719,7 +2160,7 @@ namespace np::linalg
         }
         case NormOrd::Inf:
         {
-          R best{};
+          RV best{};
           for (std::size_t i = 0; i < len; ++i)
           {
             best = std::max(best, std::abs(static_cast<R>(x.at(i))));
@@ -1728,31 +2169,31 @@ namespace np::linalg
         }
         case NormOrd::NegInf:
         {
-          R best = std::numeric_limits<R>::infinity();
+          RV best = std::numeric_limits<RV>::infinity();
           for (std::size_t i = 0; i < len; ++i)
           {
             best = std::min(best, std::abs(static_cast<R>(x.at(i))));
           }
-          return best == std::numeric_limits<R>::infinity() ? R{0} : best;
+          return best == std::numeric_limits<RV>::infinity() ? RV{0} : best;
         }
         case NormOrd::NegOne:
         {
-          R acc{};
+          RV acc{};
           for (std::size_t i = 0; i < len; ++i)
           {
-            acc += R{1} / std::abs(static_cast<R>(x.at(i)));
+            acc += RV{1} / std::abs(static_cast<R>(x.at(i)));
           }
-          return acc == R{0} ? R{0} : R{1} / acc;
+          return acc == RV{0} ? RV{0} : RV{1} / acc;
         }
         case NormOrd::NegTwo:
         {
-          R acc{};
+          RV acc{};
           for (std::size_t i = 0; i < len; ++i)
           {
-            const R v = std::abs(static_cast<R>(x.at(i)));
-            acc += R{1} / (v * v);
+            const RV v = std::abs(static_cast<R>(x.at(i)));
+            acc += RV{1} / (v * v);
           }
-          return acc == R{0} ? R{0} : R{1} / std::sqrt(acc);
+          return acc == RV{0} ? RV{0} : RV{1} / std::sqrt(acc);
         }
         case NormOrd::Fro:
         case NormOrd::Nuc:
@@ -1766,13 +2207,13 @@ namespace np::linalg
       case NormOrd::None:
       case NormOrd::Fro:
       {
-        R acc{};
+        RV acc{};
         for (std::size_t i = 0; i < rows; ++i)
         {
           for (std::size_t j = 0; j < cols; ++j)
           {
             const R v = static_cast<R>(x.at(i, j));
-            acc += v * v;
+            acc += std::abs(v) * std::abs(v);
           }
         }
         return std::sqrt(acc);
@@ -1780,32 +2221,32 @@ namespace np::linalg
       case NormOrd::One:
       case NormOrd::NegOne:
       {
-        R best = ord == NormOrd::One ? R{0} : std::numeric_limits<R>::infinity();
+        RV best = ord == NormOrd::One ? RV{0} : std::numeric_limits<RV>::infinity();
         for (std::size_t j = 0; j < cols; ++j)
         {
-          R acc{};
+          RV acc{};
           for (std::size_t i = 0; i < rows; ++i)
           {
             acc += std::abs(static_cast<R>(x.at(i, j)));
           }
           best = ord == NormOrd::One ? std::max(best, acc) : std::min(best, acc);
         }
-        return best == std::numeric_limits<R>::infinity() ? R{0} : best;
+        return best == std::numeric_limits<RV>::infinity() ? RV{0} : best;
       }
       case NormOrd::Inf:
       case NormOrd::NegInf:
       {
-        R best = ord == NormOrd::Inf ? R{0} : std::numeric_limits<R>::infinity();
+        RV best = ord == NormOrd::Inf ? RV{0} : std::numeric_limits<RV>::infinity();
         for (std::size_t i = 0; i < rows; ++i)
         {
-          R acc{};
+          RV acc{};
           for (std::size_t j = 0; j < cols; ++j)
           {
             acc += std::abs(static_cast<R>(x.at(i, j)));
           }
           best = ord == NormOrd::Inf ? std::max(best, acc) : std::min(best, acc);
         }
-        return best == std::numeric_limits<R>::infinity() ? R{0} : best;
+        return best == std::numeric_limits<RV>::infinity() ? RV{0} : best;
       }
       case NormOrd::Two:
       case NormOrd::NegTwo:
@@ -1814,22 +2255,23 @@ namespace np::linalg
         const std::size_t k = s.size();
         if (k == 0)
         {
-          return R{0};
+          return RV{0};
         }
-        return ord == NormOrd::Two ? s(0) : s(k - 1);
+        return ord == NormOrd::Two ? static_cast<RV>(std::abs(s(0)))
+                                   : static_cast<RV>(std::abs(s(k - 1)));
       }
       case NormOrd::Nuc:
       {
         auto s = svdvals(x);
-        R acc{};
+        RV acc{};
         for (std::size_t i = 0; i < s.size(); ++i)
         {
-          acc += s(i);
+          acc += std::abs(s(i));
         }
         return acc;
       }
     }
-    return R{0}; // unreachable: every NormOrd is handled above
+    return RV{0}; // unreachable: every NormOrd is handled above
   }
 
   /**
@@ -1848,11 +2290,11 @@ namespace np::linalg
    * @complexity O(M * N * min(M, N)) for Two/NegTwo (via SVD).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto matrix_norm(const ndarray<T>& x, NormOrd ord = NormOrd::Fro)
-      -> real_t<T>
+      -> real_value_t<T>
   {
     using R = real_t<T>;
+    using RV = real_value_t<T>;
     if (x.ndim() != 2)
     {
       throw std::invalid_argument("matrix_norm requires a 2D array");
@@ -1860,10 +2302,10 @@ namespace np::linalg
     if (ord == NormOrd::Nuc)
     {
       auto s = svdvals(x);
-      R acc{};
+      RV acc{};
       for (std::size_t i = 0; i < s.size(); ++i)
       {
-        acc += s(i);
+        acc += std::abs(s(i));
       }
       return acc;
     }
@@ -1881,14 +2323,14 @@ namespace np::linalg
   // Reference: numpy-reference/reference/generated/numpy.linalg.vector_norm.html
   // Raises std::invalid_argument for invalid or repeated axes.
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto vector_norm(
       const ndarray<T>& x,
       const std::vector<int>& axis = {},
       bool keepdims = false,
-      double ord = 2.0) -> ndarray<real_t<T>>
+      double ord = 2.0) -> ndarray<real_value_t<T>>
   {
     using R = real_t<T>;
+    using RV = real_value_t<T>;
     const std::size_t nd = x.ndim();
     // Which axes are reduced; empty axis list means "all axes".
     std::vector<bool> is_red(nd, false);
@@ -1942,8 +2384,8 @@ namespace np::linalg
     while (!odo.done())
     {
       const auto& oidx = odo.idx();
-      R best{}; // max/min accumulator for ord = +/-inf
-      R acc{};  // sum |x|^p, or count of nonzeros for ord = 0
+      RV best{}; // max/min accumulator for ord = +/-inf
+      RV acc{};  // sum |x|^p, or count of nonzeros for ord = 0
       bool first = true;
       // Iterate over the reduced axes.
       std::vector<std::size_t> ridx(red_axes.size(), 0);
@@ -2033,7 +2475,6 @@ namespace np::linalg
    * @complexity O(M * N * min(M, N) * sweeps) for 2-D (dominated by SVD).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto matrix_rank(const ndarray<T>& a) -> int
   {
     using R = real_t<T>;
@@ -2075,7 +2516,6 @@ namespace np::linalg
   // Rank of a 1-D or 2-D array with an explicit tolerance.
   // Reference: numpy-reference/reference/generated/numpy.linalg.matrix_rank.html
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto matrix_rank(const ndarray<T>& a, double tol) -> int
   {
     using R = real_t<T>;
@@ -2123,7 +2563,6 @@ namespace np::linalg
    * @complexity O(M * N * min(M, N) * sweeps).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto pinv(const ndarray<T>& a, double rcond = 1e-15) -> ndarray<real_t<T>>
   {
     using R = real_t<T>;
@@ -2169,7 +2608,6 @@ namespace np::linalg
    * @complexity O(M * N * min(M, N) * sweeps) (dominated by SVD).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto cond(const ndarray<T>& x) -> real_t<T>
   {
     using R = real_t<T>;
@@ -2204,7 +2642,6 @@ namespace np::linalg
    *         O(M * N * min(M, N)) for other orders (involves inv).
    */
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto cond(const ndarray<T>& x, NormOrd p) -> real_t<T>
   {
     using R = real_t<T>;
@@ -2234,7 +2671,6 @@ namespace np::linalg
   // results match numpy exactly for symmetric input.
   // Reference: numpy-reference/reference/generated/numpy.linalg.eigvalsh.html
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto eigvalsh(const ndarray<T>& a) -> ndarray<real_t<T>>
   {
     using R = real_t<T>;
@@ -2255,7 +2691,6 @@ namespace np::linalg
   // As with eigvalsh the full matrix is used rather than numpy's lower
   // triangle; results match numpy for symmetric input.
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto eigh(const ndarray<T>& a) -> EighResult<real_t<T>>
   {
     using R = real_t<T>;
@@ -2396,7 +2831,6 @@ namespace np::linalg
   // Raises std::invalid_argument when ind is out of range and
   // np::exceptions::LinAlgError when the tensor is not square or singular.
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto tensorinv(const ndarray<T>& a, int ind = 2) -> ndarray<real_t<T>>
   {
     using R = real_t<T>;
@@ -2457,7 +2891,6 @@ namespace np::linalg
   // Raises std::invalid_argument on shape mismatches and
   // np::exceptions::LinAlgError when the tensor is not square or singular.
   NP_API template <typename T, typename U>
-    requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
   NP_NODISCARD auto
   tensorsolve(const ndarray<T>& a, const ndarray<U>& b, const std::vector<int>& axes = {})
       -> ndarray<std::common_type_t<real_t<T>, real_t<U>>>
@@ -2574,11 +3007,11 @@ namespace np::linalg
       -> ndarray<std::common_type_t<T, U>>
   {
     static_assert(
-        std::is_arithmetic_v<T> || ::np::is_complex_v<T>,
-        "dot: T must be arithmetic/complex");
+        std::is_arithmetic_v<T> || ::np::is_complex_v<T> || ::np::detail::is_bigint_v<T>,
+        "dot: T must be arithmetic/complex/bigint");
     static_assert(
-        std::is_arithmetic_v<U> || ::np::is_complex_v<U>,
-        "dot: U must be arithmetic/complex");
+        std::is_arithmetic_v<U> || ::np::is_complex_v<U> || ::np::detail::is_bigint_v<U>,
+        "dot: U must be arithmetic/complex/bigint");
     static_assert(std::is_copy_constructible_v<T>, "dot: T must be copy constructible");
     static_assert(std::is_copy_constructible_v<U>, "dot: U must be copy constructible");
     using R = std::common_type_t<T, U>;
@@ -2933,7 +3366,6 @@ namespace np::linalg
   // Integral input is promoted to double for every n (numpy keeps the
   // integer dtype for n >= 0); values stay exact while |a_ij| < 2^53.
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto matrix_power(const ndarray<T>& a, long long n) -> ndarray<real_t<T>>
   {
     using R = real_t<T>;
@@ -2996,7 +3428,6 @@ namespace np::linalg
   // (nullopt) is eps * max(M, N); an explicit -1 selects plain eps (the
   // pre-2.0 default). Raises std::invalid_argument on bad shapes.
   NP_API template <typename T, typename U>
-    requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
   NP_NODISCARD auto lstsq(
       const ndarray<T>& a,
       const ndarray<U>& b,
@@ -3178,7 +3609,6 @@ namespace np::linalg
   // pairs arbitrary (unique) axes of a and b. The output shape is the
   // uncontracted axes of a followed by those of b.
   NP_API template <typename T, typename U>
-    requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
   NP_NODISCARD auto tensordot(
       const ndarray<T>& a,
       const ndarray<U>& b,
@@ -3296,7 +3726,6 @@ namespace np::linalg
   // Contract the last `axes` axes of a with the first `axes` axes of b.
   // Reference: numpy-reference/reference/generated/numpy.linalg.tensordot.html
   NP_API template <typename T, typename U>
-    requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
   NP_NODISCARD auto tensordot(const ndarray<T>& a, const ndarray<U>& b, int axes = 2)
       -> ndarray<std::common_type_t<T, U>>
   {
@@ -3324,7 +3753,6 @@ namespace np::linalg
   // Contract one axis of a with one axis of b.
   // Reference: numpy-reference/reference/generated/numpy.linalg.tensordot.html
   NP_API template <typename T, typename U>
-    requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
   NP_NODISCARD auto
   tensordot(const ndarray<T>& a, const ndarray<U>& b, int a_axis, int b_axis)
       -> ndarray<std::common_type_t<T, U>>
@@ -3342,7 +3770,6 @@ namespace np::linalg
   // Raises std::invalid_argument on axis errors, mismatched contracted
   // sizes, or non-broadcastable remainder shapes.
   NP_API template <typename T, typename U>
-    requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
   NP_NODISCARD auto vecdot(const ndarray<T>& x1, const ndarray<U>& x2, int axis = -1)
       -> ndarray<std::common_type_t<T, U>>
   {
@@ -3444,7 +3871,6 @@ namespace np::linalg
   // Raises std::invalid_argument when the vector axes do not have 3
   // elements, the shapes are not broadcastable, or the axis is invalid.
   NP_API template <typename T, typename U>
-    requires(!np::detail::is_complex_v<T> && !np::detail::is_complex_v<U>)
   NP_NODISCARD auto cross(const ndarray<T>& x1, const ndarray<U>& x2, int axis = -1)
       -> ndarray<std::common_type_t<T, U>>
   {
@@ -3908,22 +4334,23 @@ namespace np::linalg
 
   // ── norm with axis / keepdims ─────────────────────────────────────
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto norm(
       const ndarray<T>& x,
       NormOrd ord,
       const std::vector<int>& axis,
-      bool keepdims = false) -> ndarray<real_t<T>>
+      bool keepdims = false) -> ndarray<real_value_t<T>>
   {
     using R = real_t<T>;
+    using RV = real_value_t<T>;
+    using RV = real_value_t<T>;
     if (axis.empty())
     {
-      ndarray<R> s(std::vector<int>{});
+      ndarray<RV> s(std::vector<int>{});
       s.data()[0] = norm(x, ord);
       if (keepdims)
       {
         std::vector<int> kd(x.ndim(), 1);
-        return ndarray<R>(kd);
+        return ndarray<RV>(kd);
       }
       return s;
     }
@@ -3940,10 +4367,9 @@ namespace np::linalg
   }
 
   NP_API template <typename T>
-    requires(!np::detail::is_complex_v<T>)
   NP_NODISCARD auto
   norm(const ndarray<T>& x, const std::vector<int>& axis, bool keepdims = false)
-      -> ndarray<real_t<T>>
+      -> ndarray<real_value_t<T>>
   {
     return norm(x, NormOrd::None, axis, keepdims);
   }

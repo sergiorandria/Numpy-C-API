@@ -185,9 +185,9 @@ namespace
   static_assert(svdable<RealArr>);
   static_assert(qrable<RealArr>);
   static_assert(eigable<RealArr>);
-  static_assert(!svdable<CplxArr>);
-  static_assert(!qrable<CplxArr>);
-  static_assert(!eigable<CplxArr>);
+  static_assert(svdable<CplxArr>);
+  static_assert(qrable<CplxArr>);
+  static_assert(eigable<CplxArr>);
 
   static_assert(detable<RealArr>);
   static_assert(inversible<RealArr>);
@@ -199,23 +199,23 @@ namespace
   static_assert(pinvable<RealArr>);
   static_assert(condable<RealArr>);
   static_assert(eighable<RealArr>);
-  static_assert(!detable<CplxArr>);
-  static_assert(!inversible<CplxArr>);
-  static_assert(!solvable<CplxArr>);
-  static_assert(!powerable<CplxArr>);
-  static_assert(!choleskyable<CplxArr>);
-  static_assert(!normable<CplxArr>);
-  static_assert(!rankable<CplxArr>);
-  static_assert(!pinvable<CplxArr>);
-  static_assert(!condable<CplxArr>);
-  static_assert(!eighable<CplxArr>);
+  static_assert(detable<CplxArr>);
+  static_assert(inversible<CplxArr>);
+  static_assert(solvable<CplxArr>);
+  static_assert(powerable<CplxArr>);
+  static_assert(choleskyable<CplxArr>);
+  static_assert(normable<CplxArr>);
+  static_assert(rankable<CplxArr>);
+  static_assert(pinvable<CplxArr>);
+  static_assert(condable<CplxArr>);
+  static_assert(eighable<CplxArr>);
 
   static_assert(lstsqable<RealArr>);
   static_assert(tensordotable<RealArr>);
   static_assert(crossable<RealArr>);
-  static_assert(!lstsqable<CplxArr>);
-  static_assert(!tensordotable<CplxArr>);
-  static_assert(!crossable<CplxArr>);
+  static_assert(lstsqable<CplxArr>);
+  static_assert(tensordotable<CplxArr>);
+  static_assert(crossable<CplxArr>);
 
   // --- fixed path: shapes are part of the type and complex is rejected --------
   using FRealArr = np::ndarrayf<double, 2, 2>;
@@ -279,11 +279,11 @@ namespace
   static_assert(vector_normable<RealArr>);
   static_assert(diagonable<CplxArr>);
   static_assert(transposeable<CplxArr>);
-  static_assert(!matrix_normable<CplxArr>);
-  static_assert(!tensorinvable<CplxArr>);
-  static_assert(!tensorsolvable<CplxArr>);
-  static_assert(!vecdotable<CplxArr>);
-  static_assert(!vector_normable<CplxArr>);
+  static_assert(matrix_normable<CplxArr>);
+  static_assert(tensorinvable<CplxArr>);
+  static_assert(tensorsolvable<CplxArr>);
+  static_assert(vecdotable<CplxArr>);
+  static_assert(vector_normable<CplxArr>);
 
 } // namespace
 

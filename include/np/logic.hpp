@@ -610,13 +610,21 @@ namespace np
         set.insert(test_elements.data()[test_elements._flat_logical(i)]);
       if (element.is_contiguous()) [[likely]]
       {
-        const T* __restrict s = element.data().data();
-        bool* __restrict d = out.data().data();
-        std::size_t n = element.size();
-        for (std::size_t i = 0; i < n; ++i)
-        {
-          bool found = set.find(static_cast<U>(s[i])) != set.end();
-          d[i] = invert ? !found : found;
+        auto &d_vec = out.data();
+        if constexpr (std::is_same_v<T, bool>) {
+          auto &s_vec = element.data();
+          std::size_t n = element.size();
+          for (std::size_t i = 0; i < n; ++i) {
+            bool found = set.find(static_cast<U>(static_cast<bool>(s_vec[i]))) != set.end();
+            d_vec[i] = invert ? !found : found;
+          }
+        } else {
+          const T* __restrict s = element.data().data();
+          std::size_t n = element.size();
+          for (std::size_t i = 0; i < n; ++i) {
+            bool found = set.find(static_cast<U>(s[i])) != set.end();
+            d_vec[i] = invert ? !found : found;
+          }
         }
         return out;
       }
@@ -636,14 +644,21 @@ namespace np
     sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
     if (element.is_contiguous()) [[likely]]
     {
-      const T* __restrict s = element.data().data();
-      bool* __restrict d = out.data().data();
-      std::size_t n = element.size();
-      for (std::size_t i = 0; i < n; ++i)
-      {
-        bool found =
-            std::binary_search(sorted.begin(), sorted.end(), static_cast<U>(s[i]));
-        d[i] = invert ? !found : found;
+      auto &d_vec = out.data();
+      if constexpr (std::is_same_v<T, bool>) {
+        auto &s_vec = element.data();
+        std::size_t n = element.size();
+        for (std::size_t i = 0; i < n; ++i) {
+          bool found = std::binary_search(sorted.begin(), sorted.end(), static_cast<U>(static_cast<bool>(s_vec[i])));
+          d_vec[i] = invert ? !found : found;
+        }
+      } else {
+        const T* __restrict s = element.data().data();
+        std::size_t n = element.size();
+        for (std::size_t i = 0; i < n; ++i) {
+          bool found = std::binary_search(sorted.begin(), sorted.end(), static_cast<U>(s[i]));
+          d_vec[i] = invert ? !found : found;
+        }
       }
       return out;
     }
