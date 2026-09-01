@@ -444,9 +444,14 @@ namespace np::variety
   using ProjectiveVariety = manifold::ProjectiveManifold;
   using WedgeVariety = manifold::WedgeManifold;
   using AnyVariety = manifold::AnyManifold;
-  inline auto sphere(int n) { return manifold::SphereManifold(n).to_simplicial(); } // for old code that expected simplicial
-  // Keep original factory names that return unique_ptr<AbstractVariety>
-  inline auto sphere_ptr(int n) { return std::make_unique<manifold::SphereManifold>(n); }
+  // Original factories return unique_ptr for backward compat
+  inline auto sphere(int n) { return std::make_unique<manifold::SphereManifold>(n); }
+  inline auto torus(int d = 2) { return std::make_unique<manifold::TorusManifold>(d); }
+  inline auto projective_space(std::string f, int n) { return std::make_unique<manifold::ProjectiveManifold>(std::move(f), n); }
+  inline auto real_projective(int n) { return std::make_unique<manifold::ProjectiveManifold>("R", n); }
+  inline auto complex_projective(int n) { return std::make_unique<manifold::ProjectiveManifold>("C", n); }
+  inline auto sphere_ptr(int n) { return sphere(n); }
+  inline auto torus_ptr(int d = 2) { return torus(d); }
 } // namespace np::variety
 
 #endif // NP_MANIFOLD_HPP
