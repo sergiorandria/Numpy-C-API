@@ -46,6 +46,11 @@
 #include "threadpool.hpp"
 #endif
 
+// Suppress -Wbraced-scalar-init for NDProxy braced-init (e.g. {{{1},{2},{3}},{{1},{2},{3}}} shape 2×3×1)
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wbraced-scalar-init"
+#endif
+
 namespace np
 {
   namespace matrix
