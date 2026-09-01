@@ -20,7 +20,8 @@
  *   np::bigint bi = np::from_mpz(z);
  *   np::to_mpz(bi, z);
  *
- * Reference: https://www.boost.org/doc/libs/release/libs/multiprecision/doc/html/boost_multiprecision/tut/primetest.html
+ * Reference:
+ * https://www.boost.org/doc/libs/release/libs/multiprecision/doc/html/boost_multiprecision/tut/primetest.html
  *            https://gmplib.org/manual/Integer-Functions
  *
  * @author Sergio Randriamihoatra (sergiorandriamihoatra@gmail.com)
@@ -32,6 +33,7 @@
 #include <type_traits>
 
 #include "api_macros.hpp"
+#include "ndarray.hpp"
 #include "dtype.hpp"
 
 // ── Boost.Multiprecision backend ────────────────────────────────────────
@@ -76,12 +78,27 @@ namespace np
   {
     std::string value = "0";
     bigint() = default;
-    bigint(long long v) : value(std::to_string(v)) {}
-    bigint(const std::string& s) : value(s) {}
-    bigint(const char* s) : value(s) {}
-    bool operator==(const bigint& o) const { return value == o.value; }
-    bool operator<(const bigint& o) const { return value < o.value; }
-    bool operator>(const bigint& o) const { return o < *this; }
+    bigint(long long v) : value(std::to_string(v))
+    {
+    }
+    bigint(const std::string& s) : value(s)
+    {
+    }
+    bigint(const char* s) : value(s)
+    {
+    }
+    bool operator==(const bigint& o) const
+    {
+      return value == o.value;
+    }
+    bool operator<(const bigint& o) const
+    {
+      return value < o.value;
+    }
+    bool operator>(const bigint& o) const
+    {
+      return o < *this;
+    }
   };
   using mpz_bigint = bigint;
 #endif
@@ -120,15 +137,16 @@ namespace np
   /**
    * @brief Constexpr auto-promotion to bigint.
    *
-   * Any integral type (except bool) maps to `np::bigint`; floating / complex / bigint stay.
-   * `np::auto_bigint_t<int>` == `np::bigint`.
+   * Any integral type (except bool) maps to `np::bigint`; floating / complex / bigint
+   * stay. `np::auto_bigint_t<int>` == `np::bigint`.
    */
   template <typename T>
   using auto_bigint_t = std::conditional_t<
       detail::is_bigint_v<T>,
       T,
       std::conditional_t<
-          std::is_integral_v<std::remove_cv_t<T>> && !std::is_same_v<std::remove_cv_t<T>, bool>,
+          std::is_integral_v<std::remove_cv_t<T>>
+              && !std::is_same_v<std::remove_cv_t<T>, bool>,
           bigint,
           T>>;
 
@@ -136,11 +154,23 @@ namespace np
   inline constexpr bool auto_promotes_to_bigint_v =
       std::is_same_v<auto_bigint_t<T>, bigint> && !detail::is_bigint_v<T>;
 
-  // ── Converters ────────────────────────────────────────────────────────
-  NP_NODISCARD inline bigint to_bigint(long long v) { return bigint(v); }
-  NP_NODISCARD inline bigint to_bigint(const std::string& s) { return bigint(s); }
-  NP_NODISCARD inline bigint to_bigint(const char* s) { return bigint(s); }
-  NP_NODISCARD inline bigint to_bigint(const bigint& v) { return v; }
+  // Converters
+  NP_NODISCARD inline bigint to_bigint(long long v)
+  {
+    return bigint(v);
+  }
+  NP_NODISCARD inline bigint to_bigint(const std::string& s)
+  {
+    return bigint(s);
+  }
+  NP_NODISCARD inline bigint to_bigint(const char* s)
+  {
+    return bigint(s);
+  }
+  NP_NODISCARD inline bigint to_bigint(const bigint& v)
+  {
+    return v;
+  }
   template <typename T>
     requires(std::is_arithmetic_v<T> && !detail::is_bigint_v<T>)
   NP_NODISCARD inline bigint to_bigint(T v)
@@ -202,7 +232,7 @@ namespace np
     }
   } // namespace literals
 
-  // ── Ergonomic helpers ───────────────────────────────────────────────────
+  //  Ergonomic helpers
 
   /**
    * @brief Create `bigint` from any string/arithmetic literal (constexpr where possible).
@@ -213,7 +243,9 @@ namespace np
   {
     if constexpr (detail::is_bigint_v<std::remove_cv_t<T>>)
       return bigint(std::forward<T>(v));
-    else if constexpr (std::is_same_v<std::remove_cv_t<T>, const char*> || std::is_same_v<std::remove_cv_t<T>, char*>)
+    else if constexpr (
+        std::is_same_v<std::remove_cv_t<T>, const char*>
+        || std::is_same_v<std::remove_cv_t<T>, char*>)
       return bigint(std::string(v));
     else
       return bigint(std::forward<T>(v));
@@ -239,19 +271,22 @@ namespace np
    * `auto b = np::make_bigint_array({"123", "456"});`
    */
   template <typename T>
-  NP_NODISCARD inline auto make_bigint_array(std::initializer_list<T> list) -> ndarray<bigint>
+  NP_NODISCARD inline auto make_bigint_array(std::initializer_list<T> list)
+      -> ndarray<bigint>
   {
     std::vector<bigint> data;
     data.reserve(list.size());
-    for (auto &v : list) data.emplace_back(make_bigint(v));
+    for (auto& v : list)
+      data.emplace_back(make_bigint(v));
     ndarray<bigint> out(std::vector<int>{static_cast<int>(data.size())});
-    for (size_t i = 0; i < data.size(); ++i) out[i] = data[i];
+    for (size_t i = 0; i < data.size(); ++i)
+      out[i] = data[i];
     return out;
   }
 
 } // namespace np
 
-// ── dtype integration: map bigint -> dtype::bigint ──────────────────────
+// dtype integration: map bigint -> dtype::bigint
 namespace np::detail
 {
   template <>
@@ -268,7 +303,7 @@ namespace np::detail
 #endif
 } // namespace np::detail
 
-// ── std::common_type ────────────────────────────────────────────────────
+// std::common_type
 namespace std
 {
 #if NP_HAS_CPP_INT
@@ -290,7 +325,7 @@ namespace std
 #endif
 } // namespace std
 
-// ── ndarray converters (need ndarray definition) ────────────────────────
+//  ndarray converters (need ndarray definition)
 #include "ndarray.hpp"
 namespace np
 {
@@ -343,22 +378,28 @@ namespace np
    * @brief Create ndarray<bigint> from string literals (convenience).
    * `np::bigints({"123456...", "999..."})`
    */
-  NP_NODISCARD inline auto bigints(std::initializer_list<std::string> list) -> ndarray<bigint>
+  NP_NODISCARD inline auto bigints(std::initializer_list<std::string> list)
+      -> ndarray<bigint>
   {
     std::vector<bigint> data;
     data.reserve(list.size());
-    for (auto &s : list) data.emplace_back(s.c_str());
+    for (auto& s : list)
+      data.emplace_back(s.c_str());
     ndarray<bigint> out(std::vector<int>{static_cast<int>(data.size())});
-    for (std::size_t i = 0; i < data.size(); ++i) out[i] = data[i];
+    for (std::size_t i = 0; i < data.size(); ++i)
+      out[i] = data[i];
     return out;
   }
-  NP_NODISCARD inline auto bigints(std::initializer_list<const char*> list) -> ndarray<bigint>
+  NP_NODISCARD inline auto bigints(std::initializer_list<const char*> list)
+      -> ndarray<bigint>
   {
     std::vector<bigint> data;
     data.reserve(list.size());
-    for (auto s : list) data.emplace_back(s);
+    for (auto s : list)
+      data.emplace_back(s);
     ndarray<bigint> out(std::vector<int>{static_cast<int>(data.size())});
-    for (std::size_t i = 0; i < data.size(); ++i) out[i] = data[i];
+    for (std::size_t i = 0; i < data.size(); ++i)
+      out[i] = data[i];
     return out;
   }
   // Overload for already-bigint list
@@ -366,7 +407,8 @@ namespace np
   {
     std::vector<bigint> data(list.begin(), list.end());
     ndarray<bigint> out(std::vector<int>{static_cast<int>(data.size())});
-    for (std::size_t i = 0; i < data.size(); ++i) out[i] = data[i];
+    for (std::size_t i = 0; i < data.size(); ++i)
+      out[i] = data[i];
     return out;
   }
 
