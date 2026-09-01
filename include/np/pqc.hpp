@@ -36,7 +36,7 @@
 #endif
 #endif
 
-// ── PQC algorithm selection via __NUMPY_PQC_ALG ───────────────────────
+// PQC algorithm selection via __NUMPY_PQC_ALG
 // Define with e.g. -D__NUMPY_PQC_ALG=MLKEM768 or -D__NUMPY_PQC_ALG=1
 // When undefined, generic constant-time primitives remain available
 // but heavy KEM/signature wrappers are disabled (NP_PQC_ENABLED==0).
@@ -55,7 +55,7 @@ namespace np
 {
   namespace pqc
   {
-    // ── Algorithm-agnostic enable flag ──────────────────────────────
+    // Algorithm-agnostic enable flag
     NP_API inline constexpr bool enabled =
 #if NP_PQC_ENABLED
         true;

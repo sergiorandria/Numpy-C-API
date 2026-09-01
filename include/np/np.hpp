@@ -45,6 +45,7 @@
 #include "homology.hpp"
 #include "homotopy.hpp"
 #include "modular.hpp"
+#include "manifold.hpp"
 #include "variety.hpp"
 #include "differential.hpp"
 // Note: random.hpp and concatenate.hpp are not included by default.
