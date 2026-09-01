@@ -200,6 +200,184 @@ namespace np
 
   } // namespace detail
 
+  namespace detail
+  {
+
+    // ── ND initializer_list proxy helpers (arbitrary depth) ─────────────────
+    template <typename T>
+    struct is_init_list : std::false_type
+    {
+    };
+    template <typename U>
+    struct is_init_list<std::initializer_list<U>> : std::true_type
+    {
+    };
+    template <typename T>
+    constexpr bool is_init_list_v = is_init_list<T>::value;
+
+    template <typename T>
+    struct init_depth
+    {
+      static constexpr std::size_t value = 0;
+    };
+    template <typename U>
+    struct init_depth<std::initializer_list<U>>
+    {
+      static constexpr std::size_t value = 1 + init_depth<U>::value;
+    };
+    template <typename T>
+    constexpr std::size_t init_depth_v = init_depth<T>::value;
+
+    template <typename T>
+    struct init_value_type
+    {
+      using type = T;
+    };
+    template <typename U>
+    struct init_value_type<std::initializer_list<U>>
+    {
+      using type = typename init_value_type<U>::type;
+    };
+    template <typename T>
+    using init_value_type_t = typename init_value_type<T>::type;
+
+    template <typename List>
+    inline std::vector<int> nested_shape(const List& lst)
+    {
+      std::vector<int> s;
+      s.push_back(static_cast<int>(lst.size()));
+      if constexpr (is_init_list_v<typename List::value_type>)
+      {
+        if (lst.size() > 0)
+        {
+          auto sub = nested_shape(*lst.begin());
+          for (auto& sub_lst : lst)
+          {
+            auto cur = nested_shape(sub_lst);
+            if (cur != sub)
+            {
+              throw std::invalid_argument("ragged nested initializer list");
+            }
+          }
+          s.insert(s.end(), sub.begin(), sub.end());
+        }
+      }
+      return s;
+    }
+
+    template <typename List, typename T>
+    inline void nested_flatten(const List& lst, std::vector<T>& out)
+    {
+      if constexpr (is_init_list_v<typename List::value_type>)
+      {
+        for (auto& sub : lst)
+        {
+          nested_flatten(sub, out);
+        }
+      }
+      else
+      {
+        for (auto& v : lst)
+        {
+          out.push_back(static_cast<T>(v));
+        }
+      }
+    }
+
+    // ── NDProxy for arbitrary-depth braced-init (proxy pattern) ─────────
+    template <typename T>
+    struct NDProxy
+    {
+      std::vector<NDProxy> children;
+      T value{};
+      bool is_leaf = false;
+      NDProxy() = default;
+      template <typename U>
+        requires std::is_convertible_v<U, T>
+      NDProxy(U v) : value(static_cast<T>(v)), is_leaf(true)
+      {
+      }
+      NDProxy(std::initializer_list<NDProxy> lst) : children(lst), is_leaf(false)
+      {
+      }
+    };
+
+    template <typename T>
+    inline std::vector<int> proxy_shape(const NDProxy<T>& p)
+    {
+      if (p.is_leaf)
+      {
+        return {};
+      }
+      std::vector<int> s;
+      s.push_back(static_cast<int>(p.children.size()));
+      if (!p.children.empty() && !p.children[0].is_leaf)
+      {
+        auto sub = proxy_shape(p.children[0]);
+        for (auto& c : p.children)
+        {
+          auto cur = proxy_shape(c);
+          if (cur != sub)
+          {
+            throw std::invalid_argument("ragged nested initializer list");
+          }
+        }
+        s.insert(s.end(), sub.begin(), sub.end());
+      }
+      else
+      {
+        // Check all children are leaf for 1-D branch; for deeper, leaf branch is 1-D
+        for (auto& c : p.children)
+        {
+          if (c.is_leaf != p.children[0].is_leaf)
+          {
+            throw std::invalid_argument("ragged nested initializer list");
+          }
+        }
+      }
+      return s;
+    }
+
+    template <typename T>
+    inline std::vector<int> proxy_shape_list(const std::initializer_list<NDProxy<T>>& lst)
+    {
+      std::vector<int> s;
+      s.push_back(static_cast<int>(lst.size()));
+      if (lst.size() == 0)
+      {
+        return s;
+      }
+      auto sub = proxy_shape(*lst.begin());
+      for (auto& p : lst)
+      {
+        auto cur = proxy_shape(p);
+        if (cur != sub)
+        {
+          throw std::invalid_argument("ragged nested initializer list");
+        }
+      }
+      s.insert(s.end(), sub.begin(), sub.end());
+      return s;
+    }
+
+    template <typename T>
+    inline void proxy_flatten(const NDProxy<T>& p, std::vector<T>& out)
+    {
+      if (p.is_leaf)
+      {
+        out.push_back(p.value);
+      }
+      else
+      {
+        for (auto& c : p.children)
+        {
+          proxy_flatten(c, out);
+        }
+      }
+    }
+
+  } // namespace detail
+
   /**
    * @brief Result type of mean/var/std reductions.
    *
@@ -452,28 +630,12 @@ namespace np
     ndarray(std::initializer_list<std::initializer_list<double>> rows);
 
     /**
-     * @brief ND construction from nested initializer lists, e.g.
-     *        `ndarray<int> a{{{1,2},{3,4}},{{5,6},{7,8}}}` (2×2×2).
-     *        Supports 3-D to 6-D; ragged inputs throw.
+     * @brief ND construction via proxy for arbitrary depth,
+     *        e.g. `ndarray<int> a{{{1,2},{3,4}},{{5,6},{7,8}}}` (2×2×2).
+     *        Uses `detail::NDProxy<T>` so a single overload handles
+     *        any depth >=1; ragged inputs throw.
      */
-    template <typename U>
-    ndarray(
-        std::initializer_list<std::initializer_list<std::initializer_list<U>>> nested);
-    template <typename U>
-    ndarray(
-        std::initializer_list<
-            std::initializer_list<std::initializer_list<std::initializer_list<U>>>>
-            nested);
-    template <typename U>
-    ndarray(
-        std::initializer_list<std::initializer_list<
-            std::initializer_list<std::initializer_list<std::initializer_list<U>>>>>
-            nested);
-    template <typename U>
-    ndarray(
-        std::initializer_list<std::initializer_list<std::initializer_list<
-            std::initializer_list<std::initializer_list<std::initializer_list<U>>>>>>
-            nested);
+    ndarray(std::initializer_list<detail::NDProxy<T>> nested);
     /**
      * @brief Deep-copying copy constructor (value semantics).
      * @param other Array to copy.
@@ -3107,253 +3269,20 @@ namespace np
   }
 
   template <typename T>
-  template <typename U>
-  ndarray<T>::ndarray(
-      std::initializer_list<std::initializer_list<std::initializer_list<U>>> nested)
+  ndarray<T>::ndarray(std::initializer_list<detail::NDProxy<T>> nested)
   {
-    if (nested.size() == 0)
+    shape = detail::proxy_shape_list(nested);
+    std::vector<value_type> flat;
+    flat.reserve(_checked_numel(shape));
+    for (auto& p : nested)
     {
-      shape = {0, 0, 0};
-      data_ = std::make_shared<std::vector<value_type>>();
-      _finalize();
-      return;
+      detail::proxy_flatten(p, flat);
     }
-    const int d0 = static_cast<int>(nested.size());
-    const int d1 = static_cast<int>(nested.begin()->size());
-    const int d2 = static_cast<int>(nested.begin()->begin()->size());
-    for (const auto& a : nested)
+    if (flat.size() != _checked_numel(shape))
     {
-      if (static_cast<int>(a.size()) != d1)
-      {
-        throw std::invalid_argument("ragged nested initializer list (dim1)");
-      }
-      for (const auto& b : a)
-      {
-        if (static_cast<int>(b.size()) != d2)
-        {
-          throw std::invalid_argument("ragged nested initializer list (dim2)");
-        }
-      }
+      throw std::invalid_argument("ragged nested initializer list");
     }
-    shape = {d0, d1, d2};
-    data_ = std::make_shared<std::vector<value_type>>(_numel(), value_type{});
-    std::size_t k = 0;
-    for (const auto& a : nested)
-    {
-      for (const auto& b : a)
-      {
-        for (const U& v : b)
-        {
-          (*data_)[k++] = static_cast<value_type>(v);
-        }
-      }
-    }
-    _finalize();
-  }
-
-  template <typename T>
-  template <typename U>
-  ndarray<T>::ndarray(
-      std::initializer_list<
-          std::initializer_list<std::initializer_list<std::initializer_list<U>>>> nested)
-  {
-    if (nested.size() == 0)
-    {
-      shape = {0, 0, 0, 0};
-      data_ = std::make_shared<std::vector<value_type>>();
-      _finalize();
-      return;
-    }
-    const int d0 = static_cast<int>(nested.size());
-    const int d1 = static_cast<int>(nested.begin()->size());
-    const int d2 = static_cast<int>(nested.begin()->begin()->size());
-    const int d3 = static_cast<int>(nested.begin()->begin()->begin()->size());
-    for (const auto& a : nested)
-    {
-      if (static_cast<int>(a.size()) != d1)
-      {
-        throw std::invalid_argument("ragged nested initializer list (dim1)");
-      }
-      for (const auto& b : a)
-      {
-        if (static_cast<int>(b.size()) != d2)
-        {
-          throw std::invalid_argument("ragged nested initializer list (dim2)");
-        }
-        for (const auto& c : b)
-        {
-          if (static_cast<int>(c.size()) != d3)
-          {
-            throw std::invalid_argument("ragged nested initializer list (dim3)");
-          }
-        }
-      }
-    }
-    shape = {d0, d1, d2, d3};
-    data_ = std::make_shared<std::vector<value_type>>(_numel(), value_type{});
-    std::size_t k = 0;
-    for (const auto& a : nested)
-    {
-      for (const auto& b : a)
-      {
-        for (const auto& c : b)
-        {
-          for (const U& v : c)
-          {
-            (*data_)[k++] = static_cast<value_type>(v);
-          }
-        }
-      }
-    }
-    _finalize();
-  }
-
-  template <typename T>
-  template <typename U>
-  ndarray<T>::ndarray(
-      std::initializer_list<std::initializer_list<
-          std::initializer_list<std::initializer_list<std::initializer_list<U>>>>> nested)
-  {
-    if (nested.size() == 0)
-    {
-      shape = {0, 0, 0, 0, 0};
-      data_ = std::make_shared<std::vector<value_type>>();
-      _finalize();
-      return;
-    }
-    const int d0 = static_cast<int>(nested.size());
-    const int d1 = static_cast<int>(nested.begin()->size());
-    const int d2 = static_cast<int>(nested.begin()->begin()->size());
-    const int d3 = static_cast<int>(nested.begin()->begin()->begin()->size());
-    const int d4 = static_cast<int>(nested.begin()->begin()->begin()->begin()->size());
-    for (const auto& a : nested)
-    {
-      if (static_cast<int>(a.size()) != d1)
-      {
-        throw std::invalid_argument("ragged nested initializer list (dim1)");
-      }
-      for (const auto& b : a)
-      {
-        if (static_cast<int>(b.size()) != d2)
-        {
-          throw std::invalid_argument("ragged nested initializer list (dim2)");
-        }
-        for (const auto& c : b)
-        {
-          if (static_cast<int>(c.size()) != d3)
-          {
-            throw std::invalid_argument("ragged nested initializer list (dim3)");
-          }
-          for (const auto& d : c)
-          {
-            if (static_cast<int>(d.size()) != d4)
-            {
-              throw std::invalid_argument("ragged nested initializer list (dim4)");
-            }
-          }
-        }
-      }
-    }
-    shape = {d0, d1, d2, d3, d4};
-    data_ = std::make_shared<std::vector<value_type>>(_numel(), value_type{});
-    std::size_t k = 0;
-    for (const auto& a : nested)
-    {
-      for (const auto& b : a)
-      {
-        for (const auto& c : b)
-        {
-          for (const auto& d : c)
-          {
-            for (const U& v : d)
-            {
-              (*data_)[k++] = static_cast<value_type>(v);
-            }
-          }
-        }
-      }
-    }
-    _finalize();
-  }
-
-  template <typename T>
-  template <typename U>
-  ndarray<T>::ndarray(
-      std::initializer_list<std::initializer_list<std::initializer_list<
-          std::initializer_list<std::initializer_list<std::initializer_list<U>>>>>>
-          nested)
-  {
-    if (nested.size() == 0)
-    {
-      shape = {0, 0, 0, 0, 0, 0};
-      data_ = std::make_shared<std::vector<value_type>>();
-      _finalize();
-      return;
-    }
-    const int d0 = static_cast<int>(nested.size());
-    const int d1 = static_cast<int>(nested.begin()->size());
-    const int d2 = static_cast<int>(nested.begin()->begin()->size());
-    const int d3 = static_cast<int>(nested.begin()->begin()->begin()->size());
-    const int d4 = static_cast<int>(nested.begin()->begin()->begin()->begin()->size());
-    const int d5 =
-        static_cast<int>(nested.begin()->begin()->begin()->begin()->begin()->size());
-    for (const auto& a : nested)
-    {
-      if (static_cast<int>(a.size()) != d1)
-      {
-        throw std::invalid_argument("ragged nested initializer list (dim1)");
-      }
-      for (const auto& b : a)
-      {
-        if (static_cast<int>(b.size()) != d2)
-        {
-          throw std::invalid_argument("ragged nested initializer list (dim2)");
-        }
-        for (const auto& c : b)
-        {
-          if (static_cast<int>(c.size()) != d3)
-          {
-            throw std::invalid_argument("ragged nested initializer list (dim3)");
-          }
-          for (const auto& d : c)
-          {
-            if (static_cast<int>(d.size()) != d4)
-            {
-              throw std::invalid_argument("ragged nested initializer list (dim4)");
-            }
-            for (const auto& e : d)
-            {
-              if (static_cast<int>(e.size()) != d5)
-              {
-                throw std::invalid_argument("ragged nested initializer list (dim5)");
-              }
-            }
-          }
-        }
-      }
-    }
-    shape = {d0, d1, d2, d3, d4, d5};
-    data_ = std::make_shared<std::vector<value_type>>(_numel(), value_type{});
-    std::size_t k = 0;
-    for (const auto& a : nested)
-    {
-      for (const auto& b : a)
-      {
-        for (const auto& c : b)
-        {
-          for (const auto& d : c)
-          {
-            for (const auto& e : d)
-            {
-              for (const U& v : e)
-              {
-                (*data_)[k++] = static_cast<value_type>(v);
-              }
-            }
-          }
-        }
-      }
-    }
+    data_ = std::make_shared<std::vector<value_type>>(std::move(flat));
     _finalize();
   }
 
