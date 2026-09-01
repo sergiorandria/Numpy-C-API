@@ -450,6 +450,30 @@ namespace np
     ndarray(std::initializer_list<std::initializer_list<U>> rows);
 
     ndarray(std::initializer_list<std::initializer_list<double>> rows);
+
+    /**
+     * @brief ND construction from nested initializer lists, e.g.
+     *        `ndarray<int> a{{{1,2},{3,4}},{{5,6},{7,8}}}` (2×2×2).
+     *        Supports 3-D to 6-D; ragged inputs throw.
+     */
+    template <typename U>
+    ndarray(
+        std::initializer_list<std::initializer_list<std::initializer_list<U>>> nested);
+    template <typename U>
+    ndarray(
+        std::initializer_list<
+            std::initializer_list<std::initializer_list<std::initializer_list<U>>>>
+            nested);
+    template <typename U>
+    ndarray(
+        std::initializer_list<std::initializer_list<
+            std::initializer_list<std::initializer_list<std::initializer_list<U>>>>>
+            nested);
+    template <typename U>
+    ndarray(
+        std::initializer_list<std::initializer_list<std::initializer_list<
+            std::initializer_list<std::initializer_list<std::initializer_list<U>>>>>>
+            nested);
     /**
      * @brief Deep-copying copy constructor (value semantics).
      * @param other Array to copy.
@@ -718,6 +742,18 @@ namespace np
     auto operator()(std::size_t i, std::size_t j) const -> const T&;
 
     /**
+     * @brief ND index access (read/write) for `ndim() >= 3`.
+     *        e.g. `a(0,1,2)` for 3-D, `a(0,1,2,3)` for 4-D.
+     * @tparam Args Index types convertible to `size_t`; count must equal `ndim()`.
+     */
+    template <typename... Args>
+      requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+    auto operator()(Args... args) -> reference;
+    template <typename... Args>
+      requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+    auto operator()(Args... args) const -> const T&;
+
+    /**
      * @brief 2D bounds-checked access.
      * @param i Row index.
      * @param j Column index.
@@ -736,6 +772,14 @@ namespace np
      * @throws std::out_of_range if either index is out of bounds.
      */
     auto at(std::size_t i, std::size_t j) const -> const T&;
+
+    /** @brief ND bounds-checked access for `ndim() >= 3`. */
+    template <typename... Args>
+      requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+    auto at(Args... args) -> reference;
+    template <typename... Args>
+      requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+    auto at(Args... args) const -> const T&;
 
     /**
      * @brief Returns the single element of a 0-d/1-element array.
@@ -3063,6 +3107,257 @@ namespace np
   }
 
   template <typename T>
+  template <typename U>
+  ndarray<T>::ndarray(
+      std::initializer_list<std::initializer_list<std::initializer_list<U>>> nested)
+  {
+    if (nested.size() == 0)
+    {
+      shape = {0, 0, 0};
+      data_ = std::make_shared<std::vector<value_type>>();
+      _finalize();
+      return;
+    }
+    const int d0 = static_cast<int>(nested.size());
+    const int d1 = static_cast<int>(nested.begin()->size());
+    const int d2 = static_cast<int>(nested.begin()->begin()->size());
+    for (const auto& a : nested)
+    {
+      if (static_cast<int>(a.size()) != d1)
+      {
+        throw std::invalid_argument("ragged nested initializer list (dim1)");
+      }
+      for (const auto& b : a)
+      {
+        if (static_cast<int>(b.size()) != d2)
+        {
+          throw std::invalid_argument("ragged nested initializer list (dim2)");
+        }
+      }
+    }
+    shape = {d0, d1, d2};
+    data_ = std::make_shared<std::vector<value_type>>(_numel(), value_type{});
+    std::size_t k = 0;
+    for (const auto& a : nested)
+    {
+      for (const auto& b : a)
+      {
+        for (const U& v : b)
+        {
+          (*data_)[k++] = static_cast<value_type>(v);
+        }
+      }
+    }
+    _finalize();
+  }
+
+  template <typename T>
+  template <typename U>
+  ndarray<T>::ndarray(
+      std::initializer_list<
+          std::initializer_list<std::initializer_list<std::initializer_list<U>>>> nested)
+  {
+    if (nested.size() == 0)
+    {
+      shape = {0, 0, 0, 0};
+      data_ = std::make_shared<std::vector<value_type>>();
+      _finalize();
+      return;
+    }
+    const int d0 = static_cast<int>(nested.size());
+    const int d1 = static_cast<int>(nested.begin()->size());
+    const int d2 = static_cast<int>(nested.begin()->begin()->size());
+    const int d3 = static_cast<int>(nested.begin()->begin()->begin()->size());
+    for (const auto& a : nested)
+    {
+      if (static_cast<int>(a.size()) != d1)
+      {
+        throw std::invalid_argument("ragged nested initializer list (dim1)");
+      }
+      for (const auto& b : a)
+      {
+        if (static_cast<int>(b.size()) != d2)
+        {
+          throw std::invalid_argument("ragged nested initializer list (dim2)");
+        }
+        for (const auto& c : b)
+        {
+          if (static_cast<int>(c.size()) != d3)
+          {
+            throw std::invalid_argument("ragged nested initializer list (dim3)");
+          }
+        }
+      }
+    }
+    shape = {d0, d1, d2, d3};
+    data_ = std::make_shared<std::vector<value_type>>(_numel(), value_type{});
+    std::size_t k = 0;
+    for (const auto& a : nested)
+    {
+      for (const auto& b : a)
+      {
+        for (const auto& c : b)
+        {
+          for (const U& v : c)
+          {
+            (*data_)[k++] = static_cast<value_type>(v);
+          }
+        }
+      }
+    }
+    _finalize();
+  }
+
+  template <typename T>
+  template <typename U>
+  ndarray<T>::ndarray(
+      std::initializer_list<std::initializer_list<
+          std::initializer_list<std::initializer_list<std::initializer_list<U>>>>> nested)
+  {
+    if (nested.size() == 0)
+    {
+      shape = {0, 0, 0, 0, 0};
+      data_ = std::make_shared<std::vector<value_type>>();
+      _finalize();
+      return;
+    }
+    const int d0 = static_cast<int>(nested.size());
+    const int d1 = static_cast<int>(nested.begin()->size());
+    const int d2 = static_cast<int>(nested.begin()->begin()->size());
+    const int d3 = static_cast<int>(nested.begin()->begin()->begin()->size());
+    const int d4 = static_cast<int>(nested.begin()->begin()->begin()->begin()->size());
+    for (const auto& a : nested)
+    {
+      if (static_cast<int>(a.size()) != d1)
+      {
+        throw std::invalid_argument("ragged nested initializer list (dim1)");
+      }
+      for (const auto& b : a)
+      {
+        if (static_cast<int>(b.size()) != d2)
+        {
+          throw std::invalid_argument("ragged nested initializer list (dim2)");
+        }
+        for (const auto& c : b)
+        {
+          if (static_cast<int>(c.size()) != d3)
+          {
+            throw std::invalid_argument("ragged nested initializer list (dim3)");
+          }
+          for (const auto& d : c)
+          {
+            if (static_cast<int>(d.size()) != d4)
+            {
+              throw std::invalid_argument("ragged nested initializer list (dim4)");
+            }
+          }
+        }
+      }
+    }
+    shape = {d0, d1, d2, d3, d4};
+    data_ = std::make_shared<std::vector<value_type>>(_numel(), value_type{});
+    std::size_t k = 0;
+    for (const auto& a : nested)
+    {
+      for (const auto& b : a)
+      {
+        for (const auto& c : b)
+        {
+          for (const auto& d : c)
+          {
+            for (const U& v : d)
+            {
+              (*data_)[k++] = static_cast<value_type>(v);
+            }
+          }
+        }
+      }
+    }
+    _finalize();
+  }
+
+  template <typename T>
+  template <typename U>
+  ndarray<T>::ndarray(
+      std::initializer_list<std::initializer_list<std::initializer_list<
+          std::initializer_list<std::initializer_list<std::initializer_list<U>>>>>>
+          nested)
+  {
+    if (nested.size() == 0)
+    {
+      shape = {0, 0, 0, 0, 0, 0};
+      data_ = std::make_shared<std::vector<value_type>>();
+      _finalize();
+      return;
+    }
+    const int d0 = static_cast<int>(nested.size());
+    const int d1 = static_cast<int>(nested.begin()->size());
+    const int d2 = static_cast<int>(nested.begin()->begin()->size());
+    const int d3 = static_cast<int>(nested.begin()->begin()->begin()->size());
+    const int d4 = static_cast<int>(nested.begin()->begin()->begin()->begin()->size());
+    const int d5 =
+        static_cast<int>(nested.begin()->begin()->begin()->begin()->begin()->size());
+    for (const auto& a : nested)
+    {
+      if (static_cast<int>(a.size()) != d1)
+      {
+        throw std::invalid_argument("ragged nested initializer list (dim1)");
+      }
+      for (const auto& b : a)
+      {
+        if (static_cast<int>(b.size()) != d2)
+        {
+          throw std::invalid_argument("ragged nested initializer list (dim2)");
+        }
+        for (const auto& c : b)
+        {
+          if (static_cast<int>(c.size()) != d3)
+          {
+            throw std::invalid_argument("ragged nested initializer list (dim3)");
+          }
+          for (const auto& d : c)
+          {
+            if (static_cast<int>(d.size()) != d4)
+            {
+              throw std::invalid_argument("ragged nested initializer list (dim4)");
+            }
+            for (const auto& e : d)
+            {
+              if (static_cast<int>(e.size()) != d5)
+              {
+                throw std::invalid_argument("ragged nested initializer list (dim5)");
+              }
+            }
+          }
+        }
+      }
+    }
+    shape = {d0, d1, d2, d3, d4, d5};
+    data_ = std::make_shared<std::vector<value_type>>(_numel(), value_type{});
+    std::size_t k = 0;
+    for (const auto& a : nested)
+    {
+      for (const auto& b : a)
+      {
+        for (const auto& c : b)
+        {
+          for (const auto& d : c)
+          {
+            for (const auto& e : d)
+            {
+              for (const U& v : e)
+              {
+                (*data_)[k++] = static_cast<value_type>(v);
+              }
+            }
+          }
+        }
+      }
+    }
+    _finalize();
+  }
+
+  template <typename T>
   ndarray<T>::ndarray(const ndarray& other)
       : shape(other.shape), strides(other.strides), type(other.type), order(other.order),
         offset(other.offset), writeable_(other.writeable_), is_view_(false)
@@ -3480,6 +3775,42 @@ namespace np
       const T* __restrict d = data_->data();
       return d[offset + i * strides[0] + j * strides[1]];
     }
+  }
+
+  template <typename T>
+  template <typename... Args>
+    requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+  auto ndarray<T>::operator()(Args... args) -> reference
+  {
+    std::array<std::size_t, sizeof...(Args)> idx{static_cast<std::size_t>(args)...};
+    return get(idx);
+  }
+
+  template <typename T>
+  template <typename... Args>
+    requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+  auto ndarray<T>::operator()(Args... args) const -> const T&
+  {
+    std::array<std::size_t, sizeof...(Args)> idx{static_cast<std::size_t>(args)...};
+    return get(idx);
+  }
+
+  template <typename T>
+  template <typename... Args>
+    requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+  auto ndarray<T>::at(Args... args) -> reference
+  {
+    std::array<std::size_t, sizeof...(Args)> idx{static_cast<std::size_t>(args)...};
+    return get(idx);
+  }
+
+  template <typename T>
+  template <typename... Args>
+    requires(sizeof...(Args) >= 3 && (std::is_convertible_v<Args, std::size_t> && ...))
+  auto ndarray<T>::at(Args... args) const -> const T&
+  {
+    std::array<std::size_t, sizeof...(Args)> idx{static_cast<std::size_t>(args)...};
+    return get(idx);
   }
 
   // Internals
