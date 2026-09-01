@@ -25,6 +25,7 @@
 #include "linalg.hpp"
 #include "linalg_fixed.hpp"
 #include "logic.hpp"
+#include "concatenate.hpp"
 #include "manipulation.hpp"
 #include "masked_array.hpp"
 #include "math.hpp"
@@ -52,7 +53,6 @@
 #include "bundle.hpp"
 #include "persistent.hpp"
 #include "spectral.hpp"
-// Note: random.hpp and concatenate.hpp are not included by default.
-// Include them explicitly if needed to avoid template conflicts.
+#include "random.hpp"
 
 #endif // NP_NP_HPP

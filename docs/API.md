@@ -1,6 +1,6 @@
 # API — dev (760+ routines)
 
-Umbrella `include/np/np.hpp:13` (26 includes; `random.hpp`/`concatenate.hpp` explicit). Every `np::` has Doxygen `Reference: numpy-reference/...` or Bott–Tu/Hatcher.
+Umbrella `include/np/np.hpp:13` (28 includes; all integrated). Every `np::` has Doxygen `Reference: numpy-reference/...` or Bott–Tu/Hatcher.
 
 ## Module table (36 groups)
 

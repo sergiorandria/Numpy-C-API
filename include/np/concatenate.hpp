@@ -374,6 +374,7 @@ namespace np
    * @throws       std::invalid_argument if arrays is empty
    *               or contains arrays with ndim > 2.
    */
+#ifndef NP_MANIPULATION_HPP
   template <typename T>
   NP_API NP_NODISCARD auto column_stack(const std::vector<ndarray<T>>& arrays)
       -> ndarray<T>
@@ -432,6 +433,7 @@ namespace np
   {
     return concatenate(arrays, axis);
   }
+#endif // NP_MANIPULATION_HPP guard
 
 } // namespace np
 

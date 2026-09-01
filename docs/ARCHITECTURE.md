@@ -31,7 +31,7 @@ class ndarray {
 
 ## 2. Umbrella and modules
 
-`np.hpp:13` (58 LOC) includes 26 headers in dependency order. `random.hpp` + `concatenate.hpp` excluded (ADL clash) — include explicitly.
+`np.hpp:13` (58 LOC) includes 28 headers in dependency order (now fully integrated; `random.hpp:64` + `concatenate.hpp:106` after `ADL` fix via `is_ndarrayf`/`NP_CONCATENATE_HPP` guards).
 
 ```
 np → ndarray → creation → manipulation → linalg → fft → ...
