@@ -79,6 +79,19 @@ if(NP_PQC_ALG)
     add_compile_definitions(__NUMPY_PQC_ALG=${NP_PQC_ALG})
 endif()
 
+# ── Bigint / GMP (header-only cpp_int, optional GMP mpz) ─────────────────
+option(NP_ENABLE_BIGINT "Enable bigint support (boost::multiprecision::cpp_int)" ON)
+option(NP_ENABLE_GMP "Enable GMP mpz backend for bigint (requires libgmp)" OFF)
+if(NP_ENABLE_GMP)
+    find_library(GMP_LIB gmp)
+    find_path(GMP_INCLUDE_DIR gmp.h)
+    if(GMP_LIB AND GMP_INCLUDE_DIR)
+        message(STATUS "Found GMP: ${GMP_LIB}")
+    else()
+        message(WARNING "NP_ENABLE_GMP=ON but libgmp not found; falling back to cpp_int")
+    endif()
+endif()
+
 option(NP_COMPILED_UNITS
        "Enable the compile-time (negative-trait and constexpr-fold) test units"
        ON)
@@ -165,6 +178,21 @@ target_include_directories(np INTERFACE
     $<INSTALL_INTERFACE:include>)
 find_package(Threads REQUIRED)
 target_link_libraries(np INTERFACE Threads::Threads)
+if(NP_ENABLE_GMP AND GMP_LIB)
+    target_link_libraries(np INTERFACE ${GMP_LIB})
+    target_include_directories(np INTERFACE ${GMP_INCLUDE_DIR})
+    target_compile_definitions(np INTERFACE NP_HAS_GMP=1 NP_HAS_GMP_H=1)
+endif()
+if(NP_ENABLE_BIGINT)
+    target_compile_definitions(np INTERFACE NP_HAS_BIGINT=1)
+    find_package(Boost QUIET)
+    if(Boost_FOUND)
+        target_include_directories(np INTERFACE ${Boost_INCLUDE_DIRS})
+    endif()
+endif()
+# ── LLVM JIT for differential VM (optional, header-only fallback) ─────
+# No find_package needed: differential.hpp uses __has_include(<llvm/IR/IRBuilder.h>)
+# to enable JIT when LLVM headers are present. No link required for fallback.
 if(NP_USE_THREADING)
   target_compile_definitions(np INTERFACE NP_USE_THREADING)
 endif()

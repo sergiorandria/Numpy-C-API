@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <vector>
 
 #include "api_macros.hpp"
 
@@ -39,6 +40,7 @@ namespace np
     uint16,
     uint32,
     uint64,
+    bigint, // arbitrary-precision integer (np::bigint / mpz)
 
     // Floating-point types
     float16,
@@ -676,7 +678,8 @@ namespace np
    * @tparam D  A dtype value.
    */
   template <dtype D>
-  using is_integral_dtype = std::bool_constant<(D >= dtype::int8 && D <= dtype::uint64)>;
+  using is_integral_dtype = std::bool_constant<
+      (D >= dtype::int8 && D <= dtype::uint64) || D == dtype::bigint>;
 
   template <dtype D>
   inline constexpr bool is_integral_dtype_v = is_integral_dtype<D>::value;
@@ -716,6 +719,8 @@ namespace np
         return "uint32";
       case dtype::uint64:
         return "uint64";
+      case dtype::bigint:
+        return "bigint";
       case dtype::float16:
         return "float16";
       case dtype::float32:
@@ -783,6 +788,8 @@ namespace np
         return 8;
       case dtype::complex128:
         return 16;
+      case dtype::bigint:
+        return 0; // variable-length arbitrary precision
       case dtype::longdouble:
         return sizeof(long double);
       case dtype::clongdouble:
@@ -827,7 +834,7 @@ namespace np
    */
   NP_API NP_NODISCARD constexpr bool dtype_is_integer(dtype t)
   {
-    return t >= dtype::int8 && t <= dtype::uint64;
+    return (t >= dtype::int8 && t <= dtype::uint64) || t == dtype::bigint;
   }
 
   /**
@@ -889,40 +896,44 @@ namespace np
           return 7;
         case dtype::uint64:
           return 8;
-        case dtype::float16:
+        case dtype::bigint:
           return 9;
-        case dtype::float32:
+        case dtype::float16:
           return 10;
-        case dtype::float64:
+        case dtype::float32:
           return 11;
-        case dtype::longdouble:
+        case dtype::float64:
           return 12;
-        case dtype::complex64:
+        case dtype::longdouble:
           return 13;
-        case dtype::complex128:
+        case dtype::complex64:
           return 14;
-        case dtype::clongdouble:
+        case dtype::complex128:
           return 15;
+        case dtype::clongdouble:
+          return 16;
         case dtype::datetime64:
-          return 16;
-        case dtype::timedelta64:
-          return 16;
-        case dtype::string_:
           return 17;
-        case dtype::unicode_:
+        case dtype::timedelta64:
+          return 17;
+        case dtype::string_:
           return 18;
-        case dtype::void_:
+        case dtype::unicode_:
           return 19;
-        case dtype::object_:
+        case dtype::void_:
           return 20;
+        case dtype::object_:
+          return 21;
       }
-      return 20;
+      return 21;
     }
 
     inline constexpr int _dtype_kind(dtype t) noexcept
     {
       if (t == dtype::bool_)
         return 0;
+      if (t == dtype::bigint)
+        return 1; // bigint is signed arbitrary integer
       if (t >= dtype::int8 && t <= dtype::int64)
         return 1;
       if (t >= dtype::uint8 && t <= dtype::uint64)
@@ -1251,6 +1262,8 @@ namespace np
         return 'I';
       case dtype::uint64:
         return 'L';
+      case dtype::bigint:
+        return 'J'; // arbitrary-precision (GMP mpz)
       case dtype::float16:
         return 'e';
       case dtype::float32:
