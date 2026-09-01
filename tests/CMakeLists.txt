@@ -23,7 +23,8 @@ set(NP_TESTS
     test_abstract
     test_variety
     test_manifold
-    test_differential)
+    test_differential
+    test_datetime)
 
 if(NP_COMPILED_UNITS)
     list(APPEND NP_TESTS test_constexpr test_compile_time)
