@@ -82,6 +82,10 @@ endif()
 if(NP_PQC_ALG)
     add_compile_definitions(__NUMPY_PQC_ALG=${NP_PQC_ALG})
 endif()
+option(NP_USE_SECURE_IMPL "Enable hardened secure zero/buffer for creation (PQC key material)" OFF)
+if(NP_USE_SECURE_IMPL)
+    add_compile_definitions(NP_USE_SECURE_IMPL=1)
+endif()
 
 # ── Bigint / GMP (header-only cpp_int, optional GMP mpz) ─────────────────
 option(NP_ENABLE_BIGINT "Enable bigint support (boost::multiprecision::cpp_int)" ON)
