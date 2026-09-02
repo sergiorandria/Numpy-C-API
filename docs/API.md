@@ -46,6 +46,7 @@ Umbrella `include/np/np.hpp:13` (28 includes; all integrated). Every `np::` has 
 | **Neuromorphic** | `neuromorphic.hpp:1` | `Event/EventArray, SpikeEncoder (rate/temporal), LIF/Izhikevich, STDP, INeuromorphicBackend (Loihi/SpiNNaker/CPU), NeuromorphicFactory, EventBuilder, SpikeVisitor, QuantizedEventArray` | `Loihi2/NorthPole/Akida, Gerstner` |
 | **Memory** | `memory.hpp:1` | `HBMArray/CXLArray, MemorySpace (Host/HBM/CXL/Unified), MemoryFactory, migrate_to_hbm/host, zeros_hbm` | `HBM3/CXL3.0/GH200` |
 | **Tensor** | `tensor_core.hpp:1` | `TensorBackend (CPU/Hopper/AMX), TensorFactory, QuantizedTensor, quantize, matmul_fp8` | `Hopper/Blackwell/AMX/SME2` |
+| **Analog** | `memristor.hpp:1` | `Crossbar (ReRAM, Mythic/d-Matrix), ReRAMFactory, dot (analog V=IR), quantize` | `ReRAM/Memristor` |
 | **Cohomology** | `cohomology.hpp:191` | `cohomology_groups, cohomology_ring, cup_product, poincare_pairing, intersection_form, kunneth` | `Hatcher Ch.3` |
 | **Bundle** | `bundle.hpp:103` | `VectorBundle, tangent/cotangent, chern/stiefel/euler/pontryagin, whitney_sum, HodgeStar` | `Milnor–Stasheff` |
 | **Persistent** | `persistent.hpp:94` | `FilteredSimplex, Filtration, persistence_barcode, bottleneck_distance, vietoris_rips` | `Edelsbrunner–Harer` |
