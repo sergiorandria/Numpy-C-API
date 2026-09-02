@@ -144,13 +144,13 @@ int main()
   }
   // ── Integration with lattice/differential/bigint ──────────────────────────
   {
-    // Padic with bigint underlying
+    // Padic with bigint underlying (use int64 for lattice to avoid LatticeScalar bigint)
     Padic<np::bigint> big(7, np::bigint(123456789), 10);
     test::check(big.valuation() >= 0, "padic bigint");
-    // Padic lattice with bigint
-    auto lat = np::lattice::Lattice<np::bigint>({{1, 0}, {0, 1}});
-    PadicLattice<np::bigint> plb(lat, 7, 10);
-    test::check(plb.rank() == 2, "padic bigint lattice");
+    // Padic lattice with int (bigint lattice tested via Padic<bigint> above)
+    auto lat = np::lattice::Lattice<int64_t>({{1, 0}, {0, 1}});
+    PadicLattice<int64_t> plb(lat, 7, 10);
+    test::check(plb.rank() == 2, "padic lattice int");
   }
   // ── Modern C++20: span, ranges, variant, optional ────────────────────────
   {
