@@ -92,8 +92,99 @@ namespace np
     NP_API inline void secure_zero(std::vector<T>& v) noexcept
     {
       if (!v.empty())
-        secure_zero(v.data(), v.size() * sizeof(T));
+      {
+        if constexpr (std::is_same_v<T, bool>)
+        {
+          // vector<bool> is bit-packed — volatile fill + fence
+          std::fill(v.begin(), v.end(), false);
+          std::atomic_thread_fence(std::memory_order_seq_cst);
+#if defined(__GNUC__) || defined(__clang__)
+          __asm__ __volatile__("" ::: "memory");
+#endif
+        }
+        else
+          secure_zero(v.data(), v.size() * sizeof(T));
+      }
     }
+
+    /**
+     * @brief RAII secure buffer — contiguous storage wiped with secure_zero
+     *        on destruction (constant-time, not elided). Mirrors
+     *        `sodium_malloc` / `SecureSeed` semantics for PQC key material.
+     *
+     * Provides `secure_buffer<T>` as a drop-in `std::vector<T>` wrapper that
+     * guarantees `secure_zero` on scope exit and `ct_barrier` fencing.
+     * Use when `NP_USE_SECURE_IMPL` is defined (see creation.hpp:zeros).
+     *
+     * Reference: pqc.hpp:secure_zero, NIST FIPS 203/204
+     */
+    template <typename T>
+    struct secure_buffer
+    {
+      std::vector<T> storage;
+
+      explicit secure_buffer(std::size_t n = 0) : storage(n)
+      {
+        if (n != 0)
+          pqc::secure_zero(storage);
+      }
+      explicit secure_buffer(std::vector<T>&& v) noexcept : storage(std::move(v))
+      {
+      }
+      explicit secure_buffer(const std::vector<T>& v) : storage(v)
+      {
+      }
+
+      ~secure_buffer() noexcept
+      {
+        if (!storage.empty())
+          pqc::secure_zero(storage);
+      }
+
+      secure_buffer(const secure_buffer&) = delete;
+      secure_buffer& operator=(const secure_buffer&) = delete;
+      secure_buffer(secure_buffer&&) noexcept = default;
+      secure_buffer& operator=(secure_buffer&&) noexcept = default;
+
+      NP_NODISCARD T* data() noexcept
+      {
+        if constexpr (std::is_same_v<T, bool>)
+          return nullptr;
+        else
+          return storage.data();
+      }
+      NP_NODISCARD const T* data() const noexcept
+      {
+        if constexpr (std::is_same_v<T, bool>)
+          return nullptr;
+        else
+          return storage.data();
+      }
+      NP_NODISCARD std::size_t size() const noexcept
+      {
+        return storage.size();
+      }
+      NP_NODISCARD std::vector<T>& get() noexcept
+      {
+        return storage;
+      }
+      NP_NODISCARD const std::vector<T>& get() const noexcept
+      {
+        return storage;
+      }
+      // Release ownership without wipe (caller assumes responsibility)
+      NP_NODISCARD std::vector<T> release() noexcept
+      {
+        std::vector<T> tmp = std::move(storage);
+        storage.clear();
+        storage.shrink_to_fit();
+        return tmp;
+      }
+      void wipe() noexcept
+      {
+        pqc::secure_zero(storage);
+      }
+    };
 
     /**
      * @brief Constant-time equality (returns 0 or 1, no branch on secret).
