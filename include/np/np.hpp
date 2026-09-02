@@ -10,6 +10,8 @@
 #ifndef NP_NP_HPP
 #define NP_NP_HPP
 
+#include "api_macros.hpp"
+#include "simd.hpp"
 #include "bitwise.hpp"
 #include "char.hpp"
 #include "constants.hpp"
@@ -57,7 +59,8 @@
 #include "padic.hpp"
 #include "random.hpp"
 
-// Suppress -Wbraced-scalar-init for NDProxy braced-init (e.g. {{{1},{2},{3}},{{1},{2},{3}}} shape 2×3×1)
+// Suppress -Wbraced-scalar-init for NDProxy braced-init (e.g.
+// {{{1},{2},{3}},{{1},{2},{3}}} shape 2×3×1)
 #if defined(__clang__)
 #pragma clang diagnostic ignored "-Wbraced-scalar-init"
 #endif
