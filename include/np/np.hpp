@@ -43,6 +43,8 @@
 #include "indexing.hpp"
 #include "other.hpp"
 #include "pqc.hpp"
+#include "gpu.hpp"
+#include "powerful.hpp"
 #include "threadpool.hpp"
 #include "bigint.hpp"
 #include "homology.hpp"
