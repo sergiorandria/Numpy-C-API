@@ -117,11 +117,9 @@ namespace np
       std::size_t n = 1;
       for (int d : s)
         n *= static_cast<std::size_t>(d);
-      // secure_buffer<T> wipes on destruction; explicit secure_zero ensures
-      // the live buffer is not elided (secure_buffer pattern).
+      // Isolated secure_buffer: locked + MADV_DONTDUMP, wiped on destruction
+      // and slack. Explicit secure_zero keeps volatile + fence in creation.
       pqc::secure_buffer<T> sbuf(n);
-      // sbuf already zeroed via ctor; reinforce with explicit secure_zero
-      // to keep volatile + fence in the creation path.
       if (n != 0)
         pqc::secure_zero(sbuf.get().data(), n * sizeof(T));
       if constexpr (!std::is_trivially_copyable_v<T>)
@@ -129,7 +127,9 @@ namespace np
         std::fill(sbuf.get().begin(), sbuf.get().end(), T{0});
         pqc::ct_barrier();
       }
-      return ndarray<T>::from_data(s, std::move(sbuf.get()));
+      // release() de-isolates (munlock + allow dump) and hands off ownership
+      // to ndarray; sbuf is left empty and will not double-unlock.
+      return ndarray<T>::from_data(s, sbuf.release());
     }
 #else
     return ndarray<T>(s, dtype_of<T>, T{0});
@@ -162,7 +162,7 @@ namespace np
         std::fill(sbuf.get().begin(), sbuf.get().end(), T{0});
         pqc::ct_barrier();
       }
-      return ndarray<T>::from_data(s, std::move(sbuf.get()));
+      return ndarray<T>::from_data(s, sbuf.release());
     }
 #else
     return ndarray<T>(s, dtype_of<T>, T{0});
