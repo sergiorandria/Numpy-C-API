@@ -59,6 +59,7 @@
 #include "padic.hpp"
 #include "neuromorphic.hpp"
 #include "memory.hpp"
+#include "tensor_core.hpp"
 #include "random.hpp"
 
 // Suppress -Wbraced-scalar-init for NDProxy braced-init (e.g.
