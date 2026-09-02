@@ -31,14 +31,18 @@ namespace np
 
   /** @brief 2D matrix: a ndarray guaranteed to have ndim == 2.
    *
-   * Inherits from ndarray<T> and adds (i, j) element access and
-   * matrix-specific factories. The base class handles all shape
-   * manipulation, reductions, and element-wise operations.
+   * @deprecated Use `ndarray<T>` + `linalg.hpp` (Decorator pattern).
+   * `Matrix<T>` is now a thin `ndarray<T>` decorator that forwards
+   * `matmul`/`dot` to `linalg::matmul` and is fully integrated with
+   * `lattice` (as lattice basis) and `padic` (as p-adic matrix).
+   * Kept for backward compatibility; dead code now live via `lattice`/`padic`.
    *
    * @tparam T Element type.
    */
   template <typename T>
-  class Matrix : public ndarray<T>
+  class [[deprecated(
+      "Matrix is deprecated: use ndarray<T> + linalg.hpp (see other.hpp integration)")]]
+  Matrix : public ndarray<T>
   {
   public:
     using Base = ndarray<T>;

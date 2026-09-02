@@ -18,7 +18,9 @@
 #include <vector>
 
 #include "api_macros.hpp"
+#include "lattice.hpp"
 #include "ndarray.hpp"
+#include "padic.hpp"
 
 namespace np
 {
@@ -37,6 +39,26 @@ namespace np
     for (auto& n : names)
       std::cout << n << " ";
     std::cout << "\n";
+  }
+
+  // ── Integration with lattice/padic (was dead, now live) ────────────────────
+  template <typename T>
+  NP_API inline void who(const lattice::Lattice<T>& lat)
+  {
+    std::cout << "lattice who: rank " << lat.rank() << " dim " << lat.dim() << " volume "
+              << lat.volume() << "\n";
+  }
+  template <typename T>
+  NP_API inline void who(const padic::Padic<T>& p)
+  {
+    std::cout << "padic who: p=" << p.p << " prec=" << p.prec << " val=" << p.value
+              << " norm=" << p.norm() << "\n";
+  }
+  template <typename T>
+  NP_API inline void who(const padic::PadicLattice<T>& pl)
+  {
+    std::cout << "padic lattice who: rank " << pl.rank() << " dim " << pl.dim()
+              << " p=" << pl.p << "\n";
   }
 
   /**
