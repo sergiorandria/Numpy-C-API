@@ -69,16 +69,28 @@
 #include "ndarray.hpp"
 
 #if defined(NP_ENABLE_LLVM) && __has_include(<llvm/IR/IRBuilder.h>)
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/GenericValue.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/TargetSelect.h>
+#if __has_include(<llvm/ExecutionEngine/Orc/LLJIT.h>)
+#include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
+#define NP_HAS_LLVM_ORC 1
+#else
+#define NP_HAS_LLVM_ORC 0
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/ExecutionEngine/GenericValue.h>
+#endif
 #define NP_HAS_LLVM_JIT 1
 #else
 #define NP_HAS_LLVM_JIT 0
+#ifndef NP_HAS_LLVM_ORC
+#define NP_HAS_LLVM_ORC 0
+#endif
 #endif
 
 namespace np::differential
@@ -450,21 +462,411 @@ namespace np::differential
   };
 
 #if NP_HAS_LLVM_JIT
+  namespace detail_llvm
+  {
+    // Shared JIT state — one LLJIT/MCJIT per process, thread-safe cache
+    struct LLVMJit
+    {
+#if NP_HAS_LLVM_ORC
+      std::unique_ptr<llvm::orc::LLJIT> jit;
+#else
+      // Fallback ExecutionEngine path (legacy MCJIT)
+      std::unique_ptr<llvm::LLVMContext> ctx_holder;
+      llvm::ExecutionEngine* ee = nullptr;
+      std::unique_ptr<llvm::Module> mod_holder;
+#endif
+      // Content-based cache to avoid address reuse collisions (Node* may be freed/reused)
+      std::unordered_map<std::string, void*> cache;
+      std::unordered_map<std::string, void*> sym_cache;
+      std::mutex mtx;
+      bool initialized = false;
+
+      // Content hash / string key for Node — stable across allocations
+      static std::string node_key(const Node& n)
+      {
+        std::string s;
+        s.reserve(64);
+        std::function<void(const Node&)> dfs = [&](const Node& x) {
+          s += std::to_string(static_cast<int>(x.type)) + ":";
+          if (x.type == Node::Const)
+            s += std::to_string(x.cval) + ";";
+          else if (x.type == Node::Var)
+            s += std::to_string(x.var) + ";";
+          if (x.left) dfs(*x.left);
+          if (x.right) dfs(*x.right);
+          if (x.child) dfs(*x.child);
+          s += "|";
+        };
+        dfs(n);
+        return s;
+      }
+      static std::string node_key_hash(const Node& n)
+      {
+        // Use string key directly; could hash to size_t but string is collision-free
+        return node_key(n);
+      }
+
+      LLVMJit()
+      {
+        std::call_once(init_flag, []() {
+          llvm::InitializeNativeTarget();
+          llvm::InitializeNativeTargetAsmPrinter();
+          llvm::InitializeNativeTargetAsmParser();
+          llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
+        });
+#if NP_HAS_LLVM_ORC
+        auto jit_exp = llvm::orc::LLJITBuilder().create();
+        if (jit_exp)
+          jit = std::move(*jit_exp);
+#else
+        ctx_holder = std::make_unique<llvm::LLVMContext>();
+        mod_holder = std::make_unique<llvm::Module>("np_vm", *ctx_holder);
+#endif
+        initialized = (jit != nullptr)
+#if !NP_HAS_LLVM_ORC
+            || (ee != nullptr || mod_holder != nullptr)
+#endif
+            ;
+      }
+
+      static std::once_flag init_flag;
+
+      // Emit LLVM IR for Node tree — recursive, handles all Node::Type
+      static llvm::Value*
+      emit_ir(const Node& n, llvm::IRBuilder<>& b, llvm::Value* args_ptr, llvm::Module& mod)
+      {
+        llvm::LLVMContext& ctx = b.getContext();
+        (void)ctx;
+        switch (n.type)
+        {
+          case Node::Const:
+            return llvm::ConstantFP::get(b.getDoubleTy(), n.cval);
+          case Node::Var:
+          {
+            llvm::Value* idx = b.getInt32(n.var);
+            llvm::Value* gep = b.CreateGEP(b.getDoubleTy(), args_ptr, idx);
+            return b.CreateLoad(b.getDoubleTy(), gep);
+          }
+          case Node::Add:
+            return b.CreateFAdd(
+                emit_ir(*n.left, b, args_ptr, mod), emit_ir(*n.right, b, args_ptr, mod));
+          case Node::Sub:
+            return b.CreateFSub(
+                emit_ir(*n.left, b, args_ptr, mod), emit_ir(*n.right, b, args_ptr, mod));
+          case Node::Mul:
+            return b.CreateFMul(
+                emit_ir(*n.left, b, args_ptr, mod), emit_ir(*n.right, b, args_ptr, mod));
+          case Node::Div:
+            return b.CreateFDiv(
+                emit_ir(*n.left, b, args_ptr, mod), emit_ir(*n.right, b, args_ptr, mod));
+          case Node::Pow:
+          {
+            llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
+                &mod, llvm::Intrinsic::pow, {b.getDoubleTy()});
+            return b.CreateCall(fn, {emit_ir(*n.left, b, args_ptr, mod), emit_ir(*n.right, b, args_ptr, mod)});
+          }
+          case Node::Sin:
+          {
+            llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
+                &mod, llvm::Intrinsic::sin, {b.getDoubleTy()});
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Cos:
+          {
+            llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
+                &mod, llvm::Intrinsic::cos, {b.getDoubleTy()});
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Exp:
+          {
+            llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
+                &mod, llvm::Intrinsic::exp, {b.getDoubleTy()});
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Log:
+          {
+            llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
+                &mod, llvm::Intrinsic::log, {b.getDoubleTy()});
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Sqrt:
+          {
+            llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
+                &mod, llvm::Intrinsic::sqrt, {b.getDoubleTy()});
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Tan:
+          {
+            llvm::Function* fn = mod.getFunction("tan");
+            if (!fn)
+            {
+              llvm::FunctionType* ft =
+                  llvm::FunctionType::get(b.getDoubleTy(), {b.getDoubleTy()}, false);
+              fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "tan", mod);
+            }
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Asin:
+          {
+            llvm::Function* fn = mod.getFunction("asin");
+            if (!fn)
+            {
+              llvm::FunctionType* ft =
+                  llvm::FunctionType::get(b.getDoubleTy(), {b.getDoubleTy()}, false);
+              fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "asin", mod);
+            }
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Acos:
+          {
+            llvm::Function* fn = mod.getFunction("acos");
+            if (!fn)
+            {
+              llvm::FunctionType* ft =
+                  llvm::FunctionType::get(b.getDoubleTy(), {b.getDoubleTy()}, false);
+              fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "acos", mod);
+            }
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Atan:
+          {
+            llvm::Function* fn = mod.getFunction("atan");
+            if (!fn)
+            {
+              llvm::FunctionType* ft =
+                  llvm::FunctionType::get(b.getDoubleTy(), {b.getDoubleTy()}, false);
+              fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "atan", mod);
+            }
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+        }
+        return llvm::ConstantFP::get(b.getDoubleTy(), 0);
+      }
+
+#if NP_HAS_LLVM_ORC
+      // Compile Node to double(*)(double*) via LLJIT, cached by content hash
+      double (*compile(const Node& n))(double*)
+      {
+        std::string key = node_key_hash(n);
+        {
+          std::lock_guard<std::mutex> lk(mtx);
+          auto it = cache.find(key);
+          if (it != cache.end())
+            return reinterpret_cast<double (*)(double*)>(it->second);
+        }
+        if (!jit)
+          return nullptr;
+
+        auto ctx = std::make_unique<llvm::LLVMContext>();
+        auto mod = std::make_unique<llvm::Module>("np_vm_mod", *ctx);
+        mod->setDataLayout(jit->getDataLayout());
+
+        llvm::IRBuilder<> b(*ctx);
+        llvm::FunctionType* ft = llvm::FunctionType::get(
+            b.getDoubleTy(), {b.getPtrTy()}, false);
+        // unique name per content hash to avoid collision
+        std::string fname = "eval_" + std::to_string(std::hash<std::string>{}(key));
+        llvm::Function* fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, fname, *mod);
+        fn->setDSOLocal(true);
+        llvm::BasicBlock* bb = llvm::BasicBlock::Create(*ctx, "entry", fn);
+        b.SetInsertPoint(bb);
+        llvm::Value* args_ptr = fn->getArg(0);
+        llvm::Value* ret = emit_ir(n, b, args_ptr, *mod);
+        b.CreateRet(ret);
+        if (llvm::verifyFunction(*fn, &llvm::errs()))
+          return nullptr;
+
+        // Optimize: add a simple pass (optional, rely on JIT)
+        auto tsm = llvm::orc::ThreadSafeModule(std::move(mod), std::move(ctx));
+        if (auto err = jit->addIRModule(std::move(tsm)))
+        {
+          llvm::consumeError(std::move(err));
+          return nullptr;
+        }
+        auto sym = jit->lookup(fname);
+        if (!sym)
+        {
+          llvm::consumeError(sym.takeError());
+          return nullptr;
+        }
+        // LLVM 16+ returns ExecutorAddr
+        auto raw = *sym;
+        uint64_t addrInt = raw.getValue();
+        void* p = reinterpret_cast<void*>(static_cast<std::uintptr_t>(addrInt));
+        {
+          std::lock_guard<std::mutex> lk(mtx);
+          cache[key] = p;
+        }
+        return reinterpret_cast<double (*)(double*)>(p);
+      }
+#else
+      // Legacy ExecutionEngine path — single module, multiple functions
+      double (*compile(const Node& n))(double*)
+      {
+        std::string key = node_key_hash(n);
+        {
+          std::lock_guard<std::mutex> lk(mtx);
+          auto it = cache.find(key);
+          if (it != cache.end())
+            return reinterpret_cast<double (*)(double*)>(it->second);
+        }
+        if (!ctx_holder || !mod_holder)
+          return nullptr;
+        llvm::IRBuilder<> b(*ctx_holder);
+        llvm::FunctionType* ft = llvm::FunctionType::get(
+            b.getDoubleTy(), {b.getPtrTy()}, false);
+        std::string fname = "eval_" + std::to_string(std::hash<std::string>{}(key));
+        // avoid duplicate
+        if (mod_holder->getFunction(fname))
+          fname += "_" + std::to_string(cache.size());
+        llvm::Function* fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, fname, *mod_holder);
+        llvm::BasicBlock* bb = llvm::BasicBlock::Create(*ctx_holder, "entry", fn);
+        b.SetInsertPoint(bb);
+        llvm::Value* args_ptr = fn->getArg(0);
+        llvm::Value* ret = emit_ir(n, b, args_ptr, *mod_holder);
+        b.CreateRet(ret);
+        if (llvm::verifyFunction(*fn, &llvm::errs()))
+        {
+          fn->eraseFromParent();
+          return nullptr;
+        }
+        if (!ee)
+        {
+          std::string err;
+          ee = llvm::EngineBuilder(std::move(mod_holder))
+                   .setErrorStr(&err)
+                   .setOptLevel(llvm::CodeGenOptLevel::Aggressive)
+                   .create();
+          if (!ee)
+            return nullptr;
+          ee->finalizeObject();
+          // recreate holder for next compile (EE took ownership)
+          ctx_holder = std::make_unique<llvm::LLVMContext>();
+          mod_holder = std::make_unique<llvm::Module>("np_vm", *ctx_holder);
+        }
+        else
+        {
+          ee->finalizeObject();
+        }
+        void* p = ee->getPointerToFunction(fn);
+        if (!p)
+          return nullptr;
+        {
+          std::lock_guard<std::mutex> lk(mtx);
+          cache[key] = p;
+        }
+        return reinterpret_cast<double (*)(double*)>(p);
+      }
+#endif
+    };
+
+    inline LLVMJit& global_jit()
+    {
+      static LLVMJit jit;
+      return jit;
+    }
+    inline std::once_flag LLVMJit::init_flag;
+  } // namespace detail_llvm
+
   template <Scalar T = f64_t>
   struct LLVMStrategy : IEvaluator<T>
   {
-    // Would build LLVM IR via IRBuilder; fallback to interpreter until linked
+    // For non-double types, fall back to interpreter (complex/float need separate codegen)
     T eval(const Node& n, const PointT<T>& p) const override
     {
-      return InterpreterStrategy<T>{}.eval(n, p);
+      if constexpr (!std::is_same_v<T, f64_t>)
+      {
+        return InterpreterStrategy<T>{}.eval(n, p);
+      }
+      else
+      {
+#if NP_HAS_LLVM_ORC
+        auto* fn = detail_llvm::global_jit().compile(n);
+        if (fn)
+        {
+          // JIT expects double*; Point is vector<double>
+          // const_cast is safe — JIT only loads
+          double* ptr = const_cast<double*>(p.data());
+          // Handle empty point (0-dim) — pass nullptr if allowed
+          if (p.empty())
+          {
+            double dummy = 0;
+            return static_cast<T>(fn(&dummy));
+          }
+          return static_cast<T>(fn(ptr));
+        }
+        // fallback if JIT failed
+        return InterpreterStrategy<T>{}.eval(n, p);
+#else
+        // Legacy EE fallback — same
+        auto* fn = detail_llvm::global_jit().compile(n);
+        if (fn)
+          return static_cast<T>(fn(const_cast<double*>(p.data())));
+        return InterpreterStrategy<T>{}.eval(n, p);
+#endif
+      }
     }
+
     Dual<T> eval_dual(const Node& n, const PointT<T>& p, int var) const override
     {
-      return InterpreterStrategy<T>{}.eval_dual(n, p, var);
+      if constexpr (!std::is_same_v<T, f64_t>)
+      {
+        return InterpreterStrategy<T>{}.eval_dual(n, p, var);
+      }
+      else
+      {
+        // Derivative via symbolic diff + JIT (reuses eval JIT cache)
+        // This gives exact derivative, not finite difference, and benefits from
+        // LLVM optimizations (constant folding, CSE, vectorization).
+        Dual<T> r{};
+        r.val = eval(n, p);
+        // Build derivative node, then JIT it (simplify is optional and may not be visible here)
+        DiffVisitor dv{var};
+        NodePtr d = dv.visit(n);
+        if (!d)
+        {
+          r.dval = T(0);
+          return r;
+        }
+        // Optional: simplify if kernel is available (avoid hard dep to keep header order)
+        // d = ::np::differential::kernel::simplify(d);
+        if (!d || d->type == Node::Const)
+        if (!d || d->type == Node::Const)
+        {
+          r.dval = d ? static_cast<T>(d->cval) : T(0);
+          return r;
+        }
+        // JIT the derivative
+        auto* fn = detail_llvm::global_jit().compile(*d);
+        if (fn)
+        {
+          double* ptr = const_cast<double*>(p.data());
+          if (p.empty())
+          {
+            double dummy = 0;
+            r.dval = static_cast<T>(fn(&dummy));
+          }
+          else
+          {
+            r.dval = static_cast<T>(fn(ptr));
+          }
+        }
+        else
+        {
+          // fallback to interpreter dual
+          r.dval = InterpreterStrategy<T>{}.eval(*d, p);
+        }
+        return r;
+      }
     }
+
     NP_NODISCARD std::string name() const noexcept override
     {
-      return "llvm-jit";
+#if NP_HAS_LLVM_ORC
+      return "llvm-jit-orc";
+#else
+      return "llvm-jit-mc";
+#endif
     }
   };
 #endif
