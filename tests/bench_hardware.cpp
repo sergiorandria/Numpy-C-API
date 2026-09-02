@@ -1,7 +1,7 @@
 /**
  * @file bench_hardware.cpp
  * @brief Micro-benchmark for hardware backends — HBM, tensor, neuromorphic, padic,
- * lattice.
+ * lattice + powerful GPU/CPU GEMM.
  *
  * Measures throughput for:
  *   1. HBM migrate (mem::migrate_to_hbm)
@@ -11,7 +11,9 @@
  *   5. Neuromorphic spike encode + LIF
  *   6. Padic Hensel lift
  *   7. Lattice LLL
+ *   8. Powerful GEMM 512/1024 CPU vs GPU vs Auto (gpu::, accelerator::)
  *
+ * Build powerful: cmake --preset powerful && cmake --build --preset powerful -j && ./build/tests/bench_hardware
  * Not part of ctest; run: ./build/tests/bench_hardware
  */
 #include <np/np.hpp>
@@ -35,10 +37,35 @@ double ms(Fn&& fn, int iters = 3)
   return best;
 }
 
+template <typename T>
+double bench_gemm(int N, const char* label)
+{
+  auto a = np::eye<T>(N);
+  auto b = np::eye<T>(N);
+  double t_linalg = ms([&] { auto c = np::linalg::matmul(a, b); (void)c; });
+  double t_gpu = 0, t_auto = 0, t_tensor = 0;
+  if constexpr (std::is_same_v<T, float>)
+  {
+    auto gpu_acc = np::accelerator::AcceleratorFactory::gpu();
+    t_gpu = ms([&] { auto c = gpu_acc->matmul(a, b); (void)c; });
+    auto auto_acc = np::accelerator::AcceleratorFactory::auto_select();
+    t_auto = ms([&] { auto c = auto_acc->matmul(a, b); (void)c; });
+    t_tensor = ms([&] { auto c = np::tensor::matmul_fp8(a, b); (void)c; });
+  }
+  else
+  {
+    t_gpu = t_auto = t_tensor = 0;
+  }
+  printf("%s %dx%d: linalg %.2f ms | GPU %.2f ms | Auto %.2f ms | tensor_fp8 %.2f ms (gpu %s)\n",
+         label, N, N, t_linalg, t_gpu, t_auto, t_tensor, np::gpu::is_available() ? "yes" : "no");
+  return t_linalg;
+}
+
 int main()
 {
   auto a = np::eye<float>(64);
   auto b = np::eye<float>(64);
+  printf("=== hardware backends (64) ===\n");
   printf(
       "HBM migrate: %.2f ms\n",
       ms(
@@ -112,5 +139,35 @@ int main()
             auto r = lat.lll_reduce();
             (void)r;
           }));
+
+  printf("\n=== powerful GEMM (CPU SIMD+OpenMP vs GPU) ===\n");
+  printf("GPU available: %s (%d devices, backend %d) | OpenMP %s | AVX2 %s\n",
+         np::gpu::is_available() ? "yes" : "no",
+         np::gpu::device_count(),
+         (int)np::gpu::preferred_backend(),
+#if defined(_OPENMP)
+         "yes",
+#else
+         "no",
+#endif
+#if defined(__AVX2__)
+         "yes"
+#else
+         "no"
+#endif
+  );
+  bench_gemm<float>(64, "GEMM float");
+  bench_gemm<float>(256, "GEMM float");
+  bench_gemm<float>(512, "GEMM float");
+  bench_gemm<float>(1024, "GEMM float");
+  bench_gemm<double>(512, "GEMM double");
+
+  printf("\n=== memory (HBM/GPU pinned) ===\n");
+  {
+    auto arr = np::eye<float>(512);
+    printf("migrate_to_hbm 512: %.2f ms\n", ms([&] { auto h = np::mem::migrate_to_hbm(arr); (void)h; }));
+    printf("migrate_to_device 512: %.2f ms\n", ms([&] { auto g = np::mem::migrate_to_device(arr); (void)g; }));
+    printf("migrate_to_pinned 512: %.2f ms\n", ms([&] { auto p = np::mem::migrate_to_pinned(arr); (void)p; }));
+  }
   return 0;
 }
