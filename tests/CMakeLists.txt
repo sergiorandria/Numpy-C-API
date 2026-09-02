@@ -60,3 +60,10 @@ if(NOT MSVC)
     # add/mul/div_vectorized wrappers.
     target_compile_options(bench_math PRIVATE -O2 -mavx)
 endif()
+
+# Hardware benchmark (HBM/tensor/neuromorphic/padic/lattice) — not in ctest
+add_executable(bench_hardware bench_hardware.cpp)
+target_link_libraries(bench_hardware PRIVATE np::np)
+if(NOT MSVC)
+    target_compile_options(bench_hardware PRIVATE -O2 -mavx)
+endif()
