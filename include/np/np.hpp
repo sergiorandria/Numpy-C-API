@@ -63,6 +63,7 @@
 #include "memristor.hpp"
 #include "photonics.hpp"
 #include "quantum.hpp"
+#include "accelerator.hpp"
 #include "random.hpp"
 
 // Suppress -Wbraced-scalar-init for NDProxy braced-init (e.g.

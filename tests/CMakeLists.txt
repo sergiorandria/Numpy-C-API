@@ -33,7 +33,8 @@ set(NP_TESTS
     test_tensor_core
     test_memristor
     test_photonics
-    test_quantum)
+    test_quantum
+    test_accelerator)
 
 if(NP_COMPILED_UNITS)
     list(APPEND NP_TESTS test_constexpr test_compile_time)
