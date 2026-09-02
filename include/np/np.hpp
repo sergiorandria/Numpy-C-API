@@ -57,6 +57,7 @@
 #include "spectral.hpp"
 #include "lattice.hpp"
 #include "padic.hpp"
+#include "neuromorphic.hpp"
 #include "random.hpp"
 
 // Suppress -Wbraced-scalar-init for NDProxy braced-init (e.g.
