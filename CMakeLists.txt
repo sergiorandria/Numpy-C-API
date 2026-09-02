@@ -29,7 +29,6 @@ option(NP_ENABLE_HIP "Enable HIP runtime (requires ROCm, implies GPU)" OFF)
 option(NP_ENABLE_POWERFUL "Meta-option for powerful workstation + GPU (AVX2+GPU+OpenMP+Threading+LTO+Native)" OFF)
 set(NP_PQC_ALG "" CACHE STRING "PQC algorithm for __NUMPY_PQC_ALG (e.g., MLKEM768, MLDSA65) – empty = none")
 
-# Powerful meta-option: force-enable best performance opts before they are evaluated
 if(NP_ENABLE_POWERFUL)
     set(NP_ENABLE_AVX2 ON CACHE BOOL "" FORCE)
     set(NP_ENABLE_GPU ON CACHE BOOL "" FORCE)
@@ -52,30 +51,24 @@ endif()
 
 if(NP_ENABLE_SIMD)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
-        # x86/x86-64 architecture
         if(MSVC)
-            # MSVC compiler flags
             if(NP_ENABLE_AVX512)
                 add_compile_options(/arch:AVX512)
             elseif(NP_ENABLE_AVX2)
                 add_compile_options(/arch:AVX2)
             else()
-                # SSE2 is enabled by default on x64
                 add_compile_options(/arch:SSE2)
             endif()
         else()
-            # GCC/Clang compiler flags
             if(NP_ENABLE_AVX512)
                 add_compile_options(-mavx512f -mavx512dq)
             elseif(NP_ENABLE_AVX2)
                 add_compile_options(-mavx2 -mfma)
             else()
-                # Enable SSE4.2 by default for better performance
                 add_compile_options(-msse4.2)
             endif()
         endif()
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)")
-        # ARM64 architecture - NEON is standard, SVE optional
         if(NOT MSVC)
             if(NP_ENABLE_SVE)
                 add_compile_options(-march=armv8-a+sve -msve-vector-bits=scalable)
@@ -84,7 +77,6 @@ if(NP_ENABLE_SIMD)
             endif()
         endif()
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
-        # ARM32 architecture
         if(NOT MSVC)
             add_compile_options(-mfpu=neon -mfloat-abi=hard)
         endif()
@@ -113,7 +105,6 @@ if(NP_USE_SECURE_IMPL)
     add_compile_definitions(NP_USE_SECURE_IMPL=1)
 endif()
 
-# ── Bigint / GMP (header-only cpp_int, optional GMP mpz) ─────────────────
 option(NP_ENABLE_BIGINT "Enable bigint support (boost::multiprecision::cpp_int)" ON)
 option(NP_ENABLE_GMP "Enable GMP mpz backend for bigint (requires libgmp)" OFF)
 if(NP_ENABLE_GMP)
@@ -132,9 +123,6 @@ option(NP_COMPILED_UNITS
 
 option(NP_USE_THREADING "Enable threadpool for sorting/searching/loops (NP_THREADPOOL)" OFF)
 
-# ── Compilation optimization ──────────────────────────────────────────
-# Tuned for powerful multi-core machines; all options are OFF by default
-# to keep debug builds fast, but can be enabled for Release.
 option(NP_ENABLE_LTO "Enable Link-Time Optimization (IPO/LTCG)" OFF)
 option(NP_ENABLE_NATIVE "Enable -march=native / -mtune=native (GCC/Clang) / /arch:AVX* tuning" OFF)
 option(NP_ENABLE_FAST_MATH "Enable -ffast-math / /fp:fast (may affect NaN/inf)" OFF)
@@ -158,8 +146,6 @@ endif()
 
 if(NP_ENABLE_NATIVE)
   if(MSVC)
-    # MSVC has no direct -march=native; keep AVX tuning from SIMD block
-    # and add /Ot for speed. User can set /arch:AVX2 etc. via NP_ENABLE_AVX2.
     add_compile_options($<$<CONFIG:Release>:/Ot>)
   else()
     include(CheckCXXCompilerFlag)
@@ -179,7 +165,6 @@ if(NP_ENABLE_LTO)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
     if(MSVC)
-      # MSVC LTCG needs /GL + /LTCG; CMake handles via IPO flag
       add_compile_options($<$<CONFIG:Release>:/GL> $<$<CONFIG:RelWithDebInfo>:/GL>)
     else()
       add_compile_options($<$<CONFIG:Release>:-flto> $<$<CONFIG:RelWithDebInfo>:-flto>)
@@ -190,8 +175,6 @@ if(NP_ENABLE_LTO)
   endif()
 endif()
 
-# Release: always define NDEBUG and enable function/data sections + GC for
-# smaller/faster binaries (GCC/Clang). Also enable -pipe for faster compilation.
 if(NOT MSVC)
   add_compile_options($<$<CONFIG:Release>:-DNDEBUG> $<$<CONFIG:RelWithDebInfo>:-DNDEBUG>)
   add_compile_options($<$<CONFIG:Release>:-ffunction-sections> $<$<CONFIG:Release>:-fdata-sections>)
@@ -201,10 +184,6 @@ else()
   add_compile_definitions($<$<CONFIG:Release>:NDEBUG> $<$<CONFIG:RelWithDebInfo>:NDEBUG>)
 endif()
 
-# Adaptive parallelism for compilation itself (ninja/make -j)
-# If building on powerful machine, allow more jobs via CMAKE_BUILD_PARALLEL_LEVEL
-# (no flag needed – CMake respects -j).
-
 add_library(numpy-cpp INTERFACE)
 add_library(numpy-cpp::numpy-cpp ALIAS numpy-cpp)
 target_include_directories(numpy-cpp INTERFACE
@@ -212,7 +191,6 @@ target_include_directories(numpy-cpp INTERFACE
     $<INSTALL_INTERFACE:include>)
 find_package(Threads REQUIRED)
 target_link_libraries(numpy-cpp INTERFACE Threads::Threads)
-# dl for GPU driver dlopen (Linux)
 find_library(DL_LIB dl)
 if(DL_LIB)
     target_link_libraries(numpy-cpp INTERFACE ${DL_LIB})
@@ -229,7 +207,6 @@ if(NP_ENABLE_BIGINT)
         target_include_directories(numpy-cpp INTERFACE ${Boost_INCLUDE_DIRS})
     endif()
 endif()
-# ── OpenMP / GPU offload ───────────────────────────────────────────────
 if(NP_ENABLE_OPENMP)
     find_package(OpenMP)
     if(OpenMP_CXX_FOUND)
@@ -239,12 +216,10 @@ if(NP_ENABLE_OPENMP)
         if(NP_ENABLE_GPU)
             target_compile_definitions(numpy-cpp INTERFACE NP_ENABLE_GPU=1)
             message(STATUS "GPU dispatch enabled (OpenMP target + CUDA driver dlopen)")
-            # GCC/Clang offload to nvptx if toolchain available – best effort
             if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
                 include(CheckCXXCompilerFlag)
                 check_cxx_compiler_flag("-fopenmp" _np_has_fopenmp)
                 if(_np_has_fopenmp AND NOT MSVC)
-                    # Enable offload to nvptx-none if available; ignore failure
                     check_cxx_compiler_flag("-foffload=nvptx-none" _np_has_offload)
                     if(_np_has_offload)
                         message(STATUS "OpenMP offload to nvptx-none enabled")
@@ -256,7 +231,6 @@ if(NP_ENABLE_OPENMP)
         message(WARNING "NP_ENABLE_OPENMP=ON but OpenMP not found")
     endif()
 elseif(NP_ENABLE_GPU)
-    # GPU without OpenMP still enables driver probe via dlopen
     target_compile_definitions(numpy-cpp INTERFACE NP_ENABLE_GPU=1)
     message(STATUS "GPU driver probe enabled (dlopen libcuda.so.1)")
 endif()
@@ -277,64 +251,23 @@ if(NP_ENABLE_HIP)
         message(STATUS "HIP found – enabling HIP runtime")
     endif()
 endif()
-# ── LLVM JIT for differential VM (optional, header-only fallback) ─────
-# differential.hpp uses __has_include(<llvm/IR/IRBuilder.h>) to auto-enable,
-# but -DNP_ENABLE_LLVM=1 forces the define. When LLVM is found we also link.
 option(NP_ENABLE_LLVM "Enable LLVM JIT for differential VM (requires LLVM dev headers)" OFF)
 if(NP_ENABLE_LLVM)
   target_compile_definitions(numpy-cpp INTERFACE NP_ENABLE_LLVM=1)
-  # Try config package first (preferred) then plain find
-  find_package(LLVM QUIET CONFIG)
-  if(NOT LLVM_FOUND)
-    find_package(LLVM QUIET)
-  endif()
+  find_package(LLVM QUIET)
   if(LLVM_FOUND)
-    message(STATUS "LLVM found ${LLVM_PACKAGE_VERSION} — enabling differential JIT link")
-    # LLVM_DEFINITIONS may contain -D flags; add them
-    if(DEFINED LLVM_DEFINITIONS)
-      target_compile_definitions(numpy-cpp INTERFACE ${LLVM_DEFINITIONS})
-    endif()
-    if(DEFINED LLVM_INCLUDE_DIRS)
-      target_include_directories(numpy-cpp INTERFACE ${LLVM_INCLUDE_DIRS})
-    endif()
-    # Prefer llvm_map_components_to_libnames when available
-    if(COMMAND llvm_map_components_to_libnames)
-      llvm_map_components_to_libnames(llvm_libs core orcjit native support executionengine)
-      target_link_libraries(numpy-cpp INTERFACE ${llvm_libs})
-    elseif(DEFINED LLVM_AVAILABLE_LIBS)
-      target_link_libraries(numpy-cpp INTERFACE ${LLVM_AVAILABLE_LIBS})
-    elseif(TARGET LLVM)
-      target_link_libraries(numpy-cpp INTERFACE LLVM)
-    elseif(TARGET LLVM::LLVM)
-      target_link_libraries(numpy-cpp INTERFACE LLVM::LLVM)
-    else()
-      # Fallback: try llvm-config
-      find_program(LLVM_CONFIG_EXE llvm-config)
-      if(LLVM_CONFIG_EXE)
-        execute_process(COMMAND ${LLVM_CONFIG_EXE} --libs OUTPUT_VARIABLE llvm_config_libs OUTPUT_STRIP_TRAILING_WHITESPACE)
-        separate_arguments(llvm_config_libs)
-        target_link_libraries(numpy-cpp INTERFACE ${llvm_config_libs})
-      endif()
-    endif()
-    # Ensure we link with libm for external libm calls (tan/asin/...)
-    find_library(M_LIB m)
-    if(M_LIB)
-      target_link_libraries(numpy-cpp INTERFACE ${M_LIB})
-    endif()
-  else()
-    message(STATUS "NP_ENABLE_LLVM=ON but LLVM not found — differential will use interpreter fallback")
+    target_include_directories(numpy-cpp INTERFACE ${LLVM_INCLUDE_DIRS})
+    target_link_libraries(numpy-cpp INTERFACE LLVM)
   endif()
 endif()
 if(NP_USE_THREADING)
   target_compile_definitions(numpy-cpp INTERFACE NP_USE_THREADING)
 endif()
 
-# ── Legacy alias: keep `np::np` working for existing downstream code ──
 add_library(np INTERFACE)
 target_link_libraries(np INTERFACE numpy-cpp)
 add_library(np::np ALIAS np)
 
-# ── Install & package (header-only) ─────────────────────────────────────
 include(GNUInstallDirs)
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(TARGETS numpy-cpp np
@@ -358,8 +291,6 @@ install(FILES
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/numpy-cpp")
 
 include(CTest)
-# Only build tests when this is the top-level project (avoids building tests
-# for every FetchContent / add_subdirectory consumer).
 if(BUILD_TESTING AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     add_subdirectory(tests)
 endif()
