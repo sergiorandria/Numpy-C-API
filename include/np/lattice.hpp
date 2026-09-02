@@ -63,7 +63,12 @@ namespace np::lattice
 
   // ── Concepts ────────────────────────────────────────────────────────────
   template <typename T>
-  concept LatticeScalar = std::is_arithmetic_v<T> || detail::is_complex_v<T>;
+  concept LatticeScalar = requires(T a, T b) {
+    a + b;
+    a - b;
+    a * b;
+    a == b;
+  };
 
   template <typename T>
   concept Ordered = requires(const T& a, const T& b) {

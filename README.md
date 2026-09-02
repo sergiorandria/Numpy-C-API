@@ -1,4 +1,4 @@
-# numpy-cpp
+#numpy - cpp
 
 > **NumPy 2.2 in C++20. Header-only. Zero Python. Native speed.**
 
@@ -16,17 +16,17 @@
 #include <np/np.hpp> // now fully integrated (random + concatenate included)
 
 int main() {
-  auto a = np::arange<double>(0, 10, 0.5);          // [0, 0.5, …, 9.5]
+  auto a = np::arange<double>(0, 10, 0.5); // [0, 0.5, …, 9.5]
   auto b = np::linspace<double>(0, 2 * M_PI, 100);
-  auto y = np::sin(b);                              // ufunc, SIMD-dispatched
+  auto y = np::sin(b); // ufunc, SIMD-dispatched
 
   auto M = np::eye<double>(3);
   auto N = np::ones<double>({3, 3});
-  auto P = np::matmul(M, N);                        // blocked GEMM, parallel
+  auto P = np::matmul(M, N); // blocked GEMM, parallel
 
   auto rng = np::random::Generator(42);
-  auto s   = rng.standard_normal<double>({1000});   // PCG64 + Box-Muller
-  auto m   = np::mean(s);
+  auto s = rng.standard_normal<double>({1000}); // PCG64 + Box-Muller
+  auto m = np::mean(s);
 }
 ```
 
@@ -88,7 +88,7 @@ No linking. No Python runtime. No code generation. Just `#include <np/np.hpp>`.
 - **I/O** — `load`, `save`, `savez`, `NpzFile`, `savetxt`, `DataSource`
 - **Polynomial** — `Polynomial`, `Chebyshev`, `polyfit`, `polyutils`
 - **Dtype & Masked** — `can_cast`, `promote_types`, `finfo`/`iinfo`, `MaskedArray`
-- **Extras** — `bigint` (Boost `cpp_int` / GMP), `pqc` constant-time hardening, `differential` LLVM JIT (optional), `homology`/`homotopy`/`manifold`/`variety`
+- **Extras** — `bigint` (Boost `cpp_int` / GMP), `pqc` constant-time hardening, `differential` LLVM JIT (optional), `homology`/`homotopy`/`manifold`/`variety`, `lattice`/`padic`, `neuromorphic` (Loihi2/SpiNNaker), `memory` (HBM/CXL), `tensor` (Hopper/AMX), `analog` (ReRAM), `photonics` (Mach-Zehnder), `quantum` (StateVector), `accelerator` (heterogeneous)
 
 ---
 
@@ -100,28 +100,28 @@ No linking. No Python runtime. No code generation. Just `#include <np/np.hpp>`.
 
 ```bash
 cp -r include/np /usr/local/include/
-# then
+#then
 g++ -std=c++20 -O3 -I include main.cpp -o main
 ```
 
 ### 2 — CMake `add_subdirectory` / `FetchContent` (recommended)
 
 ```cmake
-# CMakeLists.txt
+#CMakeLists.txt
 cmake_minimum_required(VERSION 3.20)
 project(my_app CXX)
 set(CMAKE_CXX_STANDARD 20)
 
-# Option A: local checkout
+#Option A : local checkout
 add_subdirectory(numpy-cpp)
-# Option B: FetchContent
+#Option B : FetchContent
 include(FetchContent)
 FetchContent_Declare(numpy-cpp GIT_REPOSITORY https://github.com/sergiorandria/numpy-cpp.git GIT_TAG dev)
 FetchContent_MakeAvailable(numpy-cpp)
 
 add_executable(my_app main.cpp)
 target_link_libraries(my_app PRIVATE numpy-cpp::numpy-cpp)
-# legacy alias also works: np::np
+#legacy alias also works : np::np
 ```
 
 ```cpp
@@ -139,7 +139,7 @@ int main() {
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
 cmake --build build && cmake --install build
-# then in downstream:
+#then in downstream:
 find_package(numpy-cpp CONFIG REQUIRED)
 target_link_libraries(my_app PRIVATE numpy-cpp::numpy-cpp)
 ```
@@ -181,17 +181,17 @@ int main() {
   // — Creation & arithmetic (broadcasting) —
   auto a = np::zeros<double>({3, 4});
   auto b = np::ones<double>({3, 4});
-  auto c = a + b * 2.0;                       // element-wise, broadcast
+  auto c = a + b * 2.0; // element-wise, broadcast
 
   // — Reductions & views —
   auto v = np::arange<int>(0, 12).reshape({3, 4});
-  auto row = v[1];                            // view, shared storage
+  auto row = v[1]; // view, shared storage
   std::cout << v.sum() << " " << np::mean(v) << "\n";
 
   // — Linalg —
   auto A = np::eye<double>(4);
   auto x = np::arange<double>(0, 4);
-  auto y = np::matmul(A, x.reshape({4,1}));
+  auto y = np::matmul(A, x.reshape({4, 1}));
   auto n = np::linalg::norm(y);
 
   // — FFT —
@@ -208,7 +208,12 @@ int main() {
   auto rng = np::random::Generator(0);
   auto z = rng.standard_normal<double>({2, 3});
 
-  (void)c; (void)row; (void)n; (void)F; (void)workday; (void)z;
+  (void)c;
+  (void)row;
+  (void)n;
+  (void)F;
+  (void)workday;
+  (void)z;
 }
 ```
 
@@ -216,9 +221,9 @@ Compile:
 
 ```bash
 g++ -std=c++20 -O3 -msse4.2 -I include main.cpp -o main && ./main
-# WASM
+#WASM
 clang++ --target=wasm32 -mwasm-simd128 -DNP_SIMD_WASM -I include main.cpp -o main.wasm
-# RISC-V
+#RISC - V
 clang++ -march=rv64gcv -DNP_SIMD_RVV -I include main.cpp -o main.rvv
 ```
 
@@ -337,12 +342,12 @@ tests/                22 CTest suites + bench_math (AVX, manual)
 cmake -S . -B build && cmake --build build -j8
 ctest --test-dir build --output-on-failure   # 29/29
 
-# single suite verbose
+#single suite verbose
 ./build/tests/test_ndarray --verbose
-# header-only smoke test
+#header - only smoke test
 g++ -std=c++20 -I include tests/test_math.cpp -o /tmp/t && /tmp/t
 
-# micro-benchmark (AVX, not in ctest)
+#micro - benchmark(AVX, not in ctest)
 cmake --build build --target bench_math && ./build/tests/bench_math
 ```
 
