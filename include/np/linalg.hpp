@@ -33,7 +33,9 @@
 
 #include "dtype.hpp"
 #include "exceptions.hpp"
+#include "gpu.hpp"
 #include "ndarray.hpp"
+#include "powerful.hpp"
 #if __has_include("bigint.hpp")
 #include "bigint.hpp"
 #endif
