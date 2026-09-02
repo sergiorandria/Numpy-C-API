@@ -18,6 +18,8 @@
 #ifndef NP_NDARRAY_FIXED_HPP
 #define NP_NDARRAY_FIXED_HPP
 
+#include "api_macros.hpp"
+
 #include <array>
 #include <bit>
 #include <concepts>

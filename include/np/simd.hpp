@@ -12,6 +12,7 @@
 #ifndef NP_SIMD_HPP
 #define NP_SIMD_HPP
 
+#include "api_macros.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>

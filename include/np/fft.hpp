@@ -17,6 +17,7 @@
 #ifndef NP_FFT_HPP
 #define NP_FFT_HPP
 
+#include "api_macros.hpp"
 #include "fft/fft_core.hpp"
 #include "fft/fft_1d.hpp"
 #include "fft/fft_nd.hpp"

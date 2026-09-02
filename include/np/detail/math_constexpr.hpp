@@ -12,6 +12,8 @@
 #ifndef NP_DETAIL_MATH_CONSTEXPR_HPP
 #define NP_DETAIL_MATH_CONSTEXPR_HPP
 
+#include "../api_macros.hpp"
+
 #include <cstddef>
 #include <limits>
 

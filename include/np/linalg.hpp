@@ -15,6 +15,7 @@
 #ifndef NP_LINALG_HPP
 #define NP_LINALG_HPP
 
+#include "api_macros.hpp"
 #include <algorithm>
 #include <cmath>
 #include <complex>
