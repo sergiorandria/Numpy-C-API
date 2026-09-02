@@ -28,6 +28,7 @@
 
 #include "api_macros.hpp"
 #include "homology.hpp"
+#include "lattice.hpp"
 
 namespace np::spectral
 {
@@ -222,6 +223,28 @@ namespace np::spectral
       for (int q = 0; q <= Q; ++q)
         tot[p + q] += pg.betti[p][q];
     return tot;
+  }
+
+  // ── Lattice integration (modern) ────────────────────────────────────────────
+  NP_NODISCARD inline SpectralSequence
+  lattice_spectral(const lattice::Lattice<double>& lat)
+  {
+    // For lattice rank r, E2^{0,0}=Z, E2^{r,0}=Z, others 0 — collapses at E2
+    int r = lat.rank();
+    SpectralSequence ss;
+    ss.bundle_name = "Lattice SS for rank " + std::to_string(r);
+    SpectralSequencePage pg2;
+    pg2.r = 2;
+    pg2.betti.assign(r + 1, std::vector<int>(1, 0));
+    pg2.has_torsion.assign(r + 1, std::vector<bool>(1, false));
+    if (r >= 0)
+      pg2.betti[0][0] = 1;
+    if (r > 0)
+      pg2.betti[r][0] = 1;
+    ss.pages.push_back(pg2);
+    ss.collapses = true;
+    ss.inconclusive = false;
+    return ss;
   }
 
 } // namespace np::spectral
