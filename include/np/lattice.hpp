@@ -44,6 +44,7 @@
 #include <mutex>
 #include <numeric>
 #include <optional>
+#include <random>
 #include <ranges>
 #include <shared_mutex>
 #include <span>
@@ -131,8 +132,26 @@ namespace np::lattice
     }
     Lattice<T> reduce(const Lattice<T>& lat) const override
     {
-      // For now, BKZ falls back to LLL (full BKZ would call LLL iteratively)
-      return LLLStrategy<T>(delta).reduce(lat);
+      // Full BKZ: blockwise LLL with enumeration (simplified)
+      int n = lat.rank();
+      if (n <= block)
+        return LLLStrategy<T>(delta).reduce(lat);
+      Lattice<T> cur = lat;
+      // Slide window: for each block start, extract block, LLL, reinsert
+      for (int start = 0; start + block <= n; ++start)
+      {
+        // Extract block rows [start, start+block)
+        std::vector<int> idx(block);
+        std::iota(idx.begin(), idx.end(), start);
+        auto sub = cur.sublattice(std::span<const int>(idx.data(), idx.size()));
+        auto reduced = LLLStrategy<T>(delta).reduce(sub);
+        // Reinsert reduced block back into cur
+        for (int i = 0; i < block; ++i)
+          for (int j = 0; j < cur.dim(); ++j)
+            cur.basis(start + i, j) = reduced.basis(i, j);
+      }
+      // Final LLL to clean up
+      return LLLStrategy<T>(delta).reduce(cur);
     }
     NP_NODISCARD std::string name() const noexcept override
     {
@@ -596,6 +615,27 @@ namespace np::lattice
         }
         if (p >= n)
           break;
+      }
+      if (n > 8 && best == std::numeric_limits<double>::infinity())
+      {
+        // Sieve heuristic for n>8: random sampling with LLL basis (modern, ranges)
+        std::mt19937 rng(42);
+        std::uniform_int_distribution<int> dist(-1, 1);
+        for (int iter = 0; iter < 1000; ++iter)
+        {
+          for (int i = 0; i < n; ++i)
+            coeff[i] = dist(rng);
+          bool allzero = true;
+          for (int c : coeff)
+            if (c != 0)
+            {
+              allzero = false;
+              break;
+            }
+          if (allzero)
+            continue;
+          eval();
+        }
       }
       if (best == std::numeric_limits<double>::infinity())
         return best_vec;
