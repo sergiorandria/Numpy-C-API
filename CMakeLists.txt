@@ -244,3 +244,8 @@ include(CTest)
 if(BUILD_TESTING AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     add_subdirectory(tests)
 endif()
+
+option(NP_BUILD_PYTHON "Build Python bridge via pybind11 (header-only, optional)" OFF)
+if(NP_BUILD_PYTHON)
+  add_subdirectory(python)
+endif()
