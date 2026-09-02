@@ -431,7 +431,9 @@ namespace np::photonics
       MeshPhases q = mp;
       double tot_loss_db = 0.0;
       std::mt19937_64 rng(0xC0FFEE);
-      std::normal_distribution<double> nd(0.0, cfg.phase_error_std);
+      std::optional<std::normal_distribution<double>> nd;
+      if (cfg.phase_error_std > 0)
+        nd.emplace(0.0, cfg.phase_error_std);
       for (auto& mz : q.mzis)
       {
         // quantization
@@ -443,10 +445,10 @@ namespace np::photonics
         mz.theta += drift;
         mz.phi += drift;
         // phase noise
-        if (cfg.phase_error_std > 0)
+        if (cfg.phase_error_std > 0 && nd)
         {
-          mz.theta += nd(rng);
-          mz.phi += nd(rng);
+          mz.theta += (*nd)(rng);
+          mz.phi += (*nd)(rng);
         }
         // calibration LUT: phases -> voltage -> phases (round-trip through DAC)
         if (cal)
@@ -892,7 +894,9 @@ namespace np::photonics
       bool noisy = config.phase_error_std != 0.0
           || config.insertion_loss_db_per_mzi != 0.0
           || config.splitter_imbalance != 0.0
-          || config.dac_bits < 30;
+          || (config.dac_bits != 0 && config.dac_bits < 30)
+          || config.crosstalk_coeff != 0.0
+          || config.temperature_c != 25.0;
       ndarray<c128> U = noisy ? effective_unitary() : unitary;
       if (U.size() == 0)
         throw std::runtime_error("MachZehnderMesh: no unitary programmed");
