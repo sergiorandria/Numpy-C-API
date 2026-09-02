@@ -28,7 +28,8 @@ set(NP_TESTS
     test_higher
     test_lattice
     test_padic
-    test_neuromorphic)
+    test_neuromorphic
+    test_memory)
 
 if(NP_COMPILED_UNITS)
     list(APPEND NP_TESTS test_constexpr test_compile_time)
