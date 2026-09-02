@@ -25,7 +25,8 @@ set(NP_TESTS
     test_manifold
     test_differential
     test_datetime
-    test_higher)
+    test_higher
+    test_lattice)
 
 if(NP_COMPILED_UNITS)
     list(APPEND NP_TESTS test_constexpr test_compile_time)
