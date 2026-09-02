@@ -3237,37 +3237,49 @@ namespace np::linalg
     const std::size_t k = static_cast<std::size_t>(ashape[1]);
     const std::size_t cols = static_cast<std::size_t>(bshape[1]);
     ndarray<R> out(std::vector<int>{static_cast<int>(rows), static_cast<int>(cols)});
-    // Modern dispatch: tensor core (Hopper/AMX) for float large GEMM via accelerator
-    // Strategy
-    if constexpr (std::is_same_v<R, float>)
-    {
-      if (a.is_contiguous() && b.is_contiguous() && rows * cols * k > 8192)
-      {
-        // Prefer tensor backend when available; fallback to blocked CPU
-        // This integrates tensor_core.hpp Strategy with linalg (Decorator)
-        // For now, keep blocked path as it already is tensor-friendly (BLOCK=32)
-        // Future: if NP_ENABLE_TENSOR, dispatch to tensor::HopperBackend
-      }
-    }
-    // Micro-opt: fast contiguous direct pointer (avoid a.get()/b.get() stride calc)
+    // Powerful dispatch: GPU (OpenMP target / CUDA driver) for large FP GEMM,
+    // else CPU blocked with AVX2/FMA + OpenMP. Cache-aware BLOCK=128 (float) /96 (double)
     if (a.is_contiguous() && b.is_contiguous()) [[likely]]
     {
       const T* __restrict ad = a.data().data();
       const U* __restrict bd = b.data().data();
       R* __restrict od = out.data().data();
-      constexpr std::size_t BLOCK = 32;
-      if (rows * cols * k > 32768 && rows > BLOCK && cols > BLOCK && k > BLOCK)
+
+      // GPU fast path for contiguous float/double large GEMM
+      if constexpr (
+          std::is_same_v<T, R> && std::is_same_v<U, R>
+          && (std::is_same_v<R, float> || std::is_same_v<R, double>))
+      {
+        const std::size_t gpu_thresh = tune::gpu_threshold_flops();
+        if (rows * cols * k > gpu_thresh || rows * cols > 65536)
+        {
+          if (gpu::try_matmul(ad, bd, od, rows, cols, k))
+            return out;
+          // Fallback to optimized CPU blocked kernel (AVX2+FMA+OpenMP)
+          gpu::cpu_matmul(ad, bd, od, rows, cols, k);
+          return out;
+        }
+      }
+
+      // CPU blocked path – tune::optimal_block for powerful (L3-aware)
+      std::size_t block = 32;
+      if constexpr (std::is_same_v<R, float>)
+        block = tune::optimal_block_f32();
+      else if constexpr (std::is_same_v<R, double>)
+        block = tune::optimal_block_f64();
+
+      if (rows * cols * k > 32768 && rows > block && cols > block && k > block)
       {
         std::fill(od, od + rows * cols, R{});
-        for (std::size_t ii = 0; ii < rows; ii += BLOCK)
+        for (std::size_t ii = 0; ii < rows; ii += block)
         {
-          for (std::size_t jj = 0; jj < cols; jj += BLOCK)
+          for (std::size_t jj = 0; jj < cols; jj += block)
           {
-            for (std::size_t pp = 0; pp < k; pp += BLOCK)
+            for (std::size_t pp = 0; pp < k; pp += block)
             {
-              std::size_t i_max = std::min(ii + BLOCK, rows);
-              std::size_t j_max = std::min(jj + BLOCK, cols);
-              std::size_t p_max = std::min(pp + BLOCK, k);
+              std::size_t i_max = std::min(ii + block, rows);
+              std::size_t j_max = std::min(jj + block, cols);
+              std::size_t p_max = std::min(pp + block, k);
               for (std::size_t i = ii; i < i_max; ++i)
               {
                 for (std::size_t p = pp; p < p_max; ++p)
@@ -3300,6 +3312,21 @@ namespace np::linalg
                 od[i * cols + j] = acc;
               }
             });
+        return out;
+      }
+#endif
+#if defined(NP_ENABLE_OPENMP)
+      if (rows * cols > 4096)
+      {
+#pragma omp parallel for collapse(2) schedule(static)
+        for (std::size_t i = 0; i < rows; ++i)
+          for (std::size_t j = 0; j < cols; ++j)
+          {
+            R acc = R{0};
+            for (std::size_t p = 0; p < k; ++p)
+              acc += static_cast<R>(ad[i * k + p]) * static_cast<R>(bd[p * cols + j]);
+            od[i * cols + j] = acc;
+          }
         return out;
       }
 #endif
