@@ -42,6 +42,7 @@ Umbrella `include/np/np.hpp:13` (28 includes; all integrated). Every `np::` has 
 | **Variety** | `variety.hpp` | `deprecated alias of manifold.hpp` | `—` |
 | **Differential** | `differential.hpp:438` | `VM, ScalarField, KForm, exterior_derivative, wedge, pullback, kernel::gradient/hessian/laplacian` | `Bott–Tu` |
 | **Lattice** | `lattice.hpp:143` | `Lattice, PosetLattice, meet/join, dual, lll/bkz, gram, volume, shortest/closest, LatticeFactory, Builder, Strategy, Visitor, Observer, Decorator` | `Micciancio–Goldwasser, Lenstra–Lenstra–Lovász` |
+| **Padic** | `padic.hpp:135` | `Padic, PadicLattice, Hensel/Newton, valuation/norm/expansion/teichmuller, PadicFactory, Builder, Strategy, Visitor, Observer, Decorator, to_padic_lattice` | `Gouvea, Koblitz, Serre` |
 | **Cohomology** | `cohomology.hpp:191` | `cohomology_groups, cohomology_ring, cup_product, poincare_pairing, intersection_form, kunneth` | `Hatcher Ch.3` |
 | **Bundle** | `bundle.hpp:103` | `VectorBundle, tangent/cotangent, chern/stiefel/euler/pontryagin, whitney_sum, HodgeStar` | `Milnor–Stasheff` |
 | **Persistent** | `persistent.hpp:94` | `FilteredSimplex, Filtration, persistence_barcode, bottleneck_distance, vietoris_rips` | `Edelsbrunner–Harer` |
