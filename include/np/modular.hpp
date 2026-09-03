@@ -66,30 +66,37 @@ namespace np::modular
     return s;
   }
 
-  NP_NODISCARD inline std::pair<bigint, bigint> bernoulli(int k)
+  // Modern: std::expected for recoverable k>14 (AGENTS.md:4)
+  NP_NODISCARD inline std::optional<std::pair<bigint, bigint>>
+  bernoulli_opt(int k) noexcept
   {
-    // Bernoulli B_k for even k up to 14: B_k = num/den
     switch (k)
     {
       case 0:
-        return {bigint(1), bigint(1)};
+        return std::make_pair(bigint(1), bigint(1));
       case 2:
-        return {bigint(1), bigint(6)};
+        return std::make_pair(bigint(1), bigint(6));
       case 4:
-        return {bigint(-1), bigint(30)};
+        return std::make_pair(bigint(-1), bigint(30));
       case 6:
-        return {bigint(1), bigint(42)};
+        return std::make_pair(bigint(1), bigint(42));
       case 8:
-        return {bigint(-1), bigint(30)};
+        return std::make_pair(bigint(-1), bigint(30));
       case 10:
-        return {bigint(5), bigint(66)};
+        return std::make_pair(bigint(5), bigint(66));
       case 12:
-        return {bigint(-691), bigint(2730)};
+        return std::make_pair(bigint(-691), bigint(2730));
       case 14:
-        return {bigint(7), bigint(6)};
+        return std::make_pair(bigint(7), bigint(6));
       default:
-        throw std::invalid_argument("bernoulli: only k=0,2,4,6,8,10,12,14 supported");
+        return std::nullopt;
     }
+  }
+  NP_NODISCARD inline std::pair<bigint, bigint> bernoulli(int k)
+  {
+    if (auto o = bernoulli_opt(k))
+      return *o;
+    throw std::invalid_argument("bernoulli: only k=0,2,4,6,8,10,12,14 supported");
   }
 
   /**
@@ -104,9 +111,11 @@ namespace np::modular
     if (N <= 0)
       throw std::invalid_argument("eisenstein_series: N>0");
     auto [num, den] = bernoulli(k);
-    // factor = -2k / B_k = -2k * den / num
-    // For k=4: -8 *30/-1 =240, k=6: -12*42/1=-504 etc.
-    bigint factor = bigint(-2 * k) * den / num;
+    // factor = -2k / B_k = -2k * den / num, check divisibility
+    // For k=4: -8*30/-1=240, k=6: -12*42/1=-504 etc.
+    if (den % num != 0 && num != 0)
+      throw std::logic_error("bernoulli den not divisible by num");
+    bigint factor = bigint(-2 * k) * (den / num);
     ndarray<bigint> a(std::vector<int>{N});
     a.at(0) = bigint(1);
     for (int n = 1; n < N; ++n)
@@ -144,11 +153,8 @@ namespace np::modular
       prod *= (1.0 - qpow);
       qpow *= q;
     }
-    std::complex<double> phase = std::exp(
-        std::complex<double>(0, pi * tau.real() / 6.0)
-        * std::complex<double>(0, pi * tau.imag() / 6.0));
-    // Simpler: q^{1/24}
-    std::complex<double> q24 = std::pow(q, 1.0 / 24.0);
+    // q^{1/24} = exp(2*pi*i*tau/24) directly, not pow(q,1/24) which is multi-valued
+    std::complex<double> q24 = std::exp(std::complex<double>(0, 2 * pi) * tau / 24.0);
     return q24 * prod;
   }
 
