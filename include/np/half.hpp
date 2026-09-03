@@ -28,25 +28,8 @@ namespace np
 #endif
 
 #ifndef NP_HAS_FLOAT16
-  // Emulated half via float (fallback for CI without FP16 HW)
-  struct half
-  {
-    uint16_t bits = 0;
-    half() = default;
-    explicit half(float f)
-    {
-      uint32_t u;
-      std::memcpy(&u, &f, sizeof(float));
-      bits = static_cast<uint16_t>(u >> 16);
-    }
-    operator float() const noexcept
-    {
-      uint32_t u = static_cast<uint32_t>(bits) << 16;
-      float f;
-      std::memcpy(&f, &u, sizeof(float));
-      return f;
-    }
-  };
+  // Fallback: use float as emulated half (keeps ndarray arithmetic, header-only)
+  using half = float;
 #define NP_HAS_FLOAT16 1
 #endif
   // Note: np::float16 tag is defined in dtype.hpp; use np::half for the actual FP16 type

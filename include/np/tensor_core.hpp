@@ -878,9 +878,10 @@ namespace np::tensor
   NP_NODISCARD inline ndarray<float> matmul_fp16(
       const ndarray<float16>& a, const ndarray<float16>& b)
   {
-    // Convert to float, dispatch via Hopper (GPU) or CPU
-    auto af = a.template astype<float>();
-    auto bf = b.template astype<float>();
+    // Convert to float via manual loop (avoids astype issues with float16 tag vs half)
+    ndarray<float> af(a.shape), bf(b.shape);
+    for (size_t i = 0; i < a.size(); ++i) af.data()[i] = static_cast<float>(a.data()[i]);
+    for (size_t i = 0; i < b.size(); ++i) bf.data()[i] = static_cast<float>(b.data()[i]);
     if (gpu::is_available())
       return HopperBackend{}.matmul(af, bf);
     return linalg::matmul(af, bf);
@@ -888,8 +889,9 @@ namespace np::tensor
   NP_NODISCARD inline ndarray<float> matmul_bf16(
       const ndarray<bfloat16>& a, const ndarray<bfloat16>& b)
   {
-    auto af = a.template astype<float>();
-    auto bf = b.template astype<float>();
+    ndarray<float> af(a.shape), bf(b.shape);
+    for (size_t i = 0; i < a.size(); ++i) af.data()[i] = static_cast<float>(a.data()[i]);
+    for (size_t i = 0; i < b.size(); ++i) bf.data()[i] = static_cast<float>(b.data()[i]);
     if (gpu::is_available())
       return HopperBackend{}.matmul(af, bf);
     return linalg::matmul(af, bf);
@@ -900,11 +902,17 @@ namespace np::tensor
   NP_NODISCARD inline ndarray<float>
   einsum_alpha_evolve(const std::string& eq, const ndarray<T>& a, const ndarray<T>& b)
   {
+    // Manual float conversion to handle float16 tag vs half correctly
+    auto to_float = [](const ndarray<T>& x) {
+      ndarray<float> y(x.shape);
+      for (size_t i = 0; i < x.size(); ++i) y.data()[i] = static_cast<float>(x.data()[i]);
+      return y;
+    };
+    auto af = to_float(a), bf = to_float(b);
     // Only ij,jk->ik supported for now (matmul)
     if (eq == "ij,jk->ik" || eq == "ik,kj->ij")
-      return AlphaEvolveBackend{}.matmul(
-          a.template astype<float>(), b.template astype<float>());
-    return linalg::matmul(a.template astype<float>(), b.template astype<float>());
+      return AlphaEvolveBackend{}.matmul(af, bf);
+    return linalg::matmul(af, bf);
   }
 
 } // namespace np::tensor
