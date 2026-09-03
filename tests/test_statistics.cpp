@@ -247,7 +247,7 @@ int main()
     bool threw = false;
     try
     {
-      nanargmax(all_nan);
+      (void)nanargmax(all_nan);
     }
     catch (const std::invalid_argument&)
     {
