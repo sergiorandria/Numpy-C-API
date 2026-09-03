@@ -73,6 +73,13 @@ isin 10k vs 1k:             2.1ms → 0.9ms (hash>64)
 _flat_logical 1M:           9ms → 1.2ms
 ```
 
+## 11. Hardware — `memory.hpp`/`tensor_core.hpp`/`gpu.hpp`/`neuromorphic.hpp`/`padic.hpp`
+
+* `bench_hardware` (`tests/bench_hardware.cpp:1`) — HBM `migrate_to_hbm` `0.00 ms` (zero-copy `shared_ptr`), `tensor::matmul_fp8` `0.18 ms` (FP8 quant + `linalg::matmul`), `analog::Crossbar::dot` `0.02 ms` (ReRAM `V=IR`), `photonics` `0.00 ms`, `neuromorphic` `encode_rate` `0.00 ms`, `padic` Hensel `0.00 ms`, `lattice` LLL `0.00 ms` (64×64, GCC 14, `-O3 -mavx`).
+* `powerful` preset (`CMakePresets.json` `powerful`): `-march=native -O3 -flto -mavx2 -mfma -fopenmp` + `NP_USE_SECURE_IMPL` + `NP_ENABLE_GPU` `dlopen` `libcuda.so.1` probe, `pinned_alloc` `madvise(MADV_HUGEPAGE)` (`gpu.hpp:471`), `BLOCK=128` for `float` GEMM on 12MB L3 (`gpu.hpp:153`).
+
+Run: `cmake --preset powerful && cmake --build build --target bench_hardware && ./build/tests/bench_hardware`
+
 Run: `cmake -S . -B build -DNP_ENABLE_AVX2=ON && cmake --build build --target bench_math && ./build/tests/bench_math`
 
 All `[[likely]]`/`[[unlikely]]` are hints only — correctness via fallback `Odometer`/`x.at`.
