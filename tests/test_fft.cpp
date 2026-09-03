@@ -349,7 +349,7 @@ int main()
     np::ndarray<double> empty(std::vector<int>{0});
     try
     {
-      np::fft::fft(empty);
+      (void)np::fft::fft(empty);
     }
     catch (const std::invalid_argument&)
     {
@@ -360,7 +360,7 @@ int main()
     threw = false;
     try
     {
-      np::fft::fft(empty, 0);
+      (void)np::fft::fft(empty, 0);
     }
     catch (const std::invalid_argument&)
     {
@@ -372,7 +372,7 @@ int main()
     threw = false;
     try
     {
-      np::fft::fft(a2, std::nullopt, 5);
+      (void)np::fft::fft(a2, std::nullopt, 5);
     }
     catch (const np::AxisError&)
     {
@@ -383,7 +383,7 @@ int main()
     threw = false;
     try
     {
-      np::fft::fftn(a2, std::vector<int>{1, 2}, std::vector<int>{0});
+      (void)np::fft::fftn(a2, std::vector<int>{1, 2}, std::vector<int>{0});
     }
     catch (const std::invalid_argument&)
     {
@@ -394,7 +394,7 @@ int main()
     threw = false;
     try
     {
-      np::fft::fftn(a2, std::nullopt, std::vector<int>{0, 0});
+      (void)np::fft::fftn(a2, std::nullopt, std::vector<int>{0, 0});
     }
     catch (const std::invalid_argument&)
     {
