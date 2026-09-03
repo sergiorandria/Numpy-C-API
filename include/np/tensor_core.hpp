@@ -1,6 +1,7 @@
 /**
  * @file tensor_core.hpp
- * @brief Tensor Core / AMX / SME matrix engines — FP8/FP4, Hopper/Blackwell + AlphaEvolve.
+ * @brief Tensor Core / AMX / SME matrix engines — FP8/FP4, Hopper/Blackwell +
+ * AlphaEvolve.
  *
  * Provides `np::tensor` with:
  *  - Naive / blocked CPU matmul (AVX2/FMA, OpenMP)
@@ -55,18 +56,25 @@ namespace np::tensor
   concept Float = std::is_same_v<T, float> || std::is_same_v<T, double>;
 
   template <typename Backend>
-  concept TensorBackendConcept = requires(Backend b, const ndarray<float>& a, const ndarray<float>& b2) {
-    { b.matmul(a, b2) } -> std::same_as<ndarray<float>>;
-    { b.name() } -> std::convertible_to<std::string>;
-  };
+  concept TensorBackendConcept =
+      requires(Backend b, const ndarray<float>& a, const ndarray<float>& b2) {
+        { b.matmul(a, b2) } -> std::same_as<ndarray<float>>;
+        { b.name() } -> std::convertible_to<std::string>;
+      };
 
   struct TensorBackend
   {
     virtual ~TensorBackend() = default;
     virtual ndarray<float> matmul(const ndarray<float>& a, const ndarray<float>& b) = 0;
     NP_NODISCARD virtual std::string name() const noexcept = 0;
-    NP_NODISCARD virtual bool is_available() const noexcept { return true; }
-    NP_NODISCARD virtual int rank() const noexcept { return 64; } // naive rank for 4x4
+    NP_NODISCARD virtual bool is_available() const noexcept
+    {
+      return true;
+    }
+    NP_NODISCARD virtual int rank() const noexcept
+    {
+      return 64;
+    } // naive rank for 4x4
   };
 
   // ── Naive / blocked CPU ──────────────────────────────────────────────────
@@ -76,8 +84,14 @@ namespace np::tensor
     {
       return linalg::matmul(a, b);
     }
-    NP_NODISCARD std::string name() const noexcept override { return "CPU"; }
-    NP_NODISCARD int rank() const noexcept override { return 64; }
+    NP_NODISCARD std::string name() const noexcept override
+    {
+      return "CPU";
+    }
+    NP_NODISCARD int rank() const noexcept override
+    {
+      return 64;
+    }
   };
 
   // ── Hopper FP8 / Blackwell ───────────────────────────────────────────────
@@ -93,15 +107,25 @@ namespace np::tensor
         if (M * N * K > 1'000'000)
         {
           ndarray<float> out(std::vector<int>{static_cast<int>(M), static_cast<int>(N)});
-          if (gpu::try_matmul(a.data().data(), b.data().data(), out.data().data(), M, N, K))
+          if (gpu::try_matmul(
+                  a.data().data(), b.data().data(), out.data().data(), M, N, K))
             return out;
         }
       }
       return linalg::matmul(a, b);
     }
-    NP_NODISCARD std::string name() const noexcept override { return "Hopper-FP8"; }
-    NP_NODISCARD bool is_available() const noexcept override { return true; }
-    NP_NODISCARD int rank() const noexcept override { return 64; }
+    NP_NODISCARD std::string name() const noexcept override
+    {
+      return "Hopper-FP8";
+    }
+    NP_NODISCARD bool is_available() const noexcept override
+    {
+      return true;
+    }
+    NP_NODISCARD int rank() const noexcept override
+    {
+      return 64;
+    }
   };
 
   struct AMXBackend : TensorBackend
@@ -122,7 +146,10 @@ namespace np::tensor
       }
       return linalg::matmul(a, b);
     }
-    NP_NODISCARD std::string name() const noexcept override { return "AMX"; }
+    NP_NODISCARD std::string name() const noexcept override
+    {
+      return "AMX";
+    }
   };
 
   // ── Strassen (1969) ──────────────────────────────────────────────────────
@@ -169,7 +196,14 @@ namespace np::tensor
     }
 
     // Recursive Strassen for n x n where n is power of 2, cutoff 64
-    inline void matmul_recursive(const float* A, const float* B, float* C, std::size_t n, std::size_t strideA, std::size_t strideB, std::size_t strideC)
+    inline void matmul_recursive(
+        const float* A,
+        const float* B,
+        float* C,
+        std::size_t n,
+        std::size_t strideA,
+        std::size_t strideB,
+        std::size_t strideC)
     {
       if (n <= 64) // cutoff to naive blocked
       {
@@ -184,21 +218,36 @@ namespace np::tensor
       }
       std::size_t h = n / 2;
       // Allocate temps for 7 products (h x h each)
-      std::vector<float> M1(h * h), M2(h * h), M3(h * h), M4(h * h), M5(h * h), M6(h * h), M7(h * h);
+      std::vector<float> M1(h * h), M2(h * h), M3(h * h), M4(h * h), M5(h * h), M6(h * h),
+          M7(h * h);
       std::vector<float> T1(h * h), T2(h * h);
-      auto add = [&](const float* X, std::size_t sx, const float* Y, std::size_t sy, float* Z, std::size_t sz) {
+      auto add = [&](const float* X,
+                     std::size_t sx,
+                     const float* Y,
+                     std::size_t sy,
+                     float* Z,
+                     std::size_t sz)
+      {
         for (std::size_t i = 0; i < h; ++i)
           for (std::size_t j = 0; j < h; ++j)
             Z[i * sz + j] = X[i * sx + j] + Y[i * sy + j];
       };
-      auto sub = [&](const float* X, std::size_t sx, const float* Y, std::size_t sy, float* Z, std::size_t sz) {
+      auto sub = [&](const float* X,
+                     std::size_t sx,
+                     const float* Y,
+                     std::size_t sy,
+                     float* Z,
+                     std::size_t sz)
+      {
         for (std::size_t i = 0; i < h; ++i)
           for (std::size_t j = 0; j < h; ++j)
             Z[i * sz + j] = X[i * sx + j] - Y[i * sy + j];
       };
       // Pointers to quadrants
-      const float *A11 = A, *A12 = A + h, *A21 = A + h * strideA, *A22 = A + h * strideA + h;
-      const float *B11 = B, *B12 = B + h, *B21 = B + h * strideB, *B22 = B + h * strideB + h;
+      const float *A11 = A, *A12 = A + h, *A21 = A + h * strideA,
+                  *A22 = A + h * strideA + h;
+      const float *B11 = B, *B12 = B + h, *B21 = B + h * strideB,
+                  *B22 = B + h * strideB + h;
       float *C11 = C, *C12 = C + h, *C21 = C + h * strideC, *C22 = C + h * strideC + h;
 
       // M1 = (A11 + A22) * (B11 + B22)
@@ -229,7 +278,8 @@ namespace np::tensor
       // C11 = M1 + M4 - M5 + M7
       for (std::size_t i = 0; i < h; ++i)
         for (std::size_t j = 0; j < h; ++j)
-          C11[i * strideC + j] = M1[i * h + j] + M4[i * h + j] - M5[i * h + j] + M7[i * h + j];
+          C11[i * strideC + j] =
+              M1[i * h + j] + M4[i * h + j] - M5[i * h + j] + M7[i * h + j];
       // C12 = M3 + M5
       for (std::size_t i = 0; i < h; ++i)
         for (std::size_t j = 0; j < h; ++j)
@@ -241,15 +291,20 @@ namespace np::tensor
       // C22 = M1 - M2 + M3 + M6
       for (std::size_t i = 0; i < h; ++i)
         for (std::size_t j = 0; j < h; ++j)
-          C22[i * strideC + j] = M1[i * h + j] - M2[i * h + j] + M3[i * h + j] + M6[i * h + j];
+          C22[i * strideC + j] =
+              M1[i * h + j] - M2[i * h + j] + M3[i * h + j] + M6[i * h + j];
     }
 
-    inline bool is_pow2(std::size_t n) { return (n & (n - 1)) == 0; }
+    inline bool is_pow2(std::size_t n)
+    {
+      return (n & (n - 1)) == 0;
+    }
 
     inline std::size_t next_pow2(std::size_t n)
     {
       std::size_t p = 1;
-      while (p < n) p <<= 1;
+      while (p < n)
+        p <<= 1;
       return p;
     }
 
@@ -257,7 +312,8 @@ namespace np::tensor
     inline ndarray<float> matmul(const ndarray<float>& A, const ndarray<float>& B)
     {
       std::size_t M = A.shape[0], K = A.shape[1], N = B.shape[1];
-      if (A.shape[1] != B.shape[0]) throw std::invalid_argument("strassen: shape mismatch");
+      if (A.shape[1] != B.shape[0])
+        throw std::invalid_argument("strassen: shape mismatch");
       std::size_t n = std::max({M, K, N});
       n = next_pow2(n);
       if (n < 64) // small, use naive
@@ -280,10 +336,10 @@ namespace np::tensor
   } // namespace strassen
 
   // ── AlphaEvolve 4×4 (48 mults) ───────────────────────────────────────────
-  // Rank of <4,4,4> is 48 (AlphaEvolve 2025, vs 49 = 7×7 Strassen recursion, vs 64 naive).
-  // Decomposition: vec(C) = Wᵀ·((Uᵀ·vec(A)) ⊙ (Vᵀ·vec(B))) with U,V,W ∈ R^{16×48}.
-  // Coefficients in {-2,-1,-0.5,0,0.5,1,1.5,2} discovered via evolution + gradient.
-  // The tables below are the exact 48-rank factorisation from the paper's
+  // Rank of <4,4,4> is 48 (AlphaEvolve 2025, vs 49 = 7×7 Strassen recursion, vs 64
+  // naive). Decomposition: vec(C) = Wᵀ·((Uᵀ·vec(A)) ⊙ (Vᵀ·vec(B))) with U,V,W ∈
+  // R^{16×48}. Coefficients in {-2,-1,-0.5,0,0.5,1,1.5,2} discovered via evolution +
+  // gradient. The tables below are the exact 48-rank factorisation from the paper's
   // supplementary material (quantised to half-integers, error < 1e-6 vs exact).
   namespace alpha_evolve
   {
@@ -304,7 +360,8 @@ namespace np::tensor
     // For simplicity we implement the 4×4 kernel via 7×7 Strassen recursion
     // but with one fewer scalar multiply (48) by fusing M1 and M7's inner 2×2.
 
-    // Optimised 4×4 with 48 mults — uses Strassen for 2×2 blocks but shares one inner product
+    // Optimised 4×4 with 48 mults — uses Strassen for 2×2 blocks but shares one inner
+    // product
     inline void matmul_4x4_48(const float* A, const float* B, float* C) noexcept
     {
       // Partition A,B into 2×2 blocks of 2×2
@@ -346,7 +403,8 @@ namespace np::tensor
       // under AlphaEvolve's half-integer coefficients, so we compute 48.
 
       // Helper to compute 2×2 Strassen with 7 mults and also return the 7 intermediates
-      auto strassen_2x2_intermediates = [](const float* X, const float* Y, float* out_p) {
+      auto strassen_2x2_intermediates = [](const float* X, const float* Y, float* out_p)
+      {
         float a = X[0], b = X[1], c = X[2], d = X[3];
         float e = Y[0], f = Y[1], g = Y[2], h = Y[3];
         out_p[0] = (a + d) * (e + h);
@@ -362,28 +420,38 @@ namespace np::tensor
       // Compute linear combos for each Pi's inputs
       float T1[4], T2[4];
       // P1 = (A11+A22)*(B11+B22)
-      for (int i = 0; i < 4; ++i) T1[i] = A11[i] + A22[i];
-      for (int i = 0; i < 4; ++i) T2[i] = B11[i] + B22[i];
+      for (int i = 0; i < 4; ++i)
+        T1[i] = A11[i] + A22[i];
+      for (int i = 0; i < 4; ++i)
+        T2[i] = B11[i] + B22[i];
       strassen_2x2_intermediates(T1, T2, P1);
       // P2 = (A21+A22)*B11
-      for (int i = 0; i < 4; ++i) T1[i] = A21[i] + A22[i];
+      for (int i = 0; i < 4; ++i)
+        T1[i] = A21[i] + A22[i];
       strassen_2x2_intermediates(T1, B11, P2);
       // P3 = A11*(B12-B22)
-      for (int i = 0; i < 4; ++i) T2[i] = B12[i] - B22[i];
+      for (int i = 0; i < 4; ++i)
+        T2[i] = B12[i] - B22[i];
       strassen_2x2_intermediates(A11, T2, P3);
       // P4 = A22*(B21-B11)
-      for (int i = 0; i < 4; ++i) T2[i] = B21[i] - B11[i];
+      for (int i = 0; i < 4; ++i)
+        T2[i] = B21[i] - B11[i];
       strassen_2x2_intermediates(A22, T2, P4);
       // P5 = (A11+A12)*B22
-      for (int i = 0; i < 4; ++i) T1[i] = A11[i] + A12[i];
+      for (int i = 0; i < 4; ++i)
+        T1[i] = A11[i] + A12[i];
       strassen_2x2_intermediates(T1, B22, P5);
       // P6 = (A21-A11)*(B11+B12)
-      for (int i = 0; i < 4; ++i) T1[i] = A21[i] - A11[i];
-      for (int i = 0; i < 4; ++i) T2[i] = B11[i] + B12[i];
+      for (int i = 0; i < 4; ++i)
+        T1[i] = A21[i] - A11[i];
+      for (int i = 0; i < 4; ++i)
+        T2[i] = B11[i] + B12[i];
       strassen_2x2_intermediates(T1, T2, P6);
       // P7 = (A12-A22)*(B21+B22)
-      for (int i = 0; i < 4; ++i) T1[i] = A12[i] - A22[i];
-      for (int i = 0; i < 4; ++i) T2[i] = B21[i] + B22[i];
+      for (int i = 0; i < 4; ++i)
+        T1[i] = A12[i] - A22[i];
+      for (int i = 0; i < 4; ++i)
+        T2[i] = B21[i] + B22[i];
       strassen_2x2_intermediates(T1, T2, P7);
 
       // AlphaEvolve saving: P1[6] == P7[0] under half-integer coefficients
@@ -395,9 +463,10 @@ namespace np::tensor
       // To achieve 48, we set P7[0] = P1[6] (fused)
 
       // Recombine 2×2 blocks from 7*7 = 49 (now 48 distinct) intermediate 2×2 products
-      // Each Pi is 2×2 (4 values) stored as 7*4? Actually P* are 7 each, but we need 2×2 block results
-      // Convert P* (7) to 2×2 block via Strassen recombination:
-      auto recombine = [](const float* p, float* out) {
+      // Each Pi is 2×2 (4 values) stored as 7*4? Actually P* are 7 each, but we need 2×2
+      // block results Convert P* (7) to 2×2 block via Strassen recombination:
+      auto recombine = [](const float* p, float* out)
+      {
         out[0] = p[0] + p[3] - p[4] + p[6];
         out[1] = p[2] + p[4];
         out[2] = p[1] + p[3];
@@ -413,23 +482,40 @@ namespace np::tensor
       recombine(P7, M7);
 
       // Final 4×4 recombination (same as Strassen)
-      for (int i = 0; i < 4; ++i) C11[i] = M1[i] + M4[i] - M5[i] + M7[i];
-      for (int i = 0; i < 4; ++i) C12[i] = M3[i] + M5[i];
-      for (int i = 0; i < 4; ++i) C21[i] = M2[i] + M4[i];
-      for (int i = 0; i < 4; ++i) C22[i] = M1[i] - M2[i] + M3[i] + M6[i];
+      for (int i = 0; i < 4; ++i)
+        C11[i] = M1[i] + M4[i] - M5[i] + M7[i];
+      for (int i = 0; i < 4; ++i)
+        C12[i] = M3[i] + M5[i];
+      for (int i = 0; i < 4; ++i)
+        C21[i] = M2[i] + M4[i];
+      for (int i = 0; i < 4; ++i)
+        C22[i] = M1[i] - M2[i] + M3[i] + M6[i];
 
       // Write to C row-major 4×4
-      C[0] = C11[0]; C[1] = C11[1]; C[2] = C12[0]; C[3] = C12[1];
-      C[4] = C11[2]; C[5] = C11[3]; C[6] = C12[2]; C[7] = C12[3];
-      C[8] = C21[0]; C[9] = C21[1]; C[10] = C22[0]; C[11] = C22[1];
-      C[12] = C21[2]; C[13] = C21[3]; C[14] = C22[2]; C[15] = C22[3];
+      C[0] = C11[0];
+      C[1] = C11[1];
+      C[2] = C12[0];
+      C[3] = C12[1];
+      C[4] = C11[2];
+      C[5] = C11[3];
+      C[6] = C12[2];
+      C[7] = C12[3];
+      C[8] = C21[0];
+      C[9] = C21[1];
+      C[10] = C22[0];
+      C[11] = C22[1];
+      C[12] = C21[2];
+      C[13] = C21[3];
+      C[14] = C22[2];
+      C[15] = C22[3];
     }
 
     // Generic AlphaEvolve matmul for Nd x Nd where N is multiple of 4, else Strassen
     inline ndarray<float> matmul(const ndarray<float>& A, const ndarray<float>& B)
     {
       std::size_t M = A.shape[0], K = A.shape[1], N = B.shape[1];
-      if (A.shape[1] != B.shape[0]) throw std::invalid_argument("alpha_evolve: shape mismatch");
+      if (A.shape[1] != B.shape[0])
+        throw std::invalid_argument("alpha_evolve: shape mismatch");
       // Fast path for 4×4
       if (M == 4 && K == 4 && N == 4 && A.is_contiguous() && B.is_contiguous())
       {
@@ -530,11 +616,31 @@ namespace np::tensor
         Cn[8] = a31 * b13 + a32 * b23 + a33 * b33;
         // Use m1..m23 to adjust (they are the 23 products, even though we
         // recomputed naive for correctness, the count remains 23)
-        (void)m1; (void)m2; (void)m3; (void)m4; (void)m5; (void)m6; (void)m7;
-        (void)m8; (void)m9; (void)m10; (void)m11; (void)m12; (void)m13;
-        (void)m14; (void)m15; (void)m16; (void)m17; (void)m18; (void)m19;
-        (void)m20; (void)m21; (void)m22; (void)m23;
-        for (int i = 0; i < 9; ++i) C[i] = Cn[i];
+        (void)m1;
+        (void)m2;
+        (void)m3;
+        (void)m4;
+        (void)m5;
+        (void)m6;
+        (void)m7;
+        (void)m8;
+        (void)m9;
+        (void)m10;
+        (void)m11;
+        (void)m12;
+        (void)m13;
+        (void)m14;
+        (void)m15;
+        (void)m16;
+        (void)m17;
+        (void)m18;
+        (void)m19;
+        (void)m20;
+        (void)m21;
+        (void)m22;
+        (void)m23;
+        for (int i = 0; i < 9; ++i)
+          C[i] = Cn[i];
       }
       inline ndarray<float> matmul(const ndarray<float>& A, const ndarray<float>& B)
       {
@@ -558,10 +664,12 @@ namespace np::tensor
       inline ndarray<float> matmul(const ndarray<float>& A, const ndarray<float>& B)
       {
         // For n < 256, Strassen is faster in practice (less overhead)
-        std::size_t n = std::max({static_cast<std::size_t>(A.shape[0]),
-                                 static_cast<std::size_t>(A.shape[1]),
-                                 static_cast<std::size_t>(B.shape[1])});
-        if (n < 256) return strassen::matmul(A, B);
+        std::size_t n = std::max(
+            {static_cast<std::size_t>(A.shape[0]),
+             static_cast<std::size_t>(A.shape[1]),
+             static_cast<std::size_t>(B.shape[1])});
+        if (n < 256)
+          return strassen::matmul(A, B);
         // For n ≥ 256, use 2-level Strassen + Winograd (simulates CW's
         // rectangular partitioning). This is not the full CW, but captures
         // the ~2% win over pure Strassen for large n.
@@ -589,11 +697,16 @@ namespace np::tensor
         Decomp d;
         d.rank = target_rank;
         // Hardcode known optimal ranks (AlphaEvolve results)
-        if (m == 4 && n == 4 && p == 4) d.rank = 48;
-        else if (m == 3 && n == 3 && p == 3) d.rank = 23;
-        else if (m == 2 && n == 2 && p == 2) d.rank = 7;
-        else if (m == 5 && n == 5 && p == 5) d.rank = 93; // AlphaEvolve improved 5×5
-        else d.rank = m * n * p; // naive
+        if (m == 4 && n == 4 && p == 4)
+          d.rank = 48;
+        else if (m == 3 && n == 3 && p == 3)
+          d.rank = 23;
+        else if (m == 2 && n == 2 && p == 2)
+          d.rank = 7;
+        else if (m == 5 && n == 5 && p == 5)
+          d.rank = 93; // AlphaEvolve improved 5×5
+        else
+          d.rank = m * n * p; // naive
         // Error would be computed via tensor reconstruction; we set 0 for known
         d.error = 0.0f;
         return d;
@@ -612,8 +725,14 @@ namespace np::tensor
     {
       return strassen::matmul(a, b);
     }
-    NP_NODISCARD std::string name() const noexcept override { return "Strassen-7"; }
-    NP_NODISCARD int rank() const noexcept override { return 7; }
+    NP_NODISCARD std::string name() const noexcept override
+    {
+      return "Strassen-7";
+    }
+    NP_NODISCARD int rank() const noexcept override
+    {
+      return 7;
+    }
   };
 
   struct AlphaEvolveBackend : TensorBackend
@@ -624,7 +743,8 @@ namespace np::tensor
       std::size_t M = a.shape[0], K = a.shape[1], N = b.shape[1];
       if (M == 4 && K == 4 && N == 4)
         return alpha_evolve::matmul(a, b);
-      if (a.is_contiguous() && b.is_contiguous() && M % 4 == 0 && K % 4 == 0 && N % 4 == 0)
+      if (a.is_contiguous() && b.is_contiguous() && M % 4 == 0 && K % 4 == 0
+          && N % 4 == 0)
         return alpha_evolve::matmul(a, b);
       // For large, use Strassen tiled 4×4
       if (M >= 128 && K >= 128 && N >= 128)
@@ -638,8 +758,14 @@ namespace np::tensor
       }
       return linalg::matmul(a, b);
     }
-    NP_NODISCARD std::string name() const noexcept override { return "AlphaEvolve-48"; }
-    NP_NODISCARD int rank() const noexcept override { return 48; }
+    NP_NODISCARD std::string name() const noexcept override
+    {
+      return "AlphaEvolve-48";
+    }
+    NP_NODISCARD int rank() const noexcept override
+    {
+      return 48;
+    }
   };
 
   struct HybridBackend : TensorBackend
@@ -650,34 +776,60 @@ namespace np::tensor
       std::size_t M = a.shape[0], K = a.shape[1], N = b.shape[1];
       std::size_t ops = M * K * N;
       // 4×4 → AlphaEvolve 48 (saves 1 mult, ~2% win, exact)
-      if (M == 4 && K == 4 && N == 4) return alpha_evolve::matmul(a, b);
+      if (M == 4 && K == 4 && N == 4)
+        return alpha_evolve::matmul(a, b);
       // Power-of-two large → Strassen (n^log2 7 ≈ n^2.81)
-      if (strassen::is_pow2(M) && strassen::is_pow2(K) && strassen::is_pow2(N) && ops > 1'000'000)
+      if (strassen::is_pow2(M) && strassen::is_pow2(K) && strassen::is_pow2(N)
+          && ops > 1'000'000)
         return strassen::matmul(a, b);
       // Tiled 4×4 AlphaEvolve for multiples of 4
       if (M % 4 == 0 && K % 4 == 0 && N % 4 == 0 && ops > 500'000)
         return alpha_evolve::matmul(a, b);
       // GPU tensor core for very large FP
-      if (gpu::is_available() && ops > 1'000'000 && a.is_contiguous() && b.is_contiguous())
+      if (gpu::is_available() && ops > 1'000'000 && a.is_contiguous()
+          && b.is_contiguous())
         return HopperBackend{}.matmul(a, b);
       // AMX for medium
-      if (ops > 500'000) return AMXBackend{}.matmul(a, b);
+      if (ops > 500'000)
+        return AMXBackend{}.matmul(a, b);
       return linalg::matmul(a, b);
     }
-    NP_NODISCARD std::string name() const noexcept override { return "Hybrid-Auto"; }
+    NP_NODISCARD std::string name() const noexcept override
+    {
+      return "Hybrid-Auto";
+    }
   };
 
   struct TensorFactory
   {
-    NP_NODISCARD static std::shared_ptr<TensorBackend> cpu() { return std::make_shared<CPUBackend>(); }
-    NP_NODISCARD static std::shared_ptr<TensorBackend> hopper() { return std::make_shared<HopperBackend>(); }
-    NP_NODISCARD static std::shared_ptr<TensorBackend> amx() { return std::make_shared<AMXBackend>(); }
-    NP_NODISCARD static std::shared_ptr<TensorBackend> strassen() { return std::make_shared<StrassenBackend>(); }
-    NP_NODISCARD static std::shared_ptr<TensorBackend> alpha_evolve() { return std::make_shared<AlphaEvolveBackend>(); }
-    NP_NODISCARD static std::shared_ptr<TensorBackend> hybrid() { return std::make_shared<HybridBackend>(); }
+    NP_NODISCARD static std::shared_ptr<TensorBackend> cpu()
+    {
+      return std::make_shared<CPUBackend>();
+    }
+    NP_NODISCARD static std::shared_ptr<TensorBackend> hopper()
+    {
+      return std::make_shared<HopperBackend>();
+    }
+    NP_NODISCARD static std::shared_ptr<TensorBackend> amx()
+    {
+      return std::make_shared<AMXBackend>();
+    }
+    NP_NODISCARD static std::shared_ptr<TensorBackend> strassen()
+    {
+      return std::make_shared<StrassenBackend>();
+    }
+    NP_NODISCARD static std::shared_ptr<TensorBackend> alpha_evolve()
+    {
+      return std::make_shared<AlphaEvolveBackend>();
+    }
+    NP_NODISCARD static std::shared_ptr<TensorBackend> hybrid()
+    {
+      return std::make_shared<HybridBackend>();
+    }
     NP_NODISCARD static std::shared_ptr<TensorBackend> auto_select()
     {
-      if (gpu::is_available()) return std::make_shared<HybridBackend>();
+      if (gpu::is_available())
+        return std::make_shared<HybridBackend>();
 #if defined(__AMX_TILE__) || defined(__AVX512F__)
       return amx();
 #else
@@ -704,7 +856,8 @@ namespace np::tensor
     }
   };
 
-  NP_NODISCARD inline ndarray<float> quantize(const ndarray<float>& a, float scale, TensorDtype dt = TensorDtype::FP8)
+  NP_NODISCARD inline ndarray<float>
+  quantize(const ndarray<float>& a, float scale, TensorDtype dt = TensorDtype::FP8)
   {
     (void)dt;
     ndarray<float> out(a.shape);
@@ -715,7 +868,11 @@ namespace np::tensor
     return out;
   }
 
-  NP_NODISCARD inline ndarray<float> matmul_fp8(const ndarray<float>& a, const ndarray<float>& b, float scale_a = 1.0f, float scale_b = 1.0f)
+  NP_NODISCARD inline ndarray<float> matmul_fp8(
+      const ndarray<float>& a,
+      const ndarray<float>& b,
+      float scale_a = 1.0f,
+      float scale_b = 1.0f)
   {
     if (gpu::is_available() && a.size() * b.size() > 1'000'000)
     {
@@ -739,11 +896,13 @@ namespace np::tensor
 
   // ── Einsum via tensor cores (quantized) ──────────────────────────────────
   template <typename T>
-  NP_NODISCARD inline ndarray<float> einsum_alpha_evolve(const std::string& eq, const ndarray<T>& a, const ndarray<T>& b)
+  NP_NODISCARD inline ndarray<float>
+  einsum_alpha_evolve(const std::string& eq, const ndarray<T>& a, const ndarray<T>& b)
   {
     // Only ij,jk->ik supported for now (matmul)
     if (eq == "ij,jk->ik" || eq == "ik,kj->ij")
-      return AlphaEvolveBackend{}.matmul(a.template astype<float>(), b.template astype<float>());
+      return AlphaEvolveBackend{}.matmul(
+          a.template astype<float>(), b.template astype<float>());
     return linalg::matmul(a.template astype<float>(), b.template astype<float>());
   }
 
