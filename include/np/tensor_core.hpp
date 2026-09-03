@@ -29,6 +29,7 @@
 #include "half.hpp"
 #include "linalg.hpp"
 #include "ndarray.hpp"
+#include "simd.hpp"
 
 #include <algorithm>
 #include <array>
@@ -840,8 +841,18 @@ namespace np::tensor
       ndarray<float> out(data.shape);
       auto& od = out.data();
       auto& dd = data.data();
-      for (size_t i = 0; i < data.size(); ++i)
-        od[i] = static_cast<float>(dd[i]) * scale;
+      // SIMD: dequantize is out = dd * scale (broadcast)
+      if constexpr (std::is_same_v<T, float>)
+      {
+        // Use SIMD mul with broadcast scale
+        std::vector<float> scale_vec(data.size(), scale);
+        simd::mul_vectorized(dd.data(), scale_vec.data(), od.data(), data.size());
+      }
+      else
+      {
+        for (size_t i = 0; i < data.size(); ++i)
+          od[i] = static_cast<float>(dd[i]) * scale;
+      }
       return out;
     }
   };
@@ -853,8 +864,19 @@ namespace np::tensor
     ndarray<float> out(a.shape);
     auto& od = out.data();
     auto& ad = a.data();
-    for (size_t i = 0; i < a.size(); ++i)
-      od[i] = std::round(ad[i] / scale);
+    // SIMD for a/scale then round
+    if (a.is_contiguous() && out.is_contiguous())
+    {
+      // Use SIMD div with broadcast scale
+      std::vector<float> scale_vec(a.size(), scale);
+      std::vector<float> tmp(a.size());
+      simd::div_vectorized(ad.data(), scale_vec.data(), tmp.data(), a.size());
+      for (size_t i = 0; i < a.size(); ++i) od[i] = std::round(tmp[i]);
+    }
+    else
+    {
+      for (size_t i = 0; i < a.size(); ++i) od[i] = std::round(ad[i] / scale);
+    }
     return out;
   }
 

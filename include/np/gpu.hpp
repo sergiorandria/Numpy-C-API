@@ -588,6 +588,64 @@ namespace np::gpu
     std::free(p);
   }
 
+  // Unified managed memory via dlopen cudaMallocManaged (no link-time dep)
+  inline void* managed_alloc(std::size_t bytes) noexcept
+  {
+#if defined(_WIN32)
+    return pinned_alloc(bytes);
+#else
+#if defined(__has_include) && __has_include(<dlfcn.h>)
+    void* h = dlopen("libcudart.so", RTLD_LAZY);
+    if (!h)
+      h = dlopen("libcudart.so.12", RTLD_LAZY);
+    if (!h)
+      h = dlopen("libcuda.so.1", RTLD_LAZY);
+    if (h)
+    {
+      using cudaMallocManaged_t = int (*)(void**, std::size_t, unsigned int);
+      auto sym = reinterpret_cast<cudaMallocManaged_t>(dlsym(h, "cudaMallocManaged"));
+      if (!sym)
+        sym = reinterpret_cast<cudaMallocManaged_t>(dlsym(h, "cuMemAllocManaged"));
+      if (sym)
+      {
+        void* ptr = nullptr;
+        if (sym(&ptr, bytes, 0x01) == 0 && ptr) // 0x01 = cudaMemAttachGlobal
+        {
+          dlclose(h);
+          return ptr;
+        }
+      }
+      dlclose(h);
+    }
+#endif
+    return pinned_alloc(bytes);
+#endif
+  }
+
+  inline void managed_free(void* p) noexcept
+  {
+#if defined(NP_GPU_HAS_CUDA_RUNTIME)
+    // Try cudaFree
+    if (p && cudaFree(p) == cudaSuccess)
+      return;
+#endif
+#if defined(__has_include) && __has_include(<dlfcn.h>) && !defined(_WIN32)
+    void* h = dlopen("libcudart.so", RTLD_LAZY);
+    if (h)
+    {
+      using cudaFree_t = int (*)(void*);
+      auto sym = reinterpret_cast<cudaFree_t>(dlsym(h, "cudaFree"));
+      if (sym && sym(p) == 0)
+      {
+        dlclose(h);
+        return;
+      }
+      dlclose(h);
+    }
+#endif
+    pinned_free(p, 0);
+  }
+
   // ── Async streams & batch for powerful multi-GPU ────────────────────────
   struct Stream
   {

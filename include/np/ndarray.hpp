@@ -41,6 +41,7 @@
 #include "dtype.hpp"
 #include "exceptions.hpp"
 #include "pqc.hpp"
+#include "simd.hpp"
 
 #ifdef NP_USE_THREADING
 #include "threadpool.hpp"
@@ -4025,6 +4026,14 @@ namespace np
       -> std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>
   {
     using Acc = std::conditional_t<std::is_same_v<value_type, bool>, std::int64_t, T>;
+    if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>)
+    {
+      if (is_contiguous() && data_)
+      {
+        // SIMD sum is O(n) with 2-8x speedup for contiguous float/double
+        return static_cast<Acc>(simd::sum_vectorized(data_->data(), _numel()));
+      }
+    }
     Acc total{};
     _for_each_logical([&](const typename ndarray<T>::value_type& v) { total += v; });
     return total;
@@ -6678,6 +6687,18 @@ namespace np
   auto ndarray<T>::operator+(const ndarray<U>& rhs) const
       -> ndarray<std::common_type_t<T, U>>
   {
+    using R = std::common_type_t<T, U>;
+    // SIMD fast path: contiguous, same shape, float/double
+    if constexpr (std::is_same_v<R, float> || std::is_same_v<R, double>)
+    {
+      if (is_contiguous() && rhs.is_contiguous() && shape == rhs.shape
+          && std::is_same_v<T, R> && std::is_same_v<U, R>)
+      {
+        ndarray<R> out(shape);
+        simd::add_vectorized(data_->data(), rhs.data_->data(), out.data_->data(), _numel());
+        return out;
+      }
+    }
     return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a + b; });
   }
 
@@ -6686,6 +6707,17 @@ namespace np
   auto ndarray<T>::operator-(const ndarray<U>& rhs) const
       -> ndarray<std::common_type_t<T, U>>
   {
+    using R = std::common_type_t<T, U>;
+    if constexpr (std::is_same_v<R, float> || std::is_same_v<R, double>)
+    {
+      if (is_contiguous() && rhs.is_contiguous() && shape == rhs.shape
+          && std::is_same_v<T, R> && std::is_same_v<U, R>)
+      {
+        ndarray<R> out(shape);
+        simd::sub_vectorized(data_->data(), rhs.data_->data(), out.data_->data(), _numel());
+        return out;
+      }
+    }
     return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a - b; });
   }
 
@@ -6694,6 +6726,17 @@ namespace np
   auto ndarray<T>::operator*(const ndarray<U>& rhs) const
       -> ndarray<std::common_type_t<T, U>>
   {
+    using R = std::common_type_t<T, U>;
+    if constexpr (std::is_same_v<R, float> || std::is_same_v<R, double>)
+    {
+      if (is_contiguous() && rhs.is_contiguous() && shape == rhs.shape
+          && std::is_same_v<T, R> && std::is_same_v<U, R>)
+      {
+        ndarray<R> out(shape);
+        simd::mul_vectorized(data_->data(), rhs.data_->data(), out.data_->data(), _numel());
+        return out;
+      }
+    }
     return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a * b; });
   }
 
@@ -6702,6 +6745,17 @@ namespace np
   auto ndarray<T>::operator/(const ndarray<U>& rhs) const
       -> ndarray<std::common_type_t<T, U>>
   {
+    using R = std::common_type_t<T, U>;
+    if constexpr (std::is_same_v<R, float> || std::is_same_v<R, double>)
+    {
+      if (is_contiguous() && rhs.is_contiguous() && shape == rhs.shape
+          && std::is_same_v<T, R> && std::is_same_v<U, R>)
+      {
+        ndarray<R> out(shape);
+        simd::div_vectorized(data_->data(), rhs.data_->data(), out.data_->data(), _numel());
+        return out;
+      }
+    }
     return detail::elementwise(*this, rhs, [](const T& a, const U& b) { return a / b; });
   }
 

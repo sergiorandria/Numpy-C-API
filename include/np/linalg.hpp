@@ -3292,9 +3292,23 @@ namespace np::linalg
                 for (std::size_t p = pp; p < p_max; ++p)
                 {
                   R av = static_cast<R>(ad[i * k + p]);
-                  for (std::size_t j = jj; j < j_max; ++j)
+                  if constexpr (
+                      (std::is_same_v<R, float> || std::is_same_v<R, double>)
+                      && std::is_same_v<T, R> && std::is_same_v<U, R>)
                   {
-                    od[i * cols + j] += av * static_cast<R>(bd[p * cols + j]);
+                    // SIMD FMA: out[j] += av * b[j] with contiguous R
+                    simd::fma_vectorized(
+                        reinterpret_cast<const R*>(bd + p * cols + jj),
+                        av,
+                        od + i * cols + jj,
+                        j_max - jj);
+                  }
+                  else
+                  {
+                    for (std::size_t j = jj; j < j_max; ++j)
+                    {
+                      od[i * cols + j] += av * static_cast<R>(bd[p * cols + j]);
+                    }
                   }
                 }
               }

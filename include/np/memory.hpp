@@ -77,7 +77,7 @@ namespace np::mem
             MADV_HUGEPAGE);
 #endif
       }
-      else if constexpr (S == MemorySpace::Pinned)
+      else if constexpr (S == MemorySpace::Pinned || S == MemorySpace::Unified)
       {
         if (data.empty())
           return;
@@ -99,6 +99,8 @@ namespace np::mem
   using GpuArray = TaggedArray<T, MemorySpace::Device>;
   template <typename T>
   using PinnedArray = TaggedArray<T, MemorySpace::Pinned>;
+  template <typename T>
+  using ManagedArray = TaggedArray<T, MemorySpace::Unified>;
 
   struct MemoryFactory
   {
@@ -121,6 +123,11 @@ namespace np::mem
     NP_NODISCARD static PinnedArray<T> pinned(const ndarray<T>& a)
     {
       return PinnedArray<T>(a);
+    }
+    template <typename T>
+    NP_NODISCARD static ManagedArray<T> managed(const ndarray<T>& a)
+    {
+      return ManagedArray<T>(a);
     }
     template <typename T>
     NP_NODISCARD static std::variant<HBMArray<T>, GpuArray<T>>
@@ -148,6 +155,11 @@ namespace np::mem
     return PinnedArray<T>(a);
   }
   template <typename T>
+  NP_NODISCARD inline ManagedArray<T> migrate_to_managed(const ndarray<T>& a)
+  {
+    return ManagedArray<T>(a);
+  }
+  template <typename T>
   NP_NODISCARD inline ndarray<T> migrate_to_host(const HBMArray<T>& h)
   {
     return h.data;
@@ -161,6 +173,11 @@ namespace np::mem
   NP_NODISCARD inline ndarray<T> migrate_to_host(const PinnedArray<T>& p)
   {
     return p.data;
+  }
+  template <typename T>
+  NP_NODISCARD inline ndarray<T> migrate_to_host(const ManagedArray<T>& m)
+  {
+    return m.data;
   }
   template <typename T>
   NP_NODISCARD inline ndarray<T> zeros_hbm(const std::vector<int>& shape)
