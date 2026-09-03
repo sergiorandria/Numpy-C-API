@@ -41,6 +41,8 @@
 
 #ifndef _WIN32
 #include <unistd.h>
+#include <pthread.h>
+#include <sched.h>
 #endif
 
 #include "api_macros.hpp"
@@ -157,12 +159,25 @@ namespace np
        */
       NP_HIDDEN inline void __np_pin_thread_windows(std::size_t idx) noexcept
       {
-        // Distribute workers across processor groups if needed
         const DWORD_PTR mask = static_cast<DWORD_PTR>(1)
             << (idx % (sizeof(DWORD_PTR) * 8));
-        // Best-effort: ignore failures (e.g., insufficient privilege)
         SetThreadAffinityMask(GetCurrentThread(), mask);
         SetThreadIdealProcessor(GetCurrentThread(), static_cast<DWORD>(idx % 64));
+      }
+#else
+      NP_HIDDEN inline void __np_pin_thread_linux(std::size_t idx) noexcept
+      {
+#if defined(__linux__) && defined(NP_ENABLE_POWERFUL)
+        cpu_set_t set;
+        CPU_ZERO(&set);
+        std::size_t n = std::thread::hardware_concurrency();
+        if (n == 0)
+          n = 8;
+        CPU_SET(idx % n, &set);
+        pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
+#else
+        (void)idx;
+#endif
       }
 #endif
 
@@ -844,6 +859,8 @@ namespace np
     {
 #ifdef _WIN32
       detail::__np::__np_pin_thread_windows(idx);
+#else
+      detail::__np::__np_pin_thread_linux(idx);
 #endif
       constexpr int kSpinIters = 64;
       while (!self->__np_impl->done.load(std::memory_order_acquire))
