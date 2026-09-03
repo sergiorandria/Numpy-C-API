@@ -122,7 +122,7 @@ namespace np::cohomology
 
     NP_NODISCARD inline int effective_dim(const std::vector<homology::HomologyGroup>& hg)
     {
-      int D = (int)hg.size() - 1;
+      int D = static_cast<int>(hg.size()) - 1;
       while (D > 0 && hg[D].betti == 0 && hg[D].torsion.empty())
         --D;
       return D;
@@ -141,14 +141,14 @@ namespace np::cohomology
           num *= (D - i);
           den *= (k - i);
         }
-        int bin = (k == 0) ? 1 : (int)(num / den);
-        if (k >= (int)hg.size() || hg[k].betti != bin)
+        int bin = (k == 0) ? 1 : static_cast<int>(num / den);
+        if (k >= static_cast<int>(hg.size()) || hg[k].betti != bin)
           return false;
         if (!hg[k].torsion.empty())
           return false;
       }
       // trailing beyond D must be zero
-      for (int k = D + 1; k < (int)hg.size(); ++k)
+      for (int k = D + 1; k < static_cast<int>(hg.size()); ++k)
         if (hg[k].betti != 0 || !hg[k].torsion.empty())
           return false;
       return D >= 0;
@@ -163,12 +163,12 @@ namespace np::cohomology
       for (int k = 0; k <= D; ++k)
       {
         int bet = (k == 0 || k == D) ? 1 : 0;
-        if (k >= (int)hg.size() || hg[k].betti != bet)
+        if (k >= static_cast<int>(hg.size()) || hg[k].betti != bet)
           return false;
         if (!hg[k].torsion.empty())
           return false;
       }
-      for (int k = D + 1; k < (int)hg.size(); ++k)
+      for (int k = D + 1; k < static_cast<int>(hg.size()); ++k)
         if (hg[k].betti != 0 || !hg[k].torsion.empty())
           return false;
       return true;
@@ -190,7 +190,7 @@ namespace np::cohomology
         if (!hg[k].torsion.empty())
           return false;
       }
-      for (int k = D + 1; k < (int)hg.size(); ++k)
+      for (int k = D + 1; k < static_cast<int>(hg.size()); ++k)
         if (hg[k].betti != 0 || !hg[k].torsion.empty())
           return false;
       n_out = n;
@@ -205,7 +205,7 @@ namespace np::cohomology
     auto cg_vec = cohomology_groups(K);
     CohomologyRing R;
     R.groups = cg_vec;
-    int D = (int)cg_vec.size() - 1;
+    int D = static_cast<int>(cg_vec.size()) - 1;
     R.cup.assign(D + 1, {});
     for (int p = 0; p <= D; ++p)
       for (int q = 0; q <= D; ++q)
@@ -349,7 +349,7 @@ namespace np::cohomology
         cg[n].torsion = hg[n - 1].torsion;
     }
     R.groups = cg;
-    int D = (int)cg.size() - 1;
+    int D = static_cast<int>(cg.size()) - 1;
     R.cup.assign(D + 1, std::vector<std::vector<std::vector<int>>>(D + 1));
     for (int p = 0; p <= D; ++p)
       for (int q = 0; q <= D; ++q)
@@ -377,19 +377,19 @@ namespace np::cohomology
   cup_product(const homology::SimplicialComplex& K, int p, int q, int a, int b)
   {
     auto R = cohomology_ring(K);
-    int D = (int)R.groups.size() - 1;
+    int D = static_cast<int>(R.groups.size()) - 1;
     if (p < 0 || q < 0 || p > D || q > D)
       return -2;
     int r = p + q;
     if (r > D)
       return -1;
-    if (p >= (int)R.cup.size() || q >= (int)R.cup[p].size())
+    if (p >= static_cast<int>(R.cup.size()) || q >= static_cast<int>(R.cup[p].size()))
       return -2;
     if (R.cup[p][q].empty())
       return -2;
-    if (a < 0 || a >= (int)R.cup[p][q].size())
+    if (a < 0 || a >= static_cast<int>(R.cup[p][q].size()))
       return -2;
-    if (b < 0 || b >= (int)R.cup[p][q][a].size())
+    if (b < 0 || b >= static_cast<int>(R.cup[p][q][a].size()))
       return -2;
     int v = R.cup[p][q][a][b];
     if (R.inconclusive && v == -1)
@@ -472,7 +472,7 @@ namespace np::cohomology
   {
     auto ca = cohomology_groups(A);
     auto cb = cohomology_groups(B);
-    int da = (int)ca.size() - 1, db = (int)cb.size() - 1;
+    int da = static_cast<int>(ca.size()) - 1, db = static_cast<int>(cb.size()) - 1;
     int D = da + db;
     std::vector<int> out(D + 1, 0);
     for (int i = 0; i <= da; ++i)
@@ -496,7 +496,7 @@ namespace np::cohomology
   {
     auto hg = homology::homology_groups(K);
     UCT u;
-    if (n < 0 || n >= (int)hg.size())
+    if (n < 0 || n >= static_cast<int>(hg.size()))
       return u;
     u.betti = hg[n].betti;
     if (n > 0)

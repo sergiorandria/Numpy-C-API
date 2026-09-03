@@ -46,6 +46,7 @@
 #endif
 
 #include "api_macros.hpp"
+#include <iostream>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -886,8 +887,10 @@ namespace np
           {
             (*job)();
           }
-          catch (...)
-          {
+          catch (...) {
+
+            std::cerr << "[ThreadPool] task threw unknown exception (suppressed)\n";
+
           }
           continue;
         }
@@ -918,8 +921,10 @@ namespace np
           {
             (*job)();
           }
-          catch (...)
-          {
+          catch (...) {
+
+            std::cerr << "[ThreadPool] task threw unknown exception (suppressed)\n";
+
           }
           continue;
         }
