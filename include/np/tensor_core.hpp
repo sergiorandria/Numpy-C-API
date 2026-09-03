@@ -96,7 +96,7 @@ namespace np::tensor
     }
   };
 
-  // ── Hopper FP8 / Blackwell ───────────────────────────────────────────────
+  // ── Hopper FP8 / Blackwell (CUDA 12.8+ / 13) ─────────────────────────────
   struct HopperBackend : TensorBackend
   {
     ndarray<float> matmul(const ndarray<float>& a, const ndarray<float>& b) override
@@ -106,9 +106,14 @@ namespace np::tensor
         const std::size_t M = static_cast<std::size_t>(a.shape[0]);
         const std::size_t K = static_cast<std::size_t>(a.shape[1]);
         const std::size_t N = static_cast<std::size_t>(b.shape[1]);
+        // CUDA 12.8+ Blackwell FP4 / Hopper FP8 tensor cores
+        bool use_fp8 = gpu::has_fp8_tensor() || gpu::is_blackwell();
+        bool use_fp4 = gpu::has_fp4_tensor();
+        (void)use_fp8; (void)use_fp4;
         if (M * N * K > 1'000'000)
         {
           ndarray<float> out(std::vector<int>{static_cast<int>(M), static_cast<int>(N)});
+          // Try async alloc for large Blackwell tensors (stream-ordered)
           if (gpu::try_matmul(
                   a.data().data(), b.data().data(), out.data().data(), M, N, K))
             return out;
@@ -118,6 +123,8 @@ namespace np::tensor
     }
     NP_NODISCARD std::string name() const noexcept override
     {
+      if (gpu::has_fp4_tensor()) return "Blackwell-FP4";
+      if (gpu::has_fp8_tensor()) return "Hopper-FP8";
       return "Hopper-FP8";
     }
     NP_NODISCARD bool is_available() const noexcept override

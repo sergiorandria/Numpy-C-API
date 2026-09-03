@@ -700,6 +700,8 @@ namespace np::gpu
     std::size_t batch = As.size();
     if (batch == 0)
       return;
+    // CUDA 12 graphs: try to capture batch as graph for fast replay (e.g., transformer)
+    if (try_graph_batch_matmul(As, Bs, Cs, M, N, K)) return;
     int devs = device_count();
     if (devs == 0)
       devs = 1;
@@ -782,6 +784,46 @@ namespace np::gpu
       matmul(a + start * K, b, c + start * N, end - start, N, K);
     }
 #endif
+  }
+
+  // ── CUDA 12/13 new features (header-only, dlopen) ────────────────────────
+  NP_NODISCARD inline bool is_blackwell() noexcept { return cuda::is_blackwell(10); }
+  NP_NODISCARD inline bool has_fp8_tensor() noexcept { return cuda::has_fp8_tensor(); }
+  NP_NODISCARD inline bool has_fp4_tensor() noexcept { return cuda::has_fp4_tensor(); }
+  NP_NODISCARD inline int cuda_driver_version() noexcept { return cuda::driver_version(); }
+  NP_NODISCARD inline int cuda_runtime_version() noexcept { return cuda::runtime_version(); }
+
+  // Stream-ordered async alloc (CUDA 11.2+): try cudaMallocAsync, fallback to pinned
+  NP_NODISCARD inline void* async_alloc(std::size_t bytes, void* stream = nullptr) noexcept
+  {
+    if (void* p = cuda::malloc_async(bytes, stream)) return p;
+    return pinned_alloc(bytes);
+  }
+  inline void async_free(void* p, void* stream = nullptr) noexcept
+  {
+    if (cuda::free_async(p, stream) == 0) return;
+    pinned_free(p, 0);
+  }
+
+  // Graph-captured batch GEMM (CUDA 10+): try to capture batch as graph for replay
+  template <typename T>
+  NP_NODISCARD inline bool try_graph_batch_matmul(
+      const std::vector<const T*>& As,
+      const std::vector<const T*>& Bs,
+      std::vector<T*>& Cs,
+      std::size_t M,
+      std::size_t N,
+      std::size_t K) noexcept
+  {
+    if (As.empty() || !is_available()) return false;
+    // Use cuda::try_cuda_graph_batch_matmul as probe (dlopen); fallback to streams
+    if (cuda::try_cuda_graph_batch_matmul(
+            static_cast<const void*>(As[0]),
+            static_cast<const void*>(Bs[0]),
+            static_cast<void*>(Cs[0]),
+            M, N, K, As.size()))
+      return true;
+    return false;
   }
 
 } // namespace np::gpu
