@@ -37,14 +37,16 @@ namespace np::mem
     Pinned
   };
 
-  template <typename T>
-  struct HBMArray
+  // TaggedArray eliminates duplication (Decorator over ndarray)
+  template <typename T, MemorySpace S>
+  struct TaggedArray
   {
     ndarray<T> data;
-    MemorySpace space = MemorySpace::HBM;
-    HBMArray() = default;
-    explicit HBMArray(ndarray<T> d) : data(std::move(d)), space(MemorySpace::HBM)
+    static constexpr MemorySpace space = S;
+    TaggedArray() = default;
+    explicit TaggedArray(ndarray<T> d) : data(std::move(d))
     {
+      maybe_hugepage();
     }
     NP_NODISCARD size_t size() const noexcept
     {
@@ -52,68 +54,51 @@ namespace np::mem
     }
     NP_NODISCARD std::span<T> span()
     {
-      return {data.data().data(), data.data().size()};
+      auto& v = data.data();
+      return {v.data(), v.size()};
     }
     NP_NODISCARD std::span<const T> span() const
     {
-      return {data.data().data(), data.data().size()};
+      auto& v = data.data();
+      return {v.data(), v.size()};
     }
-  };
 
-  template <typename T>
-  struct CXLArray
-  {
-    ndarray<T> data;
-    MemorySpace space = MemorySpace::CXL;
-    CXLArray() = default;
-    explicit CXLArray(ndarray<T> d) : data(std::move(d)), space(MemorySpace::CXL)
+  private:
+    void maybe_hugepage() const noexcept
     {
-    }
-  };
-
-  template <typename T>
-  struct GpuArray
-  {
-    ndarray<T> data;
-    MemorySpace space = MemorySpace::Device;
-    bool on_device = false;
-    GpuArray() = default;
-    explicit GpuArray(ndarray<T> d) : data(std::move(d)), space(MemorySpace::Device), on_device(gpu::is_available())
-    {
-      if (on_device)
+      if constexpr (S == MemorySpace::Device)
       {
+        if (!gpu::is_available() || data.empty())
+          return;
 #if defined(__linux__)
-        madvise(data.data().data(), data.size() * sizeof(T), MADV_HUGEPAGE);
+        madvise(
+            static_cast<void*>(data.data().data()),
+            data.size() * sizeof(T),
+            MADV_HUGEPAGE);
+#endif
+      }
+      else if constexpr (S == MemorySpace::Pinned)
+      {
+        if (data.empty())
+          return;
+#if defined(__linux__)
+        madvise(
+            static_cast<void*>(data.data().data()),
+            data.size() * sizeof(T),
+            MADV_HUGEPAGE);
 #endif
       }
     }
-    NP_NODISCARD size_t size() const noexcept
-    {
-      return data.size();
-    }
-    NP_NODISCARD std::span<T> span()
-    {
-      return {data.data().data(), data.data().size()};
-    }
-    NP_NODISCARD std::span<const T> span() const
-    {
-      return {data.data().data(), data.data().size()};
-    }
   };
 
   template <typename T>
-  struct PinnedArray
-  {
-    ndarray<T> data;
-    MemorySpace space = MemorySpace::Pinned;
-    PinnedArray() = default;
-    explicit PinnedArray(ndarray<T> d) : data(std::move(d)), space(MemorySpace::Pinned)
-    {
-#if defined(__linux__)
-      madvise(data.data().data(), data.size() * sizeof(T), MADV_HUGEPAGE);
-#endif
-    }
-  };
+  using HBMArray = TaggedArray<T, MemorySpace::HBM>;
+  template <typename T>
+  using CXLArray = TaggedArray<T, MemorySpace::CXL>;
+  template <typename T>
+  using GpuArray = TaggedArray<T, MemorySpace::Device>;
+  template <typename T>
+  using PinnedArray = TaggedArray<T, MemorySpace::Pinned>;
 
   struct MemoryFactory
   {
@@ -138,7 +123,8 @@ namespace np::mem
       return PinnedArray<T>(a);
     }
     template <typename T>
-    NP_NODISCARD static auto powerful(const ndarray<T>& a)
+    NP_NODISCARD static std::variant<HBMArray<T>, GpuArray<T>>
+    powerful(const ndarray<T>& a)
     {
       if (gpu::is_available())
         return GpuArray<T>(a);
