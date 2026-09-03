@@ -76,7 +76,7 @@ namespace np::tensor
     {
       return linalg::matmul(a, b);
     }
-    NP_NODISCARD std::string name() const noexcept override { return "CPU-naive"; }
+    NP_NODISCARD std::string name() const noexcept override { return "CPU"; }
     NP_NODISCARD int rank() const noexcept override { return 64; }
   };
 
