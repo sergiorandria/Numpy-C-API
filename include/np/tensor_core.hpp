@@ -303,18 +303,28 @@ namespace np::tensor
               M1[i * h + j] - M2[i * h + j] + M3[i * h + j] + M6[i * h + j];
     }
 
-    inline bool is_pow2(std::size_t n)
+    [[nodiscard]] consteval bool is_pow2_consteval(std::size_t n) noexcept
     {
-      return (n & (n - 1)) == 0;
+      return n != 0 && (n & (n - 1)) == 0;
+    }
+    [[nodiscard]] constexpr inline bool is_pow2(std::size_t n) noexcept
+    {
+      return n != 0 && (n & (n - 1)) == 0;
     }
 
-    inline std::size_t next_pow2(std::size_t n)
+    [[nodiscard]] constexpr inline std::size_t next_pow2(std::size_t n) noexcept
     {
-      std::size_t p = 1;
-      while (p < n)
-        p <<= 1;
-      return p;
+      if (n == 0) return 1;
+      --n;
+      n |= n >> 1;
+      n |= n >> 2;
+      n |= n >> 4;
+      n |= n >> 8;
+      n |= n >> 16;
+      if constexpr (sizeof(std::size_t) > 4) n |= n >> 32;
+      return n + 1;
     }
+    static_assert(is_pow2_consteval(64) && next_pow2(65) == 128, "pow2 helpers broken");
 
     // Public Strassen matmul for arbitrary M x K * K x N via padding
     inline ndarray<float> matmul(const ndarray<float>& A, const ndarray<float>& B)
