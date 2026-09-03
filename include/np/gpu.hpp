@@ -169,7 +169,16 @@ namespace np::gpu
               {
                 float av = a[i * K + p];
                 std::size_t j = jj;
-#if defined(__AVX2__) && defined(__FMA__)
+#if defined(__AVX512F__) && defined(__FMA__)
+                for (; j + 15 < j_max; j += 16)
+                {
+                  __m512 bv = _mm512_loadu_ps(b + p * N + j);
+                  __m512 cv = _mm512_loadu_ps(c + i * N + j);
+                  __m512 avb = _mm512_set1_ps(av);
+                  cv = _mm512_fmadd_ps(avb, bv, cv);
+                  _mm512_storeu_ps(c + i * N + j, cv);
+                }
+#elif defined(__AVX2__) && defined(__FMA__)
                 for (; j + 7 < j_max; j += 8)
                 {
                   __m256 bv = _mm256_loadu_ps(b + p * N + j);
@@ -202,7 +211,16 @@ namespace np::gpu
               {
                 float av = a[i * K + p];
                 std::size_t j = jj;
-#if defined(__AVX2__) && defined(__FMA__)
+#if defined(__AVX512F__) && defined(__FMA__)
+                for (; j + 15 < j_max; j += 16)
+                {
+                  __m512 bv = _mm512_loadu_ps(b + p * N + j);
+                  __m512 cv = _mm512_loadu_ps(c + i * N + j);
+                  __m512 avb = _mm512_set1_ps(av);
+                  cv = _mm512_fmadd_ps(avb, bv, cv);
+                  _mm512_storeu_ps(c + i * N + j, cv);
+                }
+#elif defined(__AVX2__) && defined(__FMA__)
                 for (; j + 7 < j_max; j += 8)
                 {
                   __m256 bv = _mm256_loadu_ps(b + p * N + j);
@@ -244,7 +262,18 @@ namespace np::gpu
               for (std::size_t p = pp; p < p_max; ++p)
               {
                 double av = a[i * K + p];
-                for (std::size_t j = jj; j < j_max; ++j)
+                std::size_t j = jj;
+#if defined(__AVX512F__) && defined(__FMA__)
+                for (; j + 7 < j_max; j += 8)
+                {
+                  __m512d bv = _mm512_loadu_pd(b + p * N + j);
+                  __m512d cv = _mm512_loadu_pd(c + i * N + j);
+                  __m512d avb = _mm512_set1_pd(av);
+                  cv = _mm512_fmadd_pd(avb, bv, cv);
+                  _mm512_storeu_pd(c + i * N + j, cv);
+                }
+#endif
+                for (; j < j_max; ++j)
                   c[i * N + j] += av * b[p * N + j];
               }
           }
@@ -262,6 +291,17 @@ namespace np::gpu
               for (std::size_t p = pp; p < p_max; ++p)
               {
                 double av = a[i * K + p];
+                std::size_t j = jj;
+#if defined(__AVX512F__) && defined(__FMA__)
+                for (; j + 7 < j_max; j += 8)
+                {
+                  __m512d bv = _mm512_loadu_pd(b + p * N + j);
+                  __m512d cv = _mm512_loadu_pd(c + i * N + j);
+                  __m512d avb = _mm512_set1_pd(av);
+                  cv = _mm512_fmadd_pd(avb, bv, cv);
+                  _mm512_storeu_pd(c + i * N + j, cv);
+                }
+#endif
                 for (std::size_t j = jj; j < j_max; ++j)
                   c[i * N + j] += av * b[p * N + j];
               }
