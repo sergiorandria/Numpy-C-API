@@ -7,12 +7,12 @@
 
 int main()
 {
-  auto ns = np::physics::PhysicsFactory::navier_stokes(32, 32, 100);
+  auto ns = np::physics::NavierStokes2D(32, 32, 100);
   ns.state.u(16, 16) = 1.0;
   for (int i = 0; i < 5; ++i)
     ns.step();
   std::cout << "ke " << ns.kinetic_energy() << " div " << ns.max_divergence() << "\n";
-  auto builder = np::physics::SolverBuilder::create().size(16, 16).reynolds(200).build();
-  std::cout << "builder " << builder.state.nx << "x" << builder.state.ny << "\n";
+  auto ns2 = np::physics::NavierStokes2D(16, 16, 200);
+  std::cout << "builder " << ns2.state.nx << "x" << ns2.state.ny << "\n";
   return 0;
 }
