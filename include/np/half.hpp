@@ -49,11 +49,7 @@ namespace np
   };
 #define NP_HAS_FLOAT16 1
 #endif
-  // Backward compat: provide float16 as alias to half when not conflicting with dtype tag
-  // Only define if dtype.hpp not yet included (check via macro)
-#ifndef NP_DTYPE_HPP
-  using float16 = half;
-#endif
+  // Note: np::float16 tag is defined in dtype.hpp; use np::half for the actual FP16 type
 
   struct bfloat16
   {
