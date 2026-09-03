@@ -72,7 +72,7 @@ namespace np::mem
           return;
 #if defined(__linux__)
         madvise(
-            static_cast<void*>(data.data().data()),
+            const_cast<void*>(static_cast<const void*>(data.data().data())),
             data.size() * sizeof(T),
             MADV_HUGEPAGE);
 #endif
@@ -83,7 +83,7 @@ namespace np::mem
           return;
 #if defined(__linux__)
         madvise(
-            static_cast<void*>(data.data().data()),
+            const_cast<void*>(static_cast<const void*>(data.data().data())),
             data.size() * sizeof(T),
             MADV_HUGEPAGE);
 #endif
@@ -172,7 +172,7 @@ namespace np::mem
   {
     ndarray<T> tmp(shape);
 #if defined(__linux__)
-    madvise(tmp.data().data(), tmp.size() * sizeof(T), MADV_HUGEPAGE);
+    madvise(static_cast<void*>(tmp.data().data()), tmp.size() * sizeof(T), MADV_HUGEPAGE);
 #endif
     return tmp;
   }
