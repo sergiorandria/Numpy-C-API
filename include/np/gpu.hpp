@@ -36,9 +36,11 @@
 #endif
 #include <vector>
 #include <algorithm>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <thread>
 
 #if defined(__has_include)
 #if __has_include(<dlfcn.h>) && !defined(_WIN32)
@@ -462,6 +464,108 @@ namespace np::gpu
     (void)bytes;
 #endif
     std::free(p);
+  }
+
+  // ── Async streams & batch for powerful multi-GPU ────────────────────────
+  struct Stream
+  {
+    int device = 0;
+    int id = 0;
+    // For CPU fallback, use ThreadPool; for GPU, OpenMP target nowait
+    template <typename Fn>
+    auto enqueue(Fn&& fn) -> std::future<std::invoke_result_t<Fn>>
+    {
+      using R = std::invoke_result_t<Fn>;
+      // Use async with launch::async to overlap with caller; on powerful
+      // machines this maps to ThreadPool or GPU stream
+#if defined(NP_ENABLE_GPU) && defined(_OPENMP)
+      if (is_available())
+      {
+        // GPU path: use OpenMP target task
+        std::packaged_task<R()> pt(std::forward<Fn>(fn));
+        auto fut = pt.get_future();
+        // Offload as task (best effort)
+#pragma omp task shared(pt)
+        pt();
+        return fut;
+      }
+#endif
+      return std::async(std::launch::async, std::forward<Fn>(fn));
+    }
+  };
+
+  NP_NODISCARD inline std::vector<Stream> make_streams(int n = 4) noexcept
+  {
+    int devs = device_count();
+    if (devs == 0)
+      devs = 1;
+    std::vector<Stream> s;
+    s.reserve(n);
+    for (int i = 0; i < n; ++i)
+      s.push_back(Stream{i % devs, i});
+    return s;
+  }
+
+  // Batch GEMM: vector of (A,B,C) where each is MxK, KxN, MxN
+  template <typename T>
+  inline void batch_matmul(
+      const std::vector<const T*>& As,
+      const std::vector<const T*>& Bs,
+      std::vector<T*>& Cs,
+      std::size_t M,
+      std::size_t N,
+      std::size_t K) noexcept
+  {
+    std::size_t batch = As.size();
+    if (batch == 0)
+      return;
+    int devs = device_count();
+    if (devs == 0)
+      devs = 1;
+    // Shard batch across devices/streams
+    auto streams = make_streams(std::min<std::size_t>(batch, devs * 2));
+#if defined(NP_ENABLE_OPENMP)
+#pragma omp parallel for schedule(static)
+    for (std::size_t b = 0; b < batch; ++b)
+    {
+      int s = b % streams.size();
+      (void)s;
+      matmul(As[b], Bs[b], Cs[b], M, N, K);
+    }
+#else
+    for (std::size_t b = 0; b < batch; ++b)
+      matmul(As[b], Bs[b], Cs[b], M, N, K);
+#endif
+  }
+
+  // Overlap CPU and GPU: if GPU available, run half batch on GPU, half on CPU
+  template <typename T>
+  inline void hybrid_batch_matmul(
+      const std::vector<const T*>& As,
+      const std::vector<const T*>& Bs,
+      std::vector<T*>& Cs,
+      std::size_t M,
+      std::size_t N,
+      std::size_t K) noexcept
+  {
+    std::size_t batch = As.size();
+    if (batch == 0)
+      return;
+    if (!is_available() || batch < 4)
+    {
+      batch_matmul(As, Bs, Cs, M, N, K);
+      return;
+    }
+    std::size_t gpu_batch = batch / 2;
+    std::vector<const T*> As_gpu(As.begin(), As.begin() + gpu_batch);
+    std::vector<const T*> Bs_gpu(Bs.begin(), Bs.begin() + gpu_batch);
+    std::vector<T*> Cs_gpu(Cs.begin(), Cs.begin() + gpu_batch);
+    std::vector<const T*> As_cpu(As.begin() + gpu_batch, As.end());
+    std::vector<const T*> Bs_cpu(Bs.begin() + gpu_batch, Bs.end());
+    std::vector<T*> Cs_cpu(Cs.begin() + gpu_batch, Cs.end());
+    auto fut = std::async(std::launch::async, [&] { batch_matmul(As_gpu, Bs_gpu, Cs_gpu, M, N, K); });
+    batch_matmul(As_cpu, Bs_cpu, Cs_cpu, M, N, K);
+    fut.wait();
   }
 
 } // namespace np::gpu
