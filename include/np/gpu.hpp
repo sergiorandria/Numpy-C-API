@@ -25,6 +25,7 @@
 #define NP_GPU_HPP
 
 #include "api_macros.hpp"
+#include "cuda.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <string>
