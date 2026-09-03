@@ -29,6 +29,7 @@ namespace np::physics
     NavierStokes2D(int nx, int ny, double Re_ = 100) : state(nx, ny), Re(Re_) {}
     NP_API void step() {}
     NP_NODISCARD double kinetic_energy() const { return 0; }
+    NP_NODISCARD double max_divergence() const { return 0; }
   };
 
 } // namespace np::physics
