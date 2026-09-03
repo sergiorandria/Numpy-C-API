@@ -3254,6 +3254,12 @@ namespace np::linalg
         const std::size_t gpu_thresh = tune::gpu_threshold_flops();
         if (rows * cols * k > gpu_thresh || rows * cols > 65536)
         {
+          // For very large (4K) multi-GPU shard
+          if (rows * cols * k > 64ULL * 1024 * 1024 && gpu::device_count() > 1)
+          {
+            gpu::sharded_matmul(ad, bd, od, rows, cols, k);
+            return out;
+          }
           if (gpu::try_matmul(ad, bd, od, rows, cols, k))
             return out;
           // Fallback to optimized CPU blocked kernel (AVX2+FMA+OpenMP)

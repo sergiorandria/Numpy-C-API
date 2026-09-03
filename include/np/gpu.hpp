@@ -690,6 +690,41 @@ namespace np::gpu
     fut.wait();
   }
 
+  // Multi-GPU sharding for very large single GEMM (e.g., 4096) — split M across devices
+  template <typename T>
+  inline void sharded_matmul(
+      const T* a, const T* b, T* c, std::size_t M, std::size_t N, std::size_t K) noexcept
+  {
+    int devs = device_count();
+    if (devs <= 1 || M < 1024 || M * N * K < 64ULL * 1024 * 1024)
+    {
+      matmul(a, b, c, M, N, K);
+      return;
+    }
+    std::size_t rows_per_dev = (M + devs - 1) / devs;
+#if defined(NP_ENABLE_OPENMP)
+#pragma omp parallel for schedule(static)
+    for (int d = 0; d < devs; ++d)
+    {
+      std::size_t start = d * rows_per_dev;
+      std::size_t end = std::min(start + rows_per_dev, M);
+      if (start >= end)
+        continue;
+      // Each shard is (end-start) x N
+      matmul(a + start * K, b, c + start * N, end - start, N, K);
+    }
+#else
+    for (int d = 0; d < devs; ++d)
+    {
+      std::size_t start = d * rows_per_dev;
+      std::size_t end = std::min(start + rows_per_dev, M);
+      if (start >= end)
+        continue;
+      matmul(a + start * K, b, c + start * N, end - start, N, K);
+    }
+#endif
+  }
+
 } // namespace np::gpu
 
 #endif // NP_GPU_HPP
