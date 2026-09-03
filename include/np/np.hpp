@@ -11,6 +11,7 @@
 #define NP_NP_HPP
 
 #include "api_macros.hpp"
+#include "bigint.hpp"
 #include "simd.hpp"
 #include "bitwise.hpp"
 #include "char.hpp"
