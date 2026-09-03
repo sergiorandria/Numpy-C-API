@@ -2260,7 +2260,7 @@ namespace np
         {
           if (slice.empty())
             throw std::invalid_argument("var: empty slice");
-          if ((int)slice.size() <= ddof)
+          if (static_cast<int>(slice.size()) <= ddof)
             throw std::invalid_argument("var: ddof too large");
           long double sum = 0;
           for (auto& v : slice)
