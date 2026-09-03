@@ -255,7 +255,7 @@ namespace np
       bool locked_ = false;
       bool no_dump_ = false;
 
-     private:
+    private:
       void isolate() noexcept
       {
         if constexpr (!std::is_same_v<T, bool>)
@@ -313,7 +313,7 @@ namespace np
         }
       }
 
-     public:
+    public:
       explicit secure_buffer(std::size_t n = 0) : storage(n)
       {
         if (n != 0)
@@ -491,8 +491,7 @@ namespace np
           if constexpr (!std::is_same_v<T, bool>)
           {
             secure_zero(
-                static_cast<void*>(storage.data() + n),
-                (old_size - n) * sizeof(T));
+                static_cast<void*>(storage.data() + n), (old_size - n) * sizeof(T));
           }
           storage.resize(n);
           wipe_slack();
