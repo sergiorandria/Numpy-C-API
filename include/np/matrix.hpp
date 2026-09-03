@@ -303,6 +303,49 @@ namespace np
     {
       return eye(n, m, std::optional<int>{k});
     }
+
+    // ── Secure (constant-time, PQC-hardened) ───────────────────────────────
+    /** @brief Securely zero (constant-time, not elided). @see ndarray::secure_zero */
+    void secure_zero() noexcept { Base::secure_zero(); }
+    /** @brief Securely clear shape and wipe. @see ndarray::secure_clear */
+    void secure_clear() noexcept { Base::secure_clear(); }
+    /** @brief Secure fill (constant-time). @see ndarray::secure_fill */
+    void secure_fill(const value_type& v) noexcept { Base::secure_fill(v); }
+    /** @brief Constant-time at (no branch on index). @see ndarray::secure_at */
+    NP_NODISCARD auto secure_at(std::size_t i, std::size_t j) const noexcept -> value_type
+    {
+      // Flat index for row-major 2D: i*cols + j
+      std::size_t idx = i * cols() + j;
+      return Base::secure_at(idx);
+    }
+    /** @brief Secure matmul (constant-time accumulation, no early exit). */
+    template <typename U>
+    NP_NODISCARD auto secure_matmul(const Matrix<U>& rhs) const
+        -> Matrix<std::common_type_t<T, U>>
+    {
+      using R = std::common_type_t<T, U>;
+      if (cols() != rhs.rows())
+        throw std::invalid_argument("secure_matmul: inner dims must match");
+      Matrix<R> out(rows(), rhs.cols(), R{0});
+      // Constant-time triple loop with ct_barrier, no secret-dependent branches
+      for (std::size_t i = 0; i < rows(); ++i)
+        for (std::size_t k = 0; k < cols(); ++k)
+        {
+          R aik = static_cast<R>((*this)(i, k));
+          for (std::size_t j = 0; j < rhs.cols(); ++j)
+          {
+            // Use volatile to prevent optimization, ct_barrier per inner
+            volatile R* p = reinterpret_cast<volatile R*>(&out(i, j));
+            R bkj = static_cast<R>(rhs(k, j));
+            R cur = *p;
+            cur += aik * bkj;
+            *p = cur;
+          }
+          pqc::ct_barrier();
+        }
+      pqc::ct_barrier();
+      return out;
+    }
   };
 
   /** @brief Scalar * Matrix.

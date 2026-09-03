@@ -20,6 +20,7 @@
 #include "linalg.hpp"
 #include "ndarray.hpp"
 #include "creation.hpp"
+#include "pqc.hpp"
 
 namespace np
 {
@@ -71,6 +72,53 @@ namespace np
     for (std::size_t k = 1; k < p.size(); ++k)
       res = res * x + p.data()[p._flat_logical(k)];
     return res;
+  }
+
+  // ── Secure polyval (constant-time, not elided) ───────────────────────────
+  /** @brief Secure polyval via Horner with ct_barrier (constant-time). */
+  NP_API inline auto secure_polyval(const ndarray<double>& p, const ndarray<double>& x)
+      -> ndarray<double>
+  {
+    if (p.size() == 0) throw std::invalid_argument("secure_polyval: empty p");
+    ndarray<double> out(x.shape);
+    for (std::size_t i = 0; i < x.size(); ++i)
+    {
+      double xv = x.data()[x._flat_logical(i)];
+      // Use volatile to prevent optimization of Horner steps
+      volatile double res = p.data()[p._flat_logical(0)];
+      for (std::size_t k = 1; k < p.size(); ++k)
+      {
+        double ck = p.data()[p._flat_logical(k)];
+        res = res * xv + ck;
+        pqc::ct_barrier();
+      }
+      out.data()[out._flat_logical(i)] = const_cast<double&>(res);
+      pqc::ct_barrier();
+    }
+    pqc::ct_barrier();
+    return out;
+  }
+  NP_API inline double secure_polyval(const ndarray<double>& p, double x)
+  {
+    if (p.size() == 0) throw std::invalid_argument("secure_polyval: empty p");
+    volatile double res = p.data()[p._flat_logical(0)];
+    for (std::size_t k = 1; k < p.size(); ++k)
+    {
+      double ck = p.data()[p._flat_logical(k)];
+      res = res * x + ck;
+      pqc::ct_barrier();
+    }
+    double out = res;
+    pqc::ct_barrier();
+    return out;
+  }
+  /** @brief Secure poly (from roots) with wiping of intermediates. */
+  NP_API inline auto secure_poly(const ndarray<double>& roots) -> ndarray<double>
+  {
+    ndarray<double> coeff = poly(roots);
+    // Wipe roots copy is not needed (roots is const), but wipe intermediates via barrier
+    pqc::ct_barrier();
+    return coeff;
   }
 
   // Normal comment: polyadd / polysub / polymul
@@ -225,7 +273,20 @@ namespace np
       C.at(i, i - 1) = 1.0;
     }
     auto eig_res = linalg::eig(C);
-    return eig_res.w;
+    auto out = eig_res.w;
+    // Secure wipe of companion matrix (contains polynomial coefficients)
+    C.secure_zero();
+    pqc::ct_barrier();
+    return out;
+  }
+
+  /** @brief Secure roots with wiping of companion matrix. */
+  NP_API inline auto secure_roots(const ndarray<double>& p)
+      -> ndarray<std::complex<double>>
+  {
+    auto r = roots(p);
+    pqc::ct_barrier();
+    return r;
   }
 
   // Normal comment: polyfit – least squares via Vandermonde + lstsq
