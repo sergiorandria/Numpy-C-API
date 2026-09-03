@@ -17,27 +17,26 @@ namespace np
 {
 
 #if defined(__FLT16_MAX__) || defined(__HAVE_FLOAT16)
-  using float16 = _Float16;
+  using half = _Float16;
 #define NP_HAS_FLOAT16 1
 #elif __has_include(<stdfloat>)
 #include <stdfloat>
 #if defined(__STDCPP_FLOAT16_T__)
-  using float16 = std::float16_t;
+  using half = std::float16_t;
 #define NP_HAS_FLOAT16 1
 #endif
 #endif
 
 #ifndef NP_HAS_FLOAT16
   // Emulated half via float (fallback for CI without FP16 HW)
-  struct float16
+  struct half
   {
     uint16_t bits = 0;
-    float16() = default;
-    explicit float16(float f)
+    half() = default;
+    explicit half(float f)
     {
       uint32_t u;
       std::memcpy(&u, &f, sizeof(float));
-      // Simple truncation: high 16 bits
       bits = static_cast<uint16_t>(u >> 16);
     }
     operator float() const noexcept
@@ -49,6 +48,11 @@ namespace np
     }
   };
 #define NP_HAS_FLOAT16 1
+#endif
+  // Backward compat: provide float16 as alias to half when not conflicting with dtype tag
+  // Only define if dtype.hpp not yet included (check via macro)
+#ifndef NP_DTYPE_HPP
+  using float16 = half;
 #endif
 
   struct bfloat16
@@ -76,7 +80,7 @@ namespace np
   {
   };
   template <>
-  struct is_half<float16> : std::true_type
+  struct is_half<half> : std::true_type
   {
   };
   template <>
