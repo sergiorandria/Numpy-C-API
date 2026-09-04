@@ -46,10 +46,10 @@ lemma padic_valuation_one: "p > 1 ==> padic_valuation_fun p 1 = 0"
   by simp
 
 lemma padic_valuation_p: "p > 1 ==> padic_valuation_fun p p = 1"
-  by (simp add: padic_valuation_fun.simps)
+  by auto
 
 lemma padic_valuation_p_pow: "padic_valuation_fun 5 125 = 3"
-  by eval
+  by auto
 
 lemma padic_norm_zero: "padic_norm p 0 = 0"
   by (simp add: padic_norm_def)
