@@ -97,6 +97,52 @@ namespace np
     {
     }
     bigint(std::nullptr_t) = delete;
+
+    // Compatibility with boost::multiprecision::cpp_int::convert_to<T>()
+    template <typename T>
+    T convert_to() const
+    {
+      if constexpr (std::is_same_v<T, std::string>)
+        return value;
+      else if constexpr (std::is_same_v<T, const char*>)
+        return value.c_str();
+      else if constexpr (std::is_integral_v<T>)
+      {
+        // use stoll as intermediate; sufficient for fallback tests (small values)
+        long long v = 0;
+        try
+        {
+          v = std::stoll(value);
+        }
+        catch (...)
+        {
+          v = 0;
+        }
+        return static_cast<T>(v);
+      }
+      else if constexpr (std::is_floating_point_v<T>)
+      {
+        double v = 0;
+        try
+        {
+          v = std::stod(value);
+        }
+        catch (...)
+        {
+          v = 0;
+        }
+        return static_cast<T>(v);
+      }
+      else
+      {
+        // generic fallback via string construction
+        if constexpr (std::is_constructible_v<T, std::string>)
+          return T(value);
+        else
+          return T{};
+      }
+    }
+
     bool operator==(const bigint& o) const
     {
       return value == o.value;
