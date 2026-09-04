@@ -30,6 +30,7 @@
 #define NP_BIGINT_HPP
 
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include "api_macros.hpp"
@@ -78,15 +79,24 @@ namespace np
   {
     std::string value = "0";
     bigint() = default;
-    bigint(long long v) : value(std::to_string(v))
+    template <typename T>
+      requires(std::is_integral_v<T> && !std::is_same_v<T, bool>)
+    bigint(T v) : value(std::to_string(v))
     {
     }
     bigint(const std::string& s) : value(s)
     {
     }
-    bigint(const char* s) : value(s)
+    bigint(std::string_view s) : value(s)
     {
     }
+    bigint(const char* s) : value(s ? s : "0")
+    {
+    }
+    bigint(char* s) : value(s ? s : "0")
+    {
+    }
+    bigint(std::nullptr_t) = delete;
     bool operator==(const bigint& o) const
     {
       return value == o.value;
@@ -98,6 +108,18 @@ namespace np
     bool operator>(const bigint& o) const
     {
       return o < *this;
+    }
+    bool operator<=(const bigint& o) const
+    {
+      return !(o < *this);
+    }
+    bool operator>=(const bigint& o) const
+    {
+      return !(*this < o);
+    }
+    bool operator!=(const bigint& o) const
+    {
+      return !(*this == o);
     }
   };
   using mpz_bigint = bigint;
@@ -200,6 +222,34 @@ namespace np
   {
     return a;
   }
+  // compound ops only for fallback (cpp_int already has member ops)
+#if !NP_HAS_CPP_INT
+  inline bigint& operator+=(bigint& a, const bigint& b)
+  {
+    a = a + b;
+    return a;
+  }
+  inline bigint& operator-=(bigint& a, const bigint& b)
+  {
+    a = a - b;
+    return a;
+  }
+  inline bigint& operator*=(bigint& a, const bigint& b)
+  {
+    a = a * b;
+    return a;
+  }
+  inline bigint& operator/=(bigint& a, const bigint& b)
+  {
+    a = a / b;
+    return a;
+  }
+  inline bigint& operator%=(bigint& a, const bigint& b)
+  {
+    a = a % b;
+    return a;
+  }
+#endif
 
   /**
    * @brief Constexpr auto-promotion to bigint.
