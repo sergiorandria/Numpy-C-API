@@ -248,12 +248,74 @@ namespace np
      *
      * Reference: pqc.hpp:secure_zero, NIST FIPS 203/204, libsodium
      */
-    template <typename T>
-    struct secure_buffer
+    // ── Centralized secure allocator (C++20, header-only, production) ──────────
+  // Uses mlock/munlock + MADV_DONTDUMP + secure_zero on deallocate.
+  // Meets AGENTS.md:2 RAII, no raw new/delete, consteval where possible.
+  template <typename T>
+  struct secure_allocator
+  {
+    using value_type = T;
+    using propagate_on_container_move_assignment = std::true_type;
+    secure_allocator() noexcept = default;
+    template <typename U>
+    constexpr secure_allocator(const secure_allocator<U>&) noexcept
     {
-      std::vector<T> storage;
-      bool locked_ = false;
-      bool no_dump_ = false;
+    }
+    NP_NODISCARD T* allocate(std::size_t n)
+    {
+      if (n == 0) return nullptr;
+      T* p = std::allocator<T>{}.allocate(n);
+      std::size_t bytes = n * sizeof(T);
+      detail::secure_mlock(p, bytes);
+      detail::secure_no_dump(p, bytes);
+      return p;
+    }
+    void deallocate(T* p, std::size_t n) noexcept
+    {
+      if (!p) return;
+      std::size_t bytes = n * sizeof(T);
+      secure_zero(p, bytes);
+      detail::secure_allow_dump(p, bytes);
+      detail::secure_munlock(p, bytes);
+      std::allocator<T>{}.deallocate(p, n);
+    }
+    template <typename U>
+    struct rebind
+    {
+      using other = secure_allocator<U>;
+    };
+  };
+  template <typename T, typename U>
+  NP_NODISCARD bool operator==(const secure_allocator<T>&, const secure_allocator<U>&) noexcept
+  {
+    return true;
+  }
+  template <typename T, typename U>
+  NP_NODISCARD bool operator!=(const secure_allocator<T>&, const secure_allocator<U>&) noexcept
+  {
+    return false;
+  }
+
+  // Constant-time trait (for `if constexpr` dispatch instead of #ifdef)
+  struct ct_trait
+  {
+    static constexpr bool enabled = true;
+    static constexpr bool use_secure = true;
+  };
+
+  // Central switch for NP_USE_SECURE_IMPL — use if constexpr(secure_enabled) instead of #ifdef
+  #ifdef NP_USE_SECURE_IMPL
+  inline constexpr bool secure_enabled = true;
+  #else
+  inline constexpr bool secure_enabled = false;
+  #endif
+
+  template <typename T>
+  struct secure_buffer
+  {
+    std::vector<T> storage;
+    bool locked_ = false;
+    bool no_dump_ = false;
 
     private:
       void isolate() noexcept

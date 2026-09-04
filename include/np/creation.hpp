@@ -29,13 +29,10 @@
 
 #include "api_macros.hpp"
 #include "ndarray.hpp"
+#include "pqc.hpp"
 #include <map>
 #include <type_traits>
 #include <variant>
-
-#ifdef NP_USE_SECURE_IMPL
-#include "pqc.hpp"
-#endif
 
 namespace np
 {
@@ -72,22 +69,25 @@ namespace np
         "storage. "
         "Define cxx_to_np_type specialization or use dtype::object_ explicitly");
     dtype d = (dtype_of<T> == dtype::void_ ? dtype::object_ : dtype_of<T>);
-#ifdef NP_USE_SECURE_IMPL
-    // Secure path: use secure_buffer + secure_zero to guarantee
-    // constant-time, non-elided zeroing (PQC-hardened). For trivially
-    // copyable types byte-zero == T{0}; for others fall back to fill
-    // then barrier. Reference: pqc.hpp:secure_zero, pqc.hpp:secure_buffer
-    ndarray<T> out(shape, d, T{0});
-    out.secure_zero();
-    if constexpr (!std::is_trivially_copyable_v<T>)
+    if constexpr (pqc::secure_enabled)
     {
-      out.fill(T{0});
-      pqc::ct_barrier();
+      // Secure path: use secure_buffer + secure_zero to guarantee
+      // constant-time, non-elided zeroing (PQC-hardened). For trivially
+      // copyable types byte-zero == T{0}; for others fall back to fill
+      // then barrier. Reference: pqc.hpp:secure_zero, pqc.hpp:secure_buffer
+      ndarray<T> out(shape, d, T{0});
+      out.secure_zero();
+      if constexpr (!std::is_trivially_copyable_v<T>)
+      {
+        out.fill(T{0});
+        pqc::ct_barrier();
+      }
+      return out;
     }
-    return out;
-#else
-    return ndarray<T>(shape, d, T{0});
-#endif
+    else
+    {
+      return ndarray<T>(shape, d, T{0});
+    }
   }
 
 #ifdef __NUMPY_RANGES_CONTAINER_CONCEPT
@@ -103,37 +103,40 @@ namespace np
     std::vector<int> s{std::ranges::begin(shape), std::ranges::end(shape)};
     if (s.empty())
       throw std::invalid_argument("zeros: empty shape");
-#ifdef NP_USE_SECURE_IMPL
-    // Secure path: allocate via secure_buffer then harden with secure_zero.
-    // Mirrors numpy zeros but guarantees volatile zeroing not optimized away.
-    if constexpr (std::is_same_v<T, bool>)
+    if constexpr (pqc::secure_enabled)
     {
-      ndarray<T> out(s, dtype_of<T>, false);
-      out.secure_zero();
-      return out;
+      // Secure path: allocate via secure_buffer then harden with secure_zero.
+      // Mirrors numpy zeros but guarantees volatile zeroing not optimized away.
+      if constexpr (std::is_same_v<T, bool>)
+      {
+        ndarray<T> out(s, dtype_of<T>, false);
+        out.secure_zero();
+        return out;
+      }
+      else
+      {
+        std::size_t n = 1;
+        for (int d : s)
+          n *= static_cast<std::size_t>(d);
+        // Isolated secure_buffer: locked + MADV_DONTDUMP, wiped on destruction
+        // and slack. Explicit secure_zero keeps volatile + fence in creation.
+        pqc::secure_buffer<T> sbuf(n);
+        if (n != 0)
+          pqc::secure_zero(sbuf.get().data(), n * sizeof(T));
+        if constexpr (!std::is_trivially_copyable_v<T>)
+        {
+          std::fill(sbuf.get().begin(), sbuf.get().end(), T{0});
+          pqc::ct_barrier();
+        }
+        // release() de-isolates (munlock + allow dump) and hands off ownership
+        // to ndarray; sbuf is left empty and will not double-unlock.
+        return ndarray<T>::from_data(s, sbuf.release());
+      }
     }
     else
     {
-      std::size_t n = 1;
-      for (int d : s)
-        n *= static_cast<std::size_t>(d);
-      // Isolated secure_buffer: locked + MADV_DONTDUMP, wiped on destruction
-      // and slack. Explicit secure_zero keeps volatile + fence in creation.
-      pqc::secure_buffer<T> sbuf(n);
-      if (n != 0)
-        pqc::secure_zero(sbuf.get().data(), n * sizeof(T));
-      if constexpr (!std::is_trivially_copyable_v<T>)
-      {
-        std::fill(sbuf.get().begin(), sbuf.get().end(), T{0});
-        pqc::ct_barrier();
-      }
-      // release() de-isolates (munlock + allow dump) and hands off ownership
-      // to ndarray; sbuf is left empty and will not double-unlock.
-      return ndarray<T>::from_data(s, sbuf.release());
+      return ndarray<T>(s, dtype_of<T>, T{0});
     }
-#else
-    return ndarray<T>(s, dtype_of<T>, T{0});
-#endif
   }
 
   template <typename T = double>
@@ -142,31 +145,34 @@ namespace np
     std::vector<int> s(shape);
     if (s.empty())
       throw std::invalid_argument("zeros: empty shape");
-#ifdef NP_USE_SECURE_IMPL
-    if constexpr (std::is_same_v<T, bool>)
+    if constexpr (pqc::secure_enabled)
     {
-      ndarray<T> out(s, dtype_of<T>, false);
-      out.secure_zero();
-      return out;
+      if constexpr (std::is_same_v<T, bool>)
+      {
+        ndarray<T> out(s, dtype_of<T>, false);
+        out.secure_zero();
+        return out;
+      }
+      else
+      {
+        std::size_t n = 1;
+        for (int d : s)
+          n *= static_cast<std::size_t>(d);
+        pqc::secure_buffer<T> sbuf(n);
+        if (n != 0)
+          pqc::secure_zero(sbuf.get().data(), n * sizeof(T));
+        if constexpr (!std::is_trivially_copyable_v<T>)
+        {
+          std::fill(sbuf.get().begin(), sbuf.get().end(), T{0});
+          pqc::ct_barrier();
+        }
+        return ndarray<T>::from_data(s, sbuf.release());
+      }
     }
     else
     {
-      std::size_t n = 1;
-      for (int d : s)
-        n *= static_cast<std::size_t>(d);
-      pqc::secure_buffer<T> sbuf(n);
-      if (n != 0)
-        pqc::secure_zero(sbuf.get().data(), n * sizeof(T));
-      if constexpr (!std::is_trivially_copyable_v<T>)
-      {
-        std::fill(sbuf.get().begin(), sbuf.get().end(), T{0});
-        pqc::ct_barrier();
-      }
-      return ndarray<T>::from_data(s, sbuf.release());
+      return ndarray<T>(s, dtype_of<T>, T{0});
     }
-#else
-    return ndarray<T>(s, dtype_of<T>, T{0});
-#endif
   }
 
   template <typename T = double, std::size_t N>
@@ -396,18 +402,21 @@ namespace np
   NP_API template <typename T>
   NP_NODISCARD auto zeros_like(const ndarray<T>& a) -> ndarray<T>
   {
-#ifdef NP_USE_SECURE_IMPL
-    ndarray<T> out(a.shape, a.type, T{0});
-    out.secure_zero();
-    if constexpr (!std::is_trivially_copyable_v<T>)
+    if constexpr (pqc::secure_enabled)
     {
-      out.fill(T{0});
-      pqc::ct_barrier();
+      ndarray<T> out(a.shape, a.type, T{0});
+      out.secure_zero();
+      if constexpr (!std::is_trivially_copyable_v<T>)
+      {
+        out.fill(T{0});
+        pqc::ct_barrier();
+      }
+      return out;
     }
-    return out;
-#else
-    return ndarray<T>(a.shape, a.type, T{0});
-#endif
+    else
+    {
+      return ndarray<T>(a.shape, a.type, T{0});
+    }
   }
 
   /** @brief Ones with the same shape as `a`.
