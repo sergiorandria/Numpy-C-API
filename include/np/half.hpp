@@ -73,15 +73,19 @@ namespace np
   NP_NODISCARD inline ndarray<half> quantize_half(const ndarray<float>& a)
   {
     ndarray<half> out(a.shape);
+    auto& od = out.data();
+    auto& ad = a.data();
     for (size_t i = 0; i < a.size(); ++i)
-      out[i] = half(a[i]);
+      od[i] = half(ad[i]);
     return out;
   }
   NP_NODISCARD inline ndarray<float> dequantize_half(const ndarray<half>& a)
   {
     ndarray<float> out(a.shape);
+    auto& od = out.data();
+    auto& ad = a.data();
     for (size_t i = 0; i < a.size(); ++i)
-      out[i] = float(a[i]);
+      od[i] = float(ad[i]);
     return out;
   }
 
