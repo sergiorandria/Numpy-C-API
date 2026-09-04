@@ -27,9 +27,18 @@
 #include "api_macros.hpp"
 #include "gpu.hpp"
 #include "half.hpp"
-#include "linalg.hpp"
 #include "ndarray.hpp"
 #include "simd.hpp"
+
+// Forward decl to break header cycle (tensor_core ↔ linalg via np.hpp)
+// linalg::matmul is only needed for fallback; include linalg.hpp in .cpp or
+// after this header in np.hpp. For header-only, we forward declare.
+namespace np::linalg
+{
+  template <typename T, typename U>
+  auto matmul(const ndarray<T>& a, const ndarray<U>& b)
+      -> ndarray<std::common_type_t<T, U>>;
+}
 
 #include <algorithm>
 #include <array>
@@ -914,10 +923,10 @@ namespace np::tensor
   }
 
   // ── FP16 / BF16 matmul via Hopper (GPU tensor cores) ───────────────────
+  // Use np::half (actual _Float16) not np::float16 tag (dtype_tag) — keeps is_half correct
   NP_NODISCARD inline ndarray<float> matmul_fp16(
-      const ndarray<float16>& a, const ndarray<float16>& b)
+      const ndarray<half>& a, const ndarray<half>& b)
   {
-    // Convert to float via manual loop (avoids astype issues with float16 tag vs half)
     ndarray<float> af(a.shape), bf(b.shape);
     for (size_t i = 0; i < a.size(); ++i) af.data()[i] = static_cast<float>(a.data()[i]);
     for (size_t i = 0; i < b.size(); ++i) bf.data()[i] = static_cast<float>(b.data()[i]);
