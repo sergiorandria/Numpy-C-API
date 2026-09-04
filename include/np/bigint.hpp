@@ -132,7 +132,74 @@ namespace np
     };
     template <typename A, typename B>
     using common_bigint_t = typename common_bigint<A, B>::type;
+
   } // namespace detail
+
+  // ——— bigint arithmetic (ADL-visible in np) ———
+  inline bigint operator+(const bigint& a, const bigint& b)
+  {
+#if NP_HAS_CPP_INT
+    bigint r = a;
+    r += b;
+    return r;
+#else
+    return bigint(std::to_string(std::stoll(a.value) + std::stoll(b.value)));
+#endif
+  }
+  inline bigint operator-(const bigint& a, const bigint& b)
+  {
+#if NP_HAS_CPP_INT
+    bigint r = a;
+    r -= b;
+    return r;
+#else
+    return bigint(std::to_string(std::stoll(a.value) - std::stoll(b.value)));
+#endif
+  }
+  inline bigint operator*(const bigint& a, const bigint& b)
+  {
+#if NP_HAS_CPP_INT
+    bigint r = a;
+    r *= b;
+    return r;
+#else
+    return bigint(std::to_string(std::stoll(a.value) * std::stoll(b.value)));
+#endif
+  }
+  inline bigint operator/(const bigint& a, const bigint& b)
+  {
+#if NP_HAS_CPP_INT
+    bigint r = a;
+    r /= b;
+    return r;
+#else
+    return bigint(std::to_string(std::stoll(a.value) / std::stoll(b.value)));
+#endif
+  }
+  inline bigint operator%(const bigint& a, const bigint& b)
+  {
+#if NP_HAS_CPP_INT
+    bigint r = a;
+    r %= b;
+    return r;
+#else
+    return bigint(std::to_string(std::stoll(a.value) % std::stoll(b.value)));
+#endif
+  }
+  inline bigint operator-(const bigint& a)
+  {
+#if NP_HAS_CPP_INT
+    bigint r = a;
+    r = -r;
+    return r;
+#else
+    return bigint(std::to_string(-std::stoll(a.value)));
+#endif
+  }
+  inline bigint operator+(const bigint& a)
+  {
+    return a;
+  }
 
   /**
    * @brief Constexpr auto-promotion to bigint.
