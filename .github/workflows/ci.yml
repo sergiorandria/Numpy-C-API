@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  ctest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build -j8
+      - name: Test 38/38
+        run: ctest --test-dir build --output-on-failure
+      - name: Bench hardware (smoke)
+        run: ./build/tests/bench_hardware || true
+
+  isabelle:
+    runs-on: ubuntu-latest
+    container: makarius/isabelle:Isabelle2025-2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build NumpyCpp session
+        run: |
+          export PATH="/usr/local/Isabelle/bin:/opt/Isabelle/bin:$PATH"
+          if ! command -v isabelle >/dev/null 2>&1; then
+            ISABIN=$(find / -name isabelle -type f 2>/dev/null | head -n1)
+            if [ -n "$ISABIN" ]; then export PATH="$(dirname "$ISABIN"):$PATH"; fi
+          fi
+          isabelle build -D isabelle -v
+
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build examples
+        run: |
+          g++ -std=c++20 -I include examples/neuromorphic_snn.cpp -o /tmp/neuromorphic_snn && /tmp/neuromorphic_snn
+          g++ -std=c++20 -I include examples/hbm_matmul.cpp -o /tmp/hbm_matmul && /tmp/hbm_matmul
+          g++ -std=c++20 -I include examples/padic_hensel.cpp -o /tmp/padic_hensel && /tmp/padic_hensel
+          g++ -std=c++20 -I include examples/quantum_photonics.cpp -o /tmp/quantum_photonics && /tmp/quantum_photonics

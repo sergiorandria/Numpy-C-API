@@ -11,6 +11,8 @@
 #ifndef NP_DETAIL_PROXY_HPP
 #define NP_DETAIL_PROXY_HPP
 
+#include "../api_macros.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -213,16 +215,21 @@ namespace np
 
     // Fix for cpp-repl: ProxyBase with types that have convert_to (e.g. bigint)
     template <typename U>
-    requires requires { std::declval<T>().template convert_to<U>(); }
-    auto convert_to() const {
+      requires requires { std::declval<T>().template convert_to<U>(); }
+    auto convert_to() const
+    {
       return static_cast<T>(*this).template convert_to<U>();
     }
 
     // Support ap * a[n] where a[n] is ProxyBase
-    friend auto operator*(const T& lhs, const Self& rhs) -> decltype(lhs * std::declval<T>()) {
+    friend auto operator*(const T& lhs, const Self& rhs)
+        -> decltype(lhs * std::declval<T>())
+    {
       return lhs * static_cast<T>(rhs);
     }
-    friend auto operator*(const Self& lhs, const T& rhs) -> decltype(std::declval<T>() * rhs) {
+    friend auto operator*(const Self& lhs, const T& rhs)
+        -> decltype(std::declval<T>() * rhs)
+    {
       return static_cast<T>(lhs) * rhs;
     }
 

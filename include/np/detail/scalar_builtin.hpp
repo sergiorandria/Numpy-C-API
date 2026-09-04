@@ -19,6 +19,8 @@
 #ifndef NP_DETAIL_SCALAR_BUILTIN_HPP
 #define NP_DETAIL_SCALAR_BUILTIN_HPP
 
+#include "../api_macros.hpp"
+
 #include <complex>
 #include <type_traits>
 #include <utility>

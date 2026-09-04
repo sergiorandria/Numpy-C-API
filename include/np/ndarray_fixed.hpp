@@ -18,6 +18,8 @@
 #ifndef NP_NDARRAY_FIXED_HPP
 #define NP_NDARRAY_FIXED_HPP
 
+#include "api_macros.hpp"
+
 #include <array>
 #include <bit>
 #include <concepts>
@@ -986,9 +988,9 @@ namespace np
 #define NP_FIXED_BINOP(op, stdop)                                                        \
   template <typename L, typename R>                                                      \
     requires(                                                                            \
-        (detail::expr::fixed_source<L> || std::is_arithmetic_v<L>)                       \
-        && (detail::expr::fixed_source<R> || std::is_arithmetic_v<R>)                    \
-        && !(std::is_arithmetic_v<L> && std::is_arithmetic_v<R>)                         \
+        (detail::expr::fixed_source<L> || std::is_arithmetic_v<L> || detail::is_bigint_v<L>) \
+        && (detail::expr::fixed_source<R> || std::is_arithmetic_v<R> || detail::is_bigint_v<R>) \
+        && !( (std::is_arithmetic_v<L> || detail::is_bigint_v<L>) && (std::is_arithmetic_v<R> || detail::is_bigint_v<R>)) \
         && detail::fixed::binop_ok<L, R>)                                                \
   constexpr auto operator op(const L& l, const R& r)                                     \
   {                                                                                      \

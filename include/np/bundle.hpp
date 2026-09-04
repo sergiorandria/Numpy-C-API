@@ -199,7 +199,7 @@ namespace np::bundle
         C.stiefel.assign(2 * cpx_rank + 1, 0);
         C.stiefel[0] = 1;
         for (int k = 1; k <= cpx_rank; ++k)
-          C.stiefel[2 * k] = (int)(detail::binom_ll_small(cp_n + 1, k) % 2);
+          C.stiefel[2 * k] = static_cast<int>(detail::binom_ll_small(cp_n + 1, k) % 2);
         // Pontryagin from Chern: p = c·\bar c
         C.pontryagin.assign(cpx_rank + 1, bigint(0));
         C.pontryagin[0] = 1;
@@ -217,7 +217,7 @@ namespace np::bundle
           rp_n = std::stoi(bn.substr(pos + 2));
         C.stiefel.assign(rp_n + 1, 0);
         for (int k = 0; k <= rp_n; ++k)
-          C.stiefel[k] = (int)(detail::binom_ll_small(rp_n + 1, k) % 2);
+          C.stiefel[k] = static_cast<int>(detail::binom_ll_small(rp_n + 1, k) % 2);
         C.chern = {bigint(1)};
         if (rp_n % 2 == 1)
           C.euler = 0;

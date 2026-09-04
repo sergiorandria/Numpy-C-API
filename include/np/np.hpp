@@ -11,6 +11,7 @@
 #define NP_NP_HPP
 
 #include "api_macros.hpp"
+#include "bigint.hpp"
 #include "simd.hpp"
 #include "bitwise.hpp"
 #include "char.hpp"
@@ -43,6 +44,9 @@
 #include "indexing.hpp"
 #include "other.hpp"
 #include "pqc.hpp"
+#include "half.hpp"
+#include "gpu.hpp"
+#include "powerful.hpp"
 #include "threadpool.hpp"
 #include "bigint.hpp"
 #include "homology.hpp"
@@ -64,6 +68,7 @@
 #include "photonics.hpp"
 #include "quantum.hpp"
 #include "accelerator.hpp"
+#include "physics.hpp"
 #include "random.hpp"
 
 // Suppress -Wbraced-scalar-init for NDProxy braced-init (e.g.

@@ -13,7 +13,9 @@ int main()
   auto cpu = TensorFactory::cpu();
   test::check(cpu->name() == "CPU", "CPU backend");
   auto hop = TensorFactory::hopper();
-  test::check(hop->name() == "Hopper-FP8", "Hopper");
+  test::check(
+      hop->name() == "Hopper-FP8" || hop->name() == "Blackwell-FP4",
+      "Hopper");
   auto amx = TensorFactory::amx();
   test::check(amx->name() == "AMX", "AMX");
   QuantizedTensor<float> qt{a, 0.5f, TensorDtype::FP8};

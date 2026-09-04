@@ -12,6 +12,7 @@
 #ifndef NP_SIMD_HPP
 #define NP_SIMD_HPP
 
+#include "api_macros.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -1391,6 +1392,110 @@ namespace np
       pqc::ct_barrier();
       sub_vectorized(a, b, out, n);
       pqc::ct_barrier();
+    }
+
+    // FMA: out[i] += a * b[i] with broadcast scalar a (for matmul inner loop)
+    template <typename T>
+    inline void fma_vectorized(const T* b, T a, T* out, std::size_t n)
+    {
+      if constexpr (std::is_same_v<T, float>)
+      {
+#if defined(NP_SIMD_AVX512)
+        std::size_t i = 0;
+        __m512 va = _mm512_set1_ps(a);
+        for (; i + 16 <= n; i += 16)
+        {
+          __m512 vb = _mm512_loadu_ps(b + i);
+          __m512 vo = _mm512_loadu_ps(out + i);
+#if defined(__FMA__)
+          __m512 vr = _mm512_fmadd_ps(va, vb, vo);
+#else
+          __m512 vr = _mm512_add_ps(vo, _mm512_mul_ps(va, vb));
+#endif
+          _mm512_storeu_ps(out + i, vr);
+        }
+        for (; i < n; ++i) out[i] += a * b[i];
+#elif defined(NP_SIMD_AVX)
+        std::size_t i = 0;
+        __m256 va = _mm256_set1_ps(a);
+        for (; i + 8 <= n; i += 8)
+        {
+          __m256 vb = _mm256_loadu_ps(b + i);
+          __m256 vo = _mm256_loadu_ps(out + i);
+#if defined(__FMA__)
+          __m256 vr = _mm256_fmadd_ps(va, vb, vo);
+#else
+          __m256 vr = _mm256_add_ps(vo, _mm256_mul_ps(va, vb));
+#endif
+          _mm256_storeu_ps(out + i, vr);
+        }
+        for (; i < n; ++i) out[i] += a * b[i];
+#elif defined(NP_SIMD_SSE2)
+        std::size_t i = 0;
+        __m128 va = _mm_set1_ps(a);
+        for (; i + 4 <= n; i += 4)
+        {
+          __m128 vb = _mm_loadu_ps(b + i);
+          __m128 vo = _mm_loadu_ps(out + i);
+          __m128 vr = _mm_add_ps(vo, _mm_mul_ps(va, vb));
+          _mm_storeu_ps(out + i, vr);
+        }
+        for (; i < n; ++i) out[i] += a * b[i];
+#else
+        for (std::size_t i = 0; i < n; ++i) out[i] += a * b[i];
+#endif
+      }
+      else if constexpr (std::is_same_v<T, double>)
+      {
+#if defined(NP_SIMD_AVX512)
+        std::size_t i = 0;
+        __m512d va = _mm512_set1_pd(a);
+        for (; i + 8 <= n; i += 8)
+        {
+          __m512d vb = _mm512_loadu_pd(b + i);
+          __m512d vo = _mm512_loadu_pd(out + i);
+#if defined(__FMA__)
+          __m512d vr = _mm512_fmadd_pd(va, vb, vo);
+#else
+          __m512d vr = _mm512_add_pd(vo, _mm512_mul_pd(va, vb));
+#endif
+          _mm512_storeu_pd(out + i, vr);
+        }
+        for (; i < n; ++i) out[i] += a * b[i];
+#elif defined(NP_SIMD_AVX)
+        std::size_t i = 0;
+        __m256d va = _mm256_set1_pd(a);
+        for (; i + 4 <= n; i += 4)
+        {
+          __m256d vb = _mm256_loadu_pd(b + i);
+          __m256d vo = _mm256_loadu_pd(out + i);
+#if defined(__FMA__)
+          __m256d vr = _mm256_fmadd_pd(va, vb, vo);
+#else
+          __m256d vr = _mm256_add_pd(vo, _mm256_mul_pd(va, vb));
+#endif
+          _mm256_storeu_pd(out + i, vr);
+        }
+        for (; i < n; ++i) out[i] += a * b[i];
+#elif defined(NP_SIMD_SSE2)
+        std::size_t i = 0;
+        __m128d va = _mm_set1_pd(a);
+        for (; i + 2 <= n; i += 2)
+        {
+          __m128d vb = _mm_loadu_pd(b + i);
+          __m128d vo = _mm_loadu_pd(out + i);
+          __m128d vr = _mm_add_pd(vo, _mm_mul_pd(va, vb));
+          _mm_storeu_pd(out + i, vr);
+        }
+        for (; i < n; ++i) out[i] += a * b[i];
+#else
+        for (std::size_t i = 0; i < n; ++i) out[i] += a * b[i];
+#endif
+      }
+      else
+      {
+        for (std::size_t i = 0; i < n; ++i) out[i] += a * b[i];
+      }
     }
 
   } // namespace simd

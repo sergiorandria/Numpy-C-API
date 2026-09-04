@@ -13,6 +13,7 @@
 #ifndef NP_VARIETY_HPP
 #define NP_VARIETY_HPP
 
+#include "api_macros.hpp"
 #include "manifold.hpp"
 
 #endif // NP_VARIETY_HPP

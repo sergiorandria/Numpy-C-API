@@ -20,6 +20,8 @@
 #ifndef NP_DETAIL_SCALAR_CUSTOM_HPP
 #define NP_DETAIL_SCALAR_CUSTOM_HPP
 
+#include "../api_macros.hpp"
+
 #include <type_traits>
 #include <utility>
 

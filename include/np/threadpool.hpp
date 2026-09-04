@@ -41,9 +41,12 @@
 
 #ifndef _WIN32
 #include <unistd.h>
+#include <pthread.h>
+#include <sched.h>
 #endif
 
 #include "api_macros.hpp"
+#include <iostream>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -157,12 +160,25 @@ namespace np
        */
       NP_HIDDEN inline void __np_pin_thread_windows(std::size_t idx) noexcept
       {
-        // Distribute workers across processor groups if needed
         const DWORD_PTR mask = static_cast<DWORD_PTR>(1)
             << (idx % (sizeof(DWORD_PTR) * 8));
-        // Best-effort: ignore failures (e.g., insufficient privilege)
         SetThreadAffinityMask(GetCurrentThread(), mask);
         SetThreadIdealProcessor(GetCurrentThread(), static_cast<DWORD>(idx % 64));
+      }
+#else
+      NP_HIDDEN inline void __np_pin_thread_linux(std::size_t idx) noexcept
+      {
+#if defined(__linux__) && defined(NP_ENABLE_POWERFUL)
+        cpu_set_t set;
+        CPU_ZERO(&set);
+        std::size_t n = std::thread::hardware_concurrency();
+        if (n == 0)
+          n = 8;
+        CPU_SET(idx % n, &set);
+        pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
+#else
+        (void)idx;
+#endif
       }
 #endif
 
@@ -615,7 +631,7 @@ namespace np
   private:
     struct __np_ThreadPoolData
     {
-      std::vector<std::thread> workers;
+      std::vector<std::jthread> workers;
       std::vector<std::unique_ptr<detail::WorkStealingDeque<Task>>> queues;
       std::atomic<bool> done{false};
       std::atomic<std::size_t> next_queue{0};
@@ -623,7 +639,7 @@ namespace np
       std::condition_variable cv;
     };
 
-    __np_ThreadPoolData* __np_impl = nullptr;
+    std::unique_ptr<__np_ThreadPoolData> __np_impl;
 
     // Pointers to __np internals
     void (*__np_ctor_ptr)(ThreadPool*, std::size_t);
@@ -665,7 +681,7 @@ namespace np
       {
         n_threads = detail::__np::__np_adaptive_thread_count();
       }
-      self->__np_impl = new __np_ThreadPoolData();
+      self->__np_impl = std::make_unique<__np_ThreadPoolData>();
       self->__np_impl->queues.reserve(n_threads);
       for (std::size_t i = 0; i < n_threads; ++i)
       {
@@ -675,8 +691,12 @@ namespace np
       self->__np_impl->workers.reserve(n_threads);
       for (std::size_t i = 0; i < n_threads; ++i)
       {
-        self->__np_impl->workers.emplace_back([self, i]
-                                              { self->__np_worker_loop_ptr(self, i); });
+        self->__np_impl->workers.emplace_back(
+            [self, i](std::stop_token st) {
+              // jthread cooperative cancellation: check st.stop_requested() inside loop
+              (void)st;
+              self->__np_worker_loop_ptr(self, i);
+            });
       }
     }
 
@@ -705,16 +725,14 @@ namespace np
             std::lock_guard<std::mutex> lk(self->__np_impl->cv_m);
             self->__np_impl->cv.notify_all();
           }
+          // jthread joins automatically; request_stop for cooperative cancellation
           for (auto& w : self->__np_impl->workers)
-          {
-            if (w.joinable())
-            {
-              w.join();
-            }
-          }
+            w.request_stop();
+          // jthread destructor will join, but explicit wait ensures done
+          for (auto& w : self->__np_impl->workers)
+            if (w.joinable()) w.join();
         }
-        delete self->__np_impl;
-        self->__np_impl = nullptr;
+        self->__np_impl.reset();
       }
     }
 
@@ -844,6 +862,8 @@ namespace np
     {
 #ifdef _WIN32
       detail::__np::__np_pin_thread_windows(idx);
+#else
+      detail::__np::__np_pin_thread_linux(idx);
 #endif
       constexpr int kSpinIters = 64;
       while (!self->__np_impl->done.load(std::memory_order_acquire))
@@ -867,8 +887,10 @@ namespace np
           {
             (*job)();
           }
-          catch (...)
-          {
+          catch (...) {
+
+            std::cerr << "[ThreadPool] task threw unknown exception (suppressed)\n";
+
           }
           continue;
         }
@@ -899,8 +921,10 @@ namespace np
           {
             (*job)();
           }
-          catch (...)
-          {
+          catch (...) {
+
+            std::cerr << "[ThreadPool] task threw unknown exception (suppressed)\n";
+
           }
           continue;
         }

@@ -5,5 +5,7 @@ session NumpyCpp = HOL +
     Differential_Verification
     Lattice_Verification
     Padic_Verification
+    Hardware_Verification
+    Spectral_Verification
   document_files
     "root.tex"

@@ -22,6 +22,8 @@
 #ifndef NP_DETAIL_EXPR_HPP
 #define NP_DETAIL_EXPR_HPP
 
+#include "../api_macros.hpp"
+
 #include <array>
 #include <concepts>
 #include <cstddef>

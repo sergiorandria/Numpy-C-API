@@ -28,6 +28,7 @@
 #include "../api_macros.hpp"
 #include "../dtype.hpp"
 #include "../exceptions.hpp"
+#include "../gpu.hpp"
 #include "../ndarray.hpp"
 
 #ifdef NP_USE_THREADING
@@ -393,6 +394,17 @@ namespace np::fft
           }
         }
         return;
+      }
+      // GPU offload for large N (powerful workstation + GPU)
+      if (n >= 8192 && ::np::gpu::is_available())
+      {
+        std::vector<Cplx> out(n);
+        if (::np::gpu::try_fft(a.data(), out.data(), n, inverse))
+        {
+          for (std::size_t i = 0; i < n; ++i)
+            a[i] = out[i] * scale;
+          return;
+        }
       }
       if ((n & (n - 1)) == 0)
       {

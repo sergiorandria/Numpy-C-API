@@ -69,16 +69,28 @@
 #include "ndarray.hpp"
 
 #if defined(NP_ENABLE_LLVM) && __has_include(<llvm/IR/IRBuilder.h>)
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/GenericValue.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/TargetSelect.h>
+#if __has_include(<llvm/ExecutionEngine/Orc/LLJIT.h>)
+#include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
+#define NP_HAS_LLVM_ORC 1
+#else
+#define NP_HAS_LLVM_ORC 0
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/ExecutionEngine/GenericValue.h>
+#endif
 #define NP_HAS_LLVM_JIT 1
 #else
 #define NP_HAS_LLVM_JIT 0
+#ifndef NP_HAS_LLVM_ORC
+#define NP_HAS_LLVM_ORC 0
+#endif
 #endif
 
 namespace np::differential
@@ -305,7 +317,7 @@ namespace np::differential
 
   struct Node
   {
-    enum Type
+    enum class Type
     {
       Var,
       Const,
@@ -323,7 +335,7 @@ namespace np::differential
       Asin,
       Acos,
       Atan
-    } type = Const;
+    } type = Type::Const;
     int var = -1;
     f64_t cval = 0;
     NodePtr left, right, child;
@@ -450,21 +462,411 @@ namespace np::differential
   };
 
 #if NP_HAS_LLVM_JIT
+  namespace detail_llvm
+  {
+    // Shared JIT state — one LLJIT/MCJIT per process, thread-safe cache
+    struct LLVMJit
+    {
+#if NP_HAS_LLVM_ORC
+      std::unique_ptr<llvm::orc::LLJIT> jit;
+#else
+      // Fallback ExecutionEngine path (legacy MCJIT)
+      std::unique_ptr<llvm::LLVMContext> ctx_holder;
+      llvm::ExecutionEngine* ee = nullptr;
+      std::unique_ptr<llvm::Module> mod_holder;
+#endif
+      // Content-based cache to avoid address reuse collisions (Node* may be freed/reused)
+      std::unordered_map<std::string, void*> cache;
+      std::unordered_map<std::string, void*> sym_cache;
+      std::mutex mtx;
+      bool initialized = false;
+
+      // Content hash / string key for Node — stable across allocations
+      static std::string node_key(const Node& n)
+      {
+        std::string s;
+        s.reserve(64);
+        std::function<void(const Node&)> dfs = [&](const Node& x) {
+          s += std::to_string(static_cast<int>(x.type)) + ":";
+          if (x.type == Node::Type::Const)
+            s += std::to_string(x.cval) + ";";
+          else if (x.type == Node::Type::Var)
+            s += std::to_string(x.var) + ";";
+          if (x.left) dfs(*x.left);
+          if (x.right) dfs(*x.right);
+          if (x.child) dfs(*x.child);
+          s += "|";
+        };
+        dfs(n);
+        return s;
+      }
+      static std::string node_key_hash(const Node& n)
+      {
+        // Use string key directly; could hash to size_t but string is collision-free
+        return node_key(n);
+      }
+
+      LLVMJit()
+      {
+        std::call_once(init_flag, []() {
+          llvm::InitializeNativeTarget();
+          llvm::InitializeNativeTargetAsmPrinter();
+          llvm::InitializeNativeTargetAsmParser();
+          llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
+        });
+#if NP_HAS_LLVM_ORC
+        auto jit_exp = llvm::orc::LLJITBuilder().create();
+        if (jit_exp)
+          jit = std::move(*jit_exp);
+#else
+        ctx_holder = std::make_unique<llvm::LLVMContext>();
+        mod_holder = std::make_unique<llvm::Module>("np_vm", *ctx_holder);
+#endif
+        initialized = (jit != nullptr)
+#if !NP_HAS_LLVM_ORC
+            || (ee != nullptr || mod_holder != nullptr)
+#endif
+            ;
+      }
+
+      static std::once_flag init_flag;
+
+      // Emit LLVM IR for Node tree — recursive, handles all Node::Type
+      static llvm::Value*
+      emit_ir(const Node& n, llvm::IRBuilder<>& b, llvm::Value* args_ptr, llvm::Module& mod)
+      {
+        llvm::LLVMContext& ctx = b.getContext();
+        (void)ctx;
+        switch (n.type)
+        {
+          case Node::Type::Const:
+            return llvm::ConstantFP::get(b.getDoubleTy(), n.cval);
+          case Node::Type::Var:
+          {
+            llvm::Value* idx = b.getInt32(n.var);
+            llvm::Value* gep = b.CreateGEP(b.getDoubleTy(), args_ptr, idx);
+            return b.CreateLoad(b.getDoubleTy(), gep);
+          }
+          case Node::Type::Add:
+            return b.CreateFAdd(
+                emit_ir(*n.left, b, args_ptr, mod), emit_ir(*n.right, b, args_ptr, mod));
+          case Node::Type::Sub:
+            return b.CreateFSub(
+                emit_ir(*n.left, b, args_ptr, mod), emit_ir(*n.right, b, args_ptr, mod));
+          case Node::Type::Mul:
+            return b.CreateFMul(
+                emit_ir(*n.left, b, args_ptr, mod), emit_ir(*n.right, b, args_ptr, mod));
+          case Node::Type::Div:
+            return b.CreateFDiv(
+                emit_ir(*n.left, b, args_ptr, mod), emit_ir(*n.right, b, args_ptr, mod));
+          case Node::Type::Pow:
+          {
+            llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
+                &mod, llvm::Intrinsic::pow, {b.getDoubleTy()});
+            return b.CreateCall(fn, {emit_ir(*n.left, b, args_ptr, mod), emit_ir(*n.right, b, args_ptr, mod)});
+          }
+          case Node::Type::Sin:
+          {
+            llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
+                &mod, llvm::Intrinsic::sin, {b.getDoubleTy()});
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Type::Cos:
+          {
+            llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
+                &mod, llvm::Intrinsic::cos, {b.getDoubleTy()});
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Type::Exp:
+          {
+            llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
+                &mod, llvm::Intrinsic::exp, {b.getDoubleTy()});
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Type::Log:
+          {
+            llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
+                &mod, llvm::Intrinsic::log, {b.getDoubleTy()});
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Type::Sqrt:
+          {
+            llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
+                &mod, llvm::Intrinsic::sqrt, {b.getDoubleTy()});
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Type::Tan:
+          {
+            llvm::Function* fn = mod.getFunction("tan");
+            if (!fn)
+            {
+              llvm::FunctionType* ft =
+                  llvm::FunctionType::get(b.getDoubleTy(), {b.getDoubleTy()}, false);
+              fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "tan", mod);
+            }
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Type::Asin:
+          {
+            llvm::Function* fn = mod.getFunction("asin");
+            if (!fn)
+            {
+              llvm::FunctionType* ft =
+                  llvm::FunctionType::get(b.getDoubleTy(), {b.getDoubleTy()}, false);
+              fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "asin", mod);
+            }
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Type::Acos:
+          {
+            llvm::Function* fn = mod.getFunction("acos");
+            if (!fn)
+            {
+              llvm::FunctionType* ft =
+                  llvm::FunctionType::get(b.getDoubleTy(), {b.getDoubleTy()}, false);
+              fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "acos", mod);
+            }
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+          case Node::Type::Atan:
+          {
+            llvm::Function* fn = mod.getFunction("atan");
+            if (!fn)
+            {
+              llvm::FunctionType* ft =
+                  llvm::FunctionType::get(b.getDoubleTy(), {b.getDoubleTy()}, false);
+              fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "atan", mod);
+            }
+            return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
+          }
+        }
+        return llvm::ConstantFP::get(b.getDoubleTy(), 0);
+      }
+
+#if NP_HAS_LLVM_ORC
+      // Compile Node to double(*)(double*) via LLJIT, cached by content hash
+      double (*compile(const Node& n))(double*)
+      {
+        std::string key = node_key_hash(n);
+        {
+          std::lock_guard<std::mutex> lk(mtx);
+          auto it = cache.find(key);
+          if (it != cache.end())
+            return reinterpret_cast<double (*)(double*)>(it->second);
+        }
+        if (!jit)
+          return nullptr;
+
+        auto ctx = std::make_unique<llvm::LLVMContext>();
+        auto mod = std::make_unique<llvm::Module>("np_vm_mod", *ctx);
+        mod->setDataLayout(jit->getDataLayout());
+
+        llvm::IRBuilder<> b(*ctx);
+        llvm::FunctionType* ft = llvm::FunctionType::get(
+            b.getDoubleTy(), {b.getPtrTy()}, false);
+        // unique name per content hash to avoid collision
+        std::string fname = "eval_" + std::to_string(std::hash<std::string>{}(key));
+        llvm::Function* fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, fname, *mod);
+        fn->setDSOLocal(true);
+        llvm::BasicBlock* bb = llvm::BasicBlock::Create(*ctx, "entry", fn);
+        b.SetInsertPoint(bb);
+        llvm::Value* args_ptr = fn->getArg(0);
+        llvm::Value* ret = emit_ir(n, b, args_ptr, *mod);
+        b.CreateRet(ret);
+        if (llvm::verifyFunction(*fn, &llvm::errs()))
+          return nullptr;
+
+        // Optimize: add a simple pass (optional, rely on JIT)
+        auto tsm = llvm::orc::ThreadSafeModule(std::move(mod), std::move(ctx));
+        if (auto err = jit->addIRModule(std::move(tsm)))
+        {
+          llvm::consumeError(std::move(err));
+          return nullptr;
+        }
+        auto sym = jit->lookup(fname);
+        if (!sym)
+        {
+          llvm::consumeError(sym.takeError());
+          return nullptr;
+        }
+        // LLVM 16+ returns ExecutorAddr
+        auto raw = *sym;
+        uint64_t addrInt = raw.getValue();
+        void* p = reinterpret_cast<void*>(static_cast<std::uintptr_t>(addrInt));
+        {
+          std::lock_guard<std::mutex> lk(mtx);
+          cache[key] = p;
+        }
+        return reinterpret_cast<double (*)(double*)>(p);
+      }
+#else
+      // Legacy ExecutionEngine path — single module, multiple functions
+      double (*compile(const Node& n))(double*)
+      {
+        std::string key = node_key_hash(n);
+        {
+          std::lock_guard<std::mutex> lk(mtx);
+          auto it = cache.find(key);
+          if (it != cache.end())
+            return reinterpret_cast<double (*)(double*)>(it->second);
+        }
+        if (!ctx_holder || !mod_holder)
+          return nullptr;
+        llvm::IRBuilder<> b(*ctx_holder);
+        llvm::FunctionType* ft = llvm::FunctionType::get(
+            b.getDoubleTy(), {b.getPtrTy()}, false);
+        std::string fname = "eval_" + std::to_string(std::hash<std::string>{}(key));
+        // avoid duplicate
+        if (mod_holder->getFunction(fname))
+          fname += "_" + std::to_string(cache.size());
+        llvm::Function* fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, fname, *mod_holder);
+        llvm::BasicBlock* bb = llvm::BasicBlock::Create(*ctx_holder, "entry", fn);
+        b.SetInsertPoint(bb);
+        llvm::Value* args_ptr = fn->getArg(0);
+        llvm::Value* ret = emit_ir(n, b, args_ptr, *mod_holder);
+        b.CreateRet(ret);
+        if (llvm::verifyFunction(*fn, &llvm::errs()))
+        {
+          fn->eraseFromParent();
+          return nullptr;
+        }
+        if (!ee)
+        {
+          std::string err;
+          ee = llvm::EngineBuilder(std::move(mod_holder))
+                   .setErrorStr(&err)
+                   .setOptLevel(llvm::CodeGenOptLevel::Aggressive)
+                   .create();
+          if (!ee)
+            return nullptr;
+          ee->finalizeObject();
+          // recreate holder for next compile (EE took ownership)
+          ctx_holder = std::make_unique<llvm::LLVMContext>();
+          mod_holder = std::make_unique<llvm::Module>("np_vm", *ctx_holder);
+        }
+        else
+        {
+          ee->finalizeObject();
+        }
+        void* p = ee->getPointerToFunction(fn);
+        if (!p)
+          return nullptr;
+        {
+          std::lock_guard<std::mutex> lk(mtx);
+          cache[key] = p;
+        }
+        return reinterpret_cast<double (*)(double*)>(p);
+      }
+#endif
+    };
+
+    inline LLVMJit& global_jit()
+    {
+      static LLVMJit jit;
+      return jit;
+    }
+    inline std::once_flag LLVMJit::init_flag;
+  } // namespace detail_llvm
+
   template <Scalar T = f64_t>
   struct LLVMStrategy : IEvaluator<T>
   {
-    // Would build LLVM IR via IRBuilder; fallback to interpreter until linked
+    // For non-double types, fall back to interpreter (complex/float need separate codegen)
     T eval(const Node& n, const PointT<T>& p) const override
     {
-      return InterpreterStrategy<T>{}.eval(n, p);
+      if constexpr (!std::is_same_v<T, f64_t>)
+      {
+        return InterpreterStrategy<T>{}.eval(n, p);
+      }
+      else
+      {
+#if NP_HAS_LLVM_ORC
+        auto* fn = detail_llvm::global_jit().compile(n);
+        if (fn)
+        {
+          // JIT expects double*; Point is vector<double>
+          // const_cast is safe — JIT only loads
+          double* ptr = const_cast<double*>(p.data());
+          // Handle empty point (0-dim) — pass nullptr if allowed
+          if (p.empty())
+          {
+            double dummy = 0;
+            return static_cast<T>(fn(&dummy));
+          }
+          return static_cast<T>(fn(ptr));
+        }
+        // fallback if JIT failed
+        return InterpreterStrategy<T>{}.eval(n, p);
+#else
+        // Legacy EE fallback — same
+        auto* fn = detail_llvm::global_jit().compile(n);
+        if (fn)
+          return static_cast<T>(fn(const_cast<double*>(p.data())));
+        return InterpreterStrategy<T>{}.eval(n, p);
+#endif
+      }
     }
+
     Dual<T> eval_dual(const Node& n, const PointT<T>& p, int var) const override
     {
-      return InterpreterStrategy<T>{}.eval_dual(n, p, var);
+      if constexpr (!std::is_same_v<T, f64_t>)
+      {
+        return InterpreterStrategy<T>{}.eval_dual(n, p, var);
+      }
+      else
+      {
+        // Derivative via symbolic diff + JIT (reuses eval JIT cache)
+        // This gives exact derivative, not finite difference, and benefits from
+        // LLVM optimizations (constant folding, CSE, vectorization).
+        Dual<T> r{};
+        r.val = eval(n, p);
+        // Build derivative node, then JIT it (simplify is optional and may not be visible here)
+        DiffVisitor dv{var};
+        NodePtr d = dv.visit(n);
+        if (!d)
+        {
+          r.dval = T(0);
+          return r;
+        }
+        // Optional: simplify if kernel is available (avoid hard dep to keep header order)
+        // d = ::np::differential::kernel::simplify(d);
+        if (!d || d->type == Node::Type::Const)
+        if (!d || d->type == Node::Type::Const)
+        {
+          r.dval = d ? static_cast<T>(d->cval) : T(0);
+          return r;
+        }
+        // JIT the derivative
+        auto* fn = detail_llvm::global_jit().compile(*d);
+        if (fn)
+        {
+          double* ptr = const_cast<double*>(p.data());
+          if (p.empty())
+          {
+            double dummy = 0;
+            r.dval = static_cast<T>(fn(&dummy));
+          }
+          else
+          {
+            r.dval = static_cast<T>(fn(ptr));
+          }
+        }
+        else
+        {
+          // fallback to interpreter dual
+          r.dval = InterpreterStrategy<T>{}.eval(*d, p);
+        }
+        return r;
+      }
     }
+
     NP_NODISCARD std::string name() const noexcept override
     {
-      return "llvm-jit";
+#if NP_HAS_LLVM_ORC
+      return "llvm-jit-orc";
+#else
+      return "llvm-jit-mc";
+#endif
     }
   };
 #endif
@@ -503,12 +905,12 @@ namespace np::differential
     };
     struct BinaryNode
     {
-      Node::Type op = Node::Add;
+      Node::Type op = Node::Type::Add;
       NodePtr lhs, rhs;
     };
     struct UnaryNode
     {
-      Node::Type op = Node::Sin;
+      Node::Type op = Node::Type::Sin;
       NodePtr child;
     };
     using NodeVariant = std::variant<ConstNode, VarNode, BinaryNode, UnaryNode>;
@@ -517,15 +919,15 @@ namespace np::differential
     {
       switch (n.type)
       {
-        case Node::Const:
+        case Node::Type::Const:
           return ConstNode{n.cval};
-        case Node::Var:
+        case Node::Type::Var:
           return VarNode{n.var};
-        case Node::Add:
-        case Node::Sub:
-        case Node::Mul:
-        case Node::Div:
-        case Node::Pow:
+        case Node::Type::Add:
+        case Node::Type::Sub:
+        case Node::Type::Mul:
+        case Node::Type::Div:
+        case Node::Type::Pow:
           return BinaryNode{n.type, n.left, n.right};
         default:
           return UnaryNode{n.type, n.child};
@@ -535,7 +937,7 @@ namespace np::differential
     // Modern helpers for simplification (constexpr, nodiscard, ranges-friendly)
     NP_NODISCARD inline bool is_const(const NodePtr& n, f64_t v) noexcept
     {
-      return n && n->type == Node::Const && n->cval == v;
+      return n && n->type == Node::Type::Const && n->cval == v;
     }
     NP_NODISCARD inline bool is_zero(const NodePtr& n) noexcept
     {
@@ -548,7 +950,7 @@ namespace np::differential
     NP_NODISCARD inline NodePtr make_const_node(f64_t v)
     {
       auto n = std::make_shared<Node>();
-      n->type = Node::Const;
+      n->type = Node::Type::Const;
       n->cval = v;
       return n;
     }
@@ -568,49 +970,49 @@ namespace np::differential
         n->child = simplify(n->child);
 
       // constant folding for binary ops
-      if (n->left && n->right && n->left->type == Node::Const
-          && n->right->type == Node::Const)
+      if (n->left && n->right && n->left->type == Node::Type::Const
+          && n->right->type == Node::Type::Const)
       {
         f64_t a = n->left->cval, b = n->right->cval;
         switch (n->type)
         {
-          case Node::Add:
+          case Node::Type::Add:
             return make_const_node(a + b);
-          case Node::Sub:
+          case Node::Type::Sub:
             return make_const_node(a - b);
-          case Node::Mul:
+          case Node::Type::Mul:
             return make_const_node(a * b);
-          case Node::Div:
+          case Node::Type::Div:
             return b != 0 ? make_const_node(a / b) : n;
-          case Node::Pow:
+          case Node::Type::Pow:
             return make_const_node(std::pow(a, b));
           default:
             break;
         }
       }
       // constant folding for unary
-      if (n->child && n->child->type == Node::Const)
+      if (n->child && n->child->type == Node::Type::Const)
       {
         f64_t a = n->child->cval;
         switch (n->type)
         {
-          case Node::Sin:
+          case Node::Type::Sin:
             return make_const_node(std::sin(a));
-          case Node::Cos:
+          case Node::Type::Cos:
             return make_const_node(std::cos(a));
-          case Node::Exp:
+          case Node::Type::Exp:
             return make_const_node(std::exp(a));
-          case Node::Log:
+          case Node::Type::Log:
             return a > 0 ? make_const_node(std::log(a)) : n;
-          case Node::Sqrt:
+          case Node::Type::Sqrt:
             return a >= 0 ? make_const_node(std::sqrt(a)) : n;
-          case Node::Tan:
+          case Node::Type::Tan:
             return make_const_node(std::tan(a));
-          case Node::Asin:
+          case Node::Type::Asin:
             return (a >= -1 && a <= 1) ? make_const_node(std::asin(a)) : n;
-          case Node::Acos:
+          case Node::Type::Acos:
             return (a >= -1 && a <= 1) ? make_const_node(std::acos(a)) : n;
-          case Node::Atan:
+          case Node::Type::Atan:
             return make_const_node(std::atan(a));
           default:
             break;
@@ -619,26 +1021,26 @@ namespace np::differential
       // algebraic identities (modern, ranges-aware)
       switch (n->type)
       {
-        case Node::Add:
+        case Node::Type::Add:
           if (is_zero(n->left))
             return n->right;
           if (is_zero(n->right))
             return n->left;
           break;
-        case Node::Sub:
+        case Node::Type::Sub:
           if (is_zero(n->right))
             return n->left;
           if (is_zero(n->left))
           {
             // 0 - x => -1 * x
             auto o = std::make_shared<Node>();
-            o->type = Node::Mul;
+            o->type = Node::Type::Mul;
             o->left = make_const_node(-1);
             o->right = n->right;
             return o;
           }
           break;
-        case Node::Mul:
+        case Node::Type::Mul:
           if (is_zero(n->left) || is_zero(n->right))
             return make_const_node(0);
           if (is_one(n->left))
@@ -650,13 +1052,13 @@ namespace np::differential
             // keep as is, but could canonicalize
           }
           break;
-        case Node::Div:
+        case Node::Type::Div:
           if (is_zero(n->left))
             return make_const_node(0);
           if (is_one(n->right))
             return n->left;
           break;
-        case Node::Pow:
+        case Node::Type::Pow:
           if (is_zero(n->right))
             return make_const_node(1);
           if (is_one(n->right))
@@ -763,14 +1165,14 @@ namespace np::differential
     static NodePtr make_const(f64_t v)
     {
       auto n = std::make_shared<Node>();
-      n->type = Node::Const;
+      n->type = Node::Type::Const;
       n->cval = v;
       return n;
     }
     static NodePtr make_var(int idx)
     {
       auto n = std::make_shared<Node>();
-      n->type = Node::Var;
+      n->type = Node::Type::Var;
       n->var = idx;
       return n;
     }
@@ -1690,7 +2092,7 @@ namespace np::differential
       char op = expr[pos++];
       auto r = parse_term();
       auto o = std::make_shared<Node>();
-      o->type = (op == '+') ? Node::Add : Node::Sub;
+      o->type = (op == '+') ? Node::Type::Add : Node::Type::Sub;
       o->left = n;
       o->right = r;
       n = o;
@@ -1707,7 +2109,7 @@ namespace np::differential
       char op = expr[pos++];
       auto r = parse_factor();
       auto o = std::make_shared<Node>();
-      o->type = (op == '*') ? Node::Mul : Node::Div;
+      o->type = (op == '*') ? Node::Type::Mul : Node::Type::Div;
       o->left = n;
       o->right = r;
       n = o;
@@ -1724,7 +2126,7 @@ namespace np::differential
       ++pos;
       auto r = parse_factor();
       auto o = std::make_shared<Node>();
-      o->type = Node::Pow;
+      o->type = Node::Type::Pow;
       o->left = n;
       o->right = r;
       n = o;
@@ -1739,7 +2141,7 @@ namespace np::differential
       ++pos;
       auto c = parse_unary();
       auto o = std::make_shared<Node>();
-      o->type = Node::Mul;
+      o->type = Node::Type::Mul;
       o->left = make_const(-1);
       o->right = c;
       return o;
@@ -1779,23 +2181,23 @@ namespace np::differential
         ++pos;
         auto o = std::make_shared<Node>();
         if (name == "sin")
-          o->type = Node::Sin;
+          o->type = Node::Type::Sin;
         else if (name == "cos")
-          o->type = Node::Cos;
+          o->type = Node::Type::Cos;
         else if (name == "exp")
-          o->type = Node::Exp;
+          o->type = Node::Type::Exp;
         else if (name == "log")
-          o->type = Node::Log;
+          o->type = Node::Type::Log;
         else if (name == "sqrt")
-          o->type = Node::Sqrt;
+          o->type = Node::Type::Sqrt;
         else if (name == "tan")
-          o->type = Node::Tan;
+          o->type = Node::Type::Tan;
         else if (name == "asin")
-          o->type = Node::Asin;
+          o->type = Node::Type::Asin;
         else if (name == "acos")
-          o->type = Node::Acos;
+          o->type = Node::Type::Acos;
         else if (name == "atan")
-          o->type = Node::Atan;
+          o->type = Node::Type::Atan;
         else
           throw std::invalid_argument("VM: unknown func " + name);
         o->child = arg;
@@ -1881,37 +2283,37 @@ namespace np::differential
   {
     switch (n.type)
     {
-      case Node::Const:
+      case Node::Type::Const:
         return T(n.cval);
-      case Node::Var:
+      case Node::Type::Var:
         return p[n.var];
-      case Node::Add:
+      case Node::Type::Add:
         return eval(*n.left, p) + eval(*n.right, p);
-      case Node::Sub:
+      case Node::Type::Sub:
         return eval(*n.left, p) - eval(*n.right, p);
-      case Node::Mul:
+      case Node::Type::Mul:
         return eval(*n.left, p) * eval(*n.right, p);
-      case Node::Div:
+      case Node::Type::Div:
         return eval(*n.left, p) / eval(*n.right, p);
-      case Node::Pow:
+      case Node::Type::Pow:
         return std::pow(eval(*n.left, p), eval(*n.right, p));
-      case Node::Sin:
+      case Node::Type::Sin:
         return std::sin(eval(*n.child, p));
-      case Node::Cos:
+      case Node::Type::Cos:
         return std::cos(eval(*n.child, p));
-      case Node::Exp:
+      case Node::Type::Exp:
         return std::exp(eval(*n.child, p));
-      case Node::Log:
+      case Node::Type::Log:
         return std::log(eval(*n.child, p));
-      case Node::Sqrt:
+      case Node::Type::Sqrt:
         return std::sqrt(eval(*n.child, p));
-      case Node::Tan:
+      case Node::Type::Tan:
         return std::tan(eval(*n.child, p));
-      case Node::Asin:
+      case Node::Type::Asin:
         return std::asin(eval(*n.child, p));
-      case Node::Acos:
+      case Node::Type::Acos:
         return std::acos(eval(*n.child, p));
-      case Node::Atan:
+      case Node::Type::Atan:
         return std::atan(eval(*n.child, p));
     }
     return T(0);
@@ -1922,83 +2324,83 @@ namespace np::differential
   {
     switch (n.type)
     {
-      case Node::Const:
+      case Node::Type::Const:
         return {T(n.cval), T(0)};
-      case Node::Var:
+      case Node::Type::Var:
         return {p[n.var], (n.var == var) ? T(1) : T(0)};
-      case Node::Add:
+      case Node::Type::Add:
       {
         auto a = eval_dual(*n.left, p, var);
         auto b = eval_dual(*n.right, p, var);
         return a + b;
       }
-      case Node::Sub:
+      case Node::Type::Sub:
       {
         auto a = eval_dual(*n.left, p, var);
         auto b = eval_dual(*n.right, p, var);
         return a - b;
       }
-      case Node::Mul:
+      case Node::Type::Mul:
       {
         auto a = eval_dual(*n.left, p, var);
         auto b = eval_dual(*n.right, p, var);
         return a * b;
       }
-      case Node::Div:
+      case Node::Type::Div:
       {
         auto a = eval_dual(*n.left, p, var);
         auto b = eval_dual(*n.right, p, var);
         return a / b;
       }
-      case Node::Pow:
+      case Node::Type::Pow:
       {
         auto a = eval_dual(*n.left, p, var);
         auto b = eval_dual(*n.right, p, var);
-        if (n.right->type == Node::Const)
+        if (n.right->type == Node::Type::Const)
           return pow(a, static_cast<double>(n.right->cval));
         return pow(a, b);
       }
-      case Node::Sin:
+      case Node::Type::Sin:
       {
         auto a = eval_dual(*n.child, p, var);
         return sin(a);
       }
-      case Node::Cos:
+      case Node::Type::Cos:
       {
         auto a = eval_dual(*n.child, p, var);
         return cos(a);
       }
-      case Node::Exp:
+      case Node::Type::Exp:
       {
         auto a = eval_dual(*n.child, p, var);
         return exp(a);
       }
-      case Node::Log:
+      case Node::Type::Log:
       {
         auto a = eval_dual(*n.child, p, var);
         return log(a);
       }
-      case Node::Sqrt:
+      case Node::Type::Sqrt:
       {
         auto a = eval_dual(*n.child, p, var);
         return sqrt(a);
       }
-      case Node::Tan:
+      case Node::Type::Tan:
       {
         auto a = eval_dual(*n.child, p, var);
         return tan(a);
       }
-      case Node::Asin:
+      case Node::Type::Asin:
       {
         auto a = eval_dual(*n.child, p, var);
         return asin(a);
       }
-      case Node::Acos:
+      case Node::Type::Acos:
       {
         auto a = eval_dual(*n.child, p, var);
         return acos(a);
       }
-      case Node::Atan:
+      case Node::Type::Atan:
       {
         auto a = eval_dual(*n.child, p, var);
         return atan(a);
@@ -2024,45 +2426,45 @@ namespace np::differential
     auto make_const = [](f64_t v)
     {
       auto m = std::make_shared<Node>();
-      m->type = Node::Const;
+      m->type = Node::Type::Const;
       m->cval = v;
       return m;
     };
     switch (n.type)
     {
-      case Node::Const:
+      case Node::Type::Const:
         return make_const(0);
-      case Node::Var:
+      case Node::Type::Var:
         return make_const(n.var == var ? 1 : 0);
-      case Node::Add:
+      case Node::Type::Add:
       {
         auto o = std::make_shared<Node>();
-        o->type = Node::Add;
+        o->type = Node::Type::Add;
         DiffVisitor lv{var}, rv{var};
         o->left = lv.visit(*n.left);
         o->right = rv.visit(*n.right);
         return o;
       }
-      case Node::Sub:
+      case Node::Type::Sub:
       {
         auto o = std::make_shared<Node>();
-        o->type = Node::Sub;
+        o->type = Node::Type::Sub;
         DiffVisitor lv{var}, rv{var};
         o->left = lv.visit(*n.left);
         o->right = rv.visit(*n.right);
         return o;
       }
-      case Node::Mul:
+      case Node::Type::Mul:
       {
         auto o = std::make_shared<Node>();
-        o->type = Node::Add;
+        o->type = Node::Type::Add;
         auto a = std::make_shared<Node>();
-        a->type = Node::Mul;
+        a->type = Node::Type::Mul;
         DiffVisitor lv{var};
         a->left = lv.visit(*n.left);
         a->right = n.right;
         auto b = std::make_shared<Node>();
-        b->type = Node::Mul;
+        b->type = Node::Type::Mul;
         b->left = n.left;
         DiffVisitor rv{var};
         b->right = rv.visit(*n.right);
@@ -2070,22 +2472,22 @@ namespace np::differential
         o->right = b;
         return o;
       }
-      case Node::Pow:
+      case Node::Type::Pow:
       {
-        if (n.right->type == Node::Const)
+        if (n.right->type == Node::Type::Const)
         {
           f64_t c = n.right->cval;
           auto coeff = make_const(c);
           auto pw = std::make_shared<Node>();
-          pw->type = Node::Pow;
+          pw->type = Node::Type::Pow;
           pw->left = n.left;
           pw->right = make_const(c - 1);
           auto mul = std::make_shared<Node>();
-          mul->type = Node::Mul;
+          mul->type = Node::Type::Mul;
           mul->left = coeff;
           mul->right = pw;
           auto o = std::make_shared<Node>();
-          o->type = Node::Mul;
+          o->type = Node::Type::Mul;
           o->left = mul;
           DiffVisitor lv{var};
           o->right = lv.visit(*n.left);
@@ -2097,51 +2499,51 @@ namespace np::differential
         auto b_prime = lv.visit(*n.right);
         auto a_prime = rv.visit(*n.left);
         auto log_a = std::make_shared<Node>();
-        log_a->type = Node::Log;
+        log_a->type = Node::Type::Log;
         log_a->child = n.left;
         auto term1 = std::make_shared<Node>();
-        term1->type = Node::Mul;
+        term1->type = Node::Type::Mul;
         term1->left = b_prime;
         term1->right = log_a;
         auto a_div = std::make_shared<Node>();
-        a_div->type = Node::Div;
+        a_div->type = Node::Type::Div;
         a_div->left = a_prime;
         a_div->right = n.left;
         auto term2 = std::make_shared<Node>();
-        term2->type = Node::Mul;
+        term2->type = Node::Type::Mul;
         term2->left = n.right;
         term2->right = a_div;
         auto sum = std::make_shared<Node>();
-        sum->type = Node::Add;
+        sum->type = Node::Type::Add;
         sum->left = term1;
         sum->right = term2;
         auto o = std::make_shared<Node>();
-        o->type = Node::Mul;
+        o->type = Node::Type::Mul;
         o->left = a_pow_b;
         o->right = sum;
         return o;
       }
-      case Node::Sin:
+      case Node::Type::Sin:
       {
         auto o = std::make_shared<Node>();
-        o->type = Node::Mul;
+        o->type = Node::Type::Mul;
         auto c = std::make_shared<Node>();
-        c->type = Node::Cos;
+        c->type = Node::Type::Cos;
         c->child = n.child;
         o->left = c;
         DiffVisitor cv{var};
         o->right = cv.visit(*n.child);
         return o;
       }
-      case Node::Cos:
+      case Node::Type::Cos:
       {
         auto o = std::make_shared<Node>();
-        o->type = Node::Mul;
+        o->type = Node::Type::Mul;
         auto s = std::make_shared<Node>();
-        s->type = Node::Sin;
+        s->type = Node::Type::Sin;
         s->child = n.child;
         auto neg = std::make_shared<Node>();
-        neg->type = Node::Mul;
+        neg->type = Node::Type::Mul;
         neg->left = make_const(-1);
         neg->right = s;
         o->left = neg;
@@ -2149,70 +2551,70 @@ namespace np::differential
         o->right = cv.visit(*n.child);
         return o;
       }
-      case Node::Exp:
+      case Node::Type::Exp:
       {
         auto o = std::make_shared<Node>();
-        o->type = Node::Mul;
+        o->type = Node::Type::Mul;
         auto cur = std::make_shared<Node>(n);
         o->left = cur;
         DiffVisitor cv{var};
         o->right = cv.visit(*n.child);
         return o;
       }
-      case Node::Log:
+      case Node::Type::Log:
       {
         auto o = std::make_shared<Node>();
-        o->type = Node::Div;
+        o->type = Node::Type::Div;
         DiffVisitor cv{var};
         o->left = cv.visit(*n.child);
         o->right = n.child;
         return o;
       }
-      case Node::Sqrt:
+      case Node::Type::Sqrt:
       {
         auto o = std::make_shared<Node>();
-        o->type = Node::Div;
+        o->type = Node::Type::Div;
         DiffVisitor cv{var};
         o->left = cv.visit(*n.child);
         auto den = std::make_shared<Node>();
-        den->type = Node::Mul;
+        den->type = Node::Type::Mul;
         den->left = make_const(2);
         auto s = std::make_shared<Node>();
-        s->type = Node::Sqrt;
+        s->type = Node::Type::Sqrt;
         s->child = n.child;
         den->right = s;
         o->right = den;
         return o;
       }
-      case Node::Tan:
+      case Node::Type::Tan:
       {
         auto o = std::make_shared<Node>();
-        o->type = Node::Div;
+        o->type = Node::Type::Div;
         DiffVisitor cv{var};
         o->left = cv.visit(*n.child);
         auto den = std::make_shared<Node>();
-        den->type = Node::Pow;
+        den->type = Node::Type::Pow;
         auto c = std::make_shared<Node>();
-        c->type = Node::Cos;
+        c->type = Node::Type::Cos;
         c->child = n.child;
         den->left = c;
         den->right = make_const(2);
         o->right = den;
         return o;
       }
-      case Node::Asin:
+      case Node::Type::Asin:
       {
         auto o = std::make_shared<Node>();
-        o->type = Node::Div;
+        o->type = Node::Type::Div;
         DiffVisitor cv{var};
         o->left = cv.visit(*n.child);
         auto den = std::make_shared<Node>();
-        den->type = Node::Sqrt;
+        den->type = Node::Type::Sqrt;
         auto sub = std::make_shared<Node>();
-        sub->type = Node::Sub;
+        sub->type = Node::Type::Sub;
         sub->left = make_const(1);
         auto pw = std::make_shared<Node>();
-        pw->type = Node::Pow;
+        pw->type = Node::Type::Pow;
         pw->left = n.child;
         pw->right = make_const(2);
         sub->right = pw;
@@ -2220,22 +2622,22 @@ namespace np::differential
         o->right = den;
         return o;
       }
-      case Node::Acos:
+      case Node::Type::Acos:
       {
         auto o = std::make_shared<Node>();
-        o->type = Node::Mul;
+        o->type = Node::Type::Mul;
         o->left = make_const(-1);
         auto div = std::make_shared<Node>();
-        div->type = Node::Div;
+        div->type = Node::Type::Div;
         DiffVisitor cv{var};
         div->left = cv.visit(*n.child);
         auto den = std::make_shared<Node>();
-        den->type = Node::Sqrt;
+        den->type = Node::Type::Sqrt;
         auto sub = std::make_shared<Node>();
-        sub->type = Node::Sub;
+        sub->type = Node::Type::Sub;
         sub->left = make_const(1);
         auto pw = std::make_shared<Node>();
-        pw->type = Node::Pow;
+        pw->type = Node::Type::Pow;
         pw->left = n.child;
         pw->right = make_const(2);
         sub->right = pw;
@@ -2244,45 +2646,45 @@ namespace np::differential
         o->right = div;
         return o;
       }
-      case Node::Atan:
+      case Node::Type::Atan:
       {
         auto o = std::make_shared<Node>();
-        o->type = Node::Div;
+        o->type = Node::Type::Div;
         DiffVisitor cv{var};
         o->left = cv.visit(*n.child);
         auto den = std::make_shared<Node>();
-        den->type = Node::Add;
+        den->type = Node::Type::Add;
         den->left = make_const(1);
         auto pw = std::make_shared<Node>();
-        pw->type = Node::Pow;
+        pw->type = Node::Type::Pow;
         pw->left = n.child;
         pw->right = make_const(2);
         den->right = pw;
         o->right = den;
         return o;
       }
-      case Node::Div:
+      case Node::Type::Div:
       {
         auto num = std::make_shared<Node>();
-        num->type = Node::Sub;
+        num->type = Node::Type::Sub;
         auto a = std::make_shared<Node>();
-        a->type = Node::Mul;
+        a->type = Node::Type::Mul;
         DiffVisitor lv{var};
         a->left = lv.visit(*n.left);
         a->right = n.right;
         auto b = std::make_shared<Node>();
-        b->type = Node::Mul;
+        b->type = Node::Type::Mul;
         b->left = n.left;
         DiffVisitor rv{var};
         b->right = rv.visit(*n.right);
         num->left = a;
         num->right = b;
         auto den = std::make_shared<Node>();
-        den->type = Node::Pow;
+        den->type = Node::Type::Pow;
         den->left = n.right;
         den->right = make_const(2);
         auto o = std::make_shared<Node>();
-        o->type = Node::Div;
+        o->type = Node::Type::Div;
         o->left = num;
         o->right = den;
         return o;
