@@ -468,7 +468,9 @@ namespace np
     zero -= a;
     return zero;
 #else
-    return bigint(std::to_string(-std::stoll(a.value)));
+    if (a.value == "0" || a.value == "-0") return bigint("0");
+    if (!a.value.empty() && a.value[0] == '-') return bigint(a.value.substr(1));
+    return bigint("-" + a.value);
 #endif
   }
   inline bigint operator+(const bigint& a)
