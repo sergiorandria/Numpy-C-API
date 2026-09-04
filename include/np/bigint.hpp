@@ -189,9 +189,9 @@ namespace np
   inline bigint operator-(const bigint& a)
   {
 #if NP_HAS_CPP_INT
-    bigint r = a;
-    r = -r;
-    return r;
+    bigint zero = 0;
+    zero -= a;
+    return zero;
 #else
     return bigint(std::to_string(-std::stoll(a.value)));
 #endif
