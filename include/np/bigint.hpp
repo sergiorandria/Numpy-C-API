@@ -143,6 +143,14 @@ namespace np
       }
     }
 
+    // allow static_cast<long long>(bigint) etc (explicit to avoid accidental)
+    template <typename T>
+      requires(std::is_arithmetic_v<T> && !std::is_same_v<T, bool>)
+    explicit operator T() const
+    {
+      return convert_to<T>();
+    }
+
     bool operator==(const bigint& o) const
     {
       return value == o.value;
