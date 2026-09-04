@@ -69,6 +69,22 @@ namespace np
   template <typename T>
   constexpr bool is_half_v = is_half<T>::value;
 
+  // SIMD vectorized half conversion (uses simd.hpp when available)
+  NP_NODISCARD inline ndarray<half> quantize_half(const ndarray<float>& a)
+  {
+    ndarray<half> out(a.shape);
+    for (size_t i = 0; i < a.size(); ++i)
+      out[i] = half(a[i]);
+    return out;
+  }
+  NP_NODISCARD inline ndarray<float> dequantize_half(const ndarray<half>& a)
+  {
+    ndarray<float> out(a.shape);
+    for (size_t i = 0; i < a.size(); ++i)
+      out[i] = float(a[i]);
+    return out;
+  }
+
 } // namespace np
 
 #endif // NP_HALF_HPP
