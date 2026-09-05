@@ -322,6 +322,13 @@ namespace np
   NP_API template <detail::Numeric T>
   NP_NODISCARD auto sin(const ndarray<T>& x) -> ndarray<T>
   {
+    if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+      if (x.is_contiguous()) {
+        ndarray<T> out(x.shape);
+        simd::sin_vectorized(x.data().data(), out.data().data(), x.size());
+        return out;
+      }
+    }
     return detail::ufunc_unary(x, [](const T& v) { return std::sin(v); });
   }
 
@@ -330,6 +337,12 @@ namespace np
   NP_API template <detail::Numeric T>
   auto sin(const ndarray<T>& x, ndarray<T>& out) -> ndarray<T>&
   {
+    if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+      if (x.is_contiguous() && out.is_contiguous() && x.shape == out.shape) {
+        simd::sin_vectorized(x.data().data(), out.data().data(), x.size());
+        return out;
+      }
+    }
     return detail::ufunc_unary_into(x, out, [](const T& v) { return std::sin(v); });
   }
 
@@ -342,6 +355,13 @@ namespace np
   NP_API template <detail::Numeric T>
   NP_NODISCARD auto cos(const ndarray<T>& x) -> ndarray<T>
   {
+    if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+      if (x.is_contiguous()) {
+        ndarray<T> out(x.shape);
+        simd::cos_vectorized(x.data().data(), out.data().data(), x.size());
+        return out;
+      }
+    }
     return detail::ufunc_unary(x, [](const T& v) { return std::cos(v); });
   }
 
@@ -350,6 +370,12 @@ namespace np
   NP_API template <detail::Numeric T>
   auto cos(const ndarray<T>& x, ndarray<T>& out) -> ndarray<T>&
   {
+    if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+      if (x.is_contiguous() && out.is_contiguous() && x.shape == out.shape) {
+        simd::cos_vectorized(x.data().data(), out.data().data(), x.size());
+        return out;
+      }
+    }
     return detail::ufunc_unary_into(x, out, [](const T& v) { return std::cos(v); });
   }
 
@@ -735,6 +761,13 @@ namespace np
   NP_API template <detail::Numeric T>
   NP_NODISCARD auto exp(const ndarray<T>& x) -> ndarray<T>
   {
+    if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+      if (x.is_contiguous()) {
+        ndarray<T> out(x.shape);
+        simd::exp_vectorized(x.data().data(), out.data().data(), x.size());
+        return out;
+      }
+    }
     return detail::ufunc_unary(x, [](const T& v) { return std::exp(v); });
   }
 
@@ -743,6 +776,12 @@ namespace np
   NP_API template <detail::Numeric T>
   auto exp(const ndarray<T>& x, ndarray<T>& out) -> ndarray<T>&
   {
+    if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+      if (x.is_contiguous() && out.is_contiguous() && x.shape == out.shape) {
+        simd::exp_vectorized(x.data().data(), out.data().data(), x.size());
+        return out;
+      }
+    }
     return detail::ufunc_unary_into(x, out, [](const T& v) { return std::exp(v); });
   }
 
@@ -799,6 +838,13 @@ namespace np
   NP_API template <detail::Numeric T>
   NP_NODISCARD auto log(const ndarray<T>& x) -> ndarray<T>
   {
+    if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+      if (x.is_contiguous()) {
+        ndarray<T> out(x.shape);
+        simd::log_vectorized(x.data().data(), out.data().data(), x.size());
+        return out;
+      }
+    }
     return detail::ufunc_unary(x, [](const T& v) { return std::log(v); });
   }
 
@@ -807,6 +853,12 @@ namespace np
   NP_API template <detail::Numeric T>
   auto log(const ndarray<T>& x, ndarray<T>& out) -> ndarray<T>&
   {
+    if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+      if (x.is_contiguous() && out.is_contiguous() && x.shape == out.shape) {
+        simd::log_vectorized(x.data().data(), out.data().data(), x.size());
+        return out;
+      }
+    }
     return detail::ufunc_unary_into(x, out, [](const T& v) { return std::log(v); });
   }
 

@@ -70,7 +70,8 @@ namespace np::tensor
   concept TensorBackendConcept =
       requires(Backend b, const ndarray<float>& a, const ndarray<float>& b2) {
         { b.matmul(a, b2) } -> std::same_as<ndarray<float>>;
-        { b.name() } -> std::convertible_to<std::string>;
+        { b.name() } -> std::same_as<std::string>;
+        { b.is_available() } -> std::same_as<bool>;
       };
 
   struct TensorBackend
@@ -118,7 +119,8 @@ namespace np::tensor
         // CUDA 12.8+ Blackwell FP4 / Hopper FP8 tensor cores
         bool use_fp8 = gpu::has_fp8_tensor() || gpu::is_blackwell();
         bool use_fp4 = gpu::has_fp4_tensor();
-        (void)use_fp8; (void)use_fp4;
+        (void)use_fp8;
+        (void)use_fp4;
         if (M * N * K > 1'000'000)
         {
           ndarray<float> out(std::vector<int>{static_cast<int>(M), static_cast<int>(N)});
@@ -132,8 +134,10 @@ namespace np::tensor
     }
     NP_NODISCARD std::string name() const noexcept override
     {
-      if (gpu::has_fp4_tensor()) return "Blackwell-FP4";
-      if (gpu::has_fp8_tensor()) return "Hopper-FP8";
+      if (gpu::has_fp4_tensor())
+        return "Blackwell-FP4";
+      if (gpu::has_fp8_tensor())
+        return "Hopper-FP8";
       return "Hopper-FP8";
     }
     NP_NODISCARD bool is_available() const noexcept override
@@ -331,14 +335,16 @@ namespace np::tensor
 
     [[nodiscard]] constexpr inline std::size_t next_pow2(std::size_t n) noexcept
     {
-      if (n == 0) return 1;
+      if (n == 0)
+        return 1;
       --n;
       n |= n >> 1;
       n |= n >> 2;
       n |= n >> 4;
       n |= n >> 8;
       n |= n >> 16;
-      if constexpr (sizeof(std::size_t) > 4) n |= n >> 32;
+      if constexpr (sizeof(std::size_t) > 4)
+        n |= n >> 32;
       return n + 1;
     }
     static_assert(is_pow2_consteval(64) && next_pow2(65) == 128, "pow2 helpers broken");
@@ -845,6 +851,29 @@ namespace np::tensor
     }
   };
 
+#if __cplusplus >= 202302L
+  // C++23: closed set via variant + visit + deducing this (zero-cost, no virtual)
+  // Produced when CXX_STANDARD 23 is set in CMake (GCC 13+, Clang 16+)
+  using TensorBackendVariant = std::variant<
+      CPUBackend,
+      HopperBackend,
+      AMXBackend,
+      StrassenBackend,
+      AlphaEvolveBackend,
+      HybridBackend>;
+  // Example deducing-this helper for name() — C++23
+  struct TensorBackendHelper
+  {
+    template <typename Self>
+    [[nodiscard]] std::string name(this Self&& self) noexcept
+    {
+      return std::visit(
+          [](auto&& b) -> std::string { return b.name(); },
+          std::forward<Self>(self).as_variant());
+    }
+  };
+#endif
+
   // ── Quantized tensor decorator ───────────────────────────────────────────
   template <typename T>
   struct QuantizedTensor
@@ -887,11 +916,13 @@ namespace np::tensor
       std::vector<float> scale_vec(a.size(), scale);
       std::vector<float> tmp(a.size());
       simd::div_vectorized(ad.data(), scale_vec.data(), tmp.data(), a.size());
-      for (size_t i = 0; i < a.size(); ++i) od[i] = std::round(tmp[i]);
+      for (size_t i = 0; i < a.size(); ++i)
+        od[i] = std::round(tmp[i]);
     }
     else
     {
-      for (size_t i = 0; i < a.size(); ++i) od[i] = std::round(ad[i] / scale);
+      for (size_t i = 0; i < a.size(); ++i)
+        od[i] = std::round(ad[i] / scale);
     }
     return out;
   }
@@ -923,23 +954,28 @@ namespace np::tensor
   }
 
   // ── FP16 / BF16 matmul via Hopper (GPU tensor cores) ───────────────────
-  // Use np::half (actual _Float16) not np::float16 tag (dtype_tag) — keeps is_half correct
-  NP_NODISCARD inline ndarray<float> matmul_fp16(
-      const ndarray<half>& a, const ndarray<half>& b)
+  // Use np::half (actual _Float16) not np::float16 tag (dtype_tag) — keeps is_half
+  // correct
+  NP_NODISCARD inline ndarray<float>
+  matmul_fp16(const ndarray<half>& a, const ndarray<half>& b)
   {
     ndarray<float> af(a.shape), bf(b.shape);
-    for (size_t i = 0; i < a.size(); ++i) af.data()[i] = static_cast<float>(a.data()[i]);
-    for (size_t i = 0; i < b.size(); ++i) bf.data()[i] = static_cast<float>(b.data()[i]);
+    for (size_t i = 0; i < a.size(); ++i)
+      af.data()[i] = static_cast<float>(a.data()[i]);
+    for (size_t i = 0; i < b.size(); ++i)
+      bf.data()[i] = static_cast<float>(b.data()[i]);
     if (gpu::is_available())
       return HopperBackend{}.matmul(af, bf);
     return linalg::matmul(af, bf);
   }
-  NP_NODISCARD inline ndarray<float> matmul_bf16(
-      const ndarray<bfloat16>& a, const ndarray<bfloat16>& b)
+  NP_NODISCARD inline ndarray<float>
+  matmul_bf16(const ndarray<bfloat16>& a, const ndarray<bfloat16>& b)
   {
     ndarray<float> af(a.shape), bf(b.shape);
-    for (size_t i = 0; i < a.size(); ++i) af.data()[i] = static_cast<float>(a.data()[i]);
-    for (size_t i = 0; i < b.size(); ++i) bf.data()[i] = static_cast<float>(b.data()[i]);
+    for (size_t i = 0; i < a.size(); ++i)
+      af.data()[i] = static_cast<float>(a.data()[i]);
+    for (size_t i = 0; i < b.size(); ++i)
+      bf.data()[i] = static_cast<float>(b.data()[i]);
     if (gpu::is_available())
       return HopperBackend{}.matmul(af, bf);
     return linalg::matmul(af, bf);
@@ -951,9 +987,11 @@ namespace np::tensor
   einsum_alpha_evolve(const std::string& eq, const ndarray<T>& a, const ndarray<T>& b)
   {
     // Manual float conversion to handle float16 tag vs half correctly
-    auto to_float = [](const ndarray<T>& x) {
+    auto to_float = [](const ndarray<T>& x)
+    {
       ndarray<float> y(x.shape);
-      for (size_t i = 0; i < x.size(); ++i) y.data()[i] = static_cast<float>(x.data()[i]);
+      for (size_t i = 0; i < x.size(); ++i)
+        y.data()[i] = static_cast<float>(x.data()[i]);
       return y;
     };
     auto af = to_float(a), bf = to_float(b);

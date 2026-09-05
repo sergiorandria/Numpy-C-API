@@ -48,7 +48,6 @@
 #include "gpu.hpp"
 #include "powerful.hpp"
 #include "threadpool.hpp"
-#include "bigint.hpp"
 #include "homology.hpp"
 #include "homotopy.hpp"
 #include "modular.hpp"

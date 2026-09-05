@@ -28,6 +28,9 @@
 #include <initializer_list>
 #include <optional>
 #include <stdexcept>
+#if __cplusplus >= 202302L && __has_include(<mdspan>)
+#include <mdspan>
+#endif
 #include <type_traits>
 #include <utility>
 
@@ -164,6 +167,20 @@ namespace np
     {
       return size_v;
     }
+
+#if __cplusplus >= 202302L && __has_include(<mdspan>)
+    // C++23 mdspan view — zero-cost, non-owning, row-major
+    [[nodiscard]] constexpr auto mdspan() noexcept
+    {
+      return std::mdspan<value_type, std::dextents<std::size_t, rank>>(
+          m_data.data(), static_cast<std::size_t>(Extents)...);
+    }
+    [[nodiscard]] constexpr auto mdspan() const noexcept
+    {
+      return std::mdspan<const value_type, std::dextents<std::size_t, rank>>(
+          m_data.data(), static_cast<std::size_t>(Extents)...);
+    }
+#endif
 
     constexpr value_type* data()
     {
@@ -988,9 +1005,13 @@ namespace np
 #define NP_FIXED_BINOP(op, stdop)                                                        \
   template <typename L, typename R>                                                      \
     requires(                                                                            \
-        (detail::expr::fixed_source<L> || std::is_arithmetic_v<L> || detail::is_bigint_v<L>) \
-        && (detail::expr::fixed_source<R> || std::is_arithmetic_v<R> || detail::is_bigint_v<R>) \
-        && !( (std::is_arithmetic_v<L> || detail::is_bigint_v<L>) && (std::is_arithmetic_v<R> || detail::is_bigint_v<R>)) \
+        (detail::expr::fixed_source<L> || std::is_arithmetic_v<L>                        \
+         || detail::is_bigint_v<L>)                                                      \
+        && (detail::expr::fixed_source<R> || std::is_arithmetic_v<R>                     \
+            || detail::is_bigint_v<R>)                                                   \
+        && !(                                                                            \
+            (std::is_arithmetic_v<L> || detail::is_bigint_v<L>)                          \
+            && (std::is_arithmetic_v<R> || detail::is_bigint_v<R>))                      \
         && detail::fixed::binop_ok<L, R>)                                                \
   constexpr auto operator op(const L& l, const R& r)                                     \
   {                                                                                      \

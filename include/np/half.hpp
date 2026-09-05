@@ -53,7 +53,7 @@ namespace np
     }
   };
 
-  // Traits
+  // Traits — C++23 consteval + inline constexpr
   template <typename T>
   struct is_half : std::false_type
   {
@@ -67,7 +67,22 @@ namespace np
   {
   };
   template <typename T>
-  constexpr bool is_half_v = is_half<T>::value;
+  inline constexpr bool is_half_v = is_half<T>::value;
+
+#if __cplusplus >= 202302L
+  consteval bool has_half_consteval() noexcept
+  {
+    if consteval
+    {
+      return is_half_v<half>;
+    }
+    else
+    {
+      return true;
+    }
+  }
+  static_assert(has_half_consteval(), "half trait broken");
+#endif
 
   // SIMD vectorized half conversion (uses simd.hpp when available)
   NP_NODISCARD inline ndarray<half> quantize_half(const ndarray<float>& a)

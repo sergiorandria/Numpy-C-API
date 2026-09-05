@@ -33,6 +33,9 @@
 #include <map>
 #include <type_traits>
 #include <variant>
+#if __cplusplus >= 202302L && __has_include(<expected>)
+#include <expected>
+#endif
 
 namespace np
 {
@@ -69,6 +72,10 @@ namespace np
         "storage. "
         "Define cxx_to_np_type specialization or use dtype::object_ explicitly");
     dtype d = (dtype_of<T> == dtype::void_ ? dtype::object_ : dtype_of<T>);
+#if __cplusplus >= 202302L && __has_include(<expected>)
+    if (shape.empty())
+      throw std::invalid_argument("zeros: empty shape");
+#endif
     if constexpr (pqc::secure_enabled)
     {
       // Secure path: use secure_buffer + secure_zero to guarantee
@@ -88,6 +95,28 @@ namespace np
     {
       return ndarray<T>(shape, d, T{0});
     }
+  }
+
+  template <Fillable T = double>
+  [[nodiscard]] inline auto try_zeros(const std::vector<int>& shape)
+#if __cplusplus >= 202302L && __has_include(<expected>)
+      -> std::expected<ndarray<T>, std::string>
+#else
+      -> ndarray<T>
+#endif
+  {
+#if __cplusplus >= 202302L && __has_include(<expected>)
+    try
+    {
+      return zeros<T>(shape);
+    }
+    catch (const std::exception& e)
+    {
+      return std::unexpected<std::string>(e.what());
+    }
+#else
+    return zeros<T>(shape);
+#endif
   }
 
 #ifdef __NUMPY_RANGES_CONTAINER_CONCEPT
