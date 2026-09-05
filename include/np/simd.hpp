@@ -19,6 +19,10 @@
 
 #include "pqc.hpp"
 
+#ifdef NP_HAS_SLEEF
+#include <sleef.h>
+#endif
+
 // Detect SIMD capabilities at compile time
 // AVX512 implies AVX2 and AVX, AVX2 implies AVX – define all lower levels
 // so kernels gated on NP_SIMD_AVX are visible in AVX2/AVX-512 builds.
@@ -123,6 +127,13 @@ namespace np
 
       static constexpr bool has_neon =
 #ifdef NP_SIMD_NEON
+          true;
+#else
+          false;
+#endif
+
+      static constexpr bool has_sleef =
+#ifdef NP_HAS_SLEEF
           true;
 #else
           false;
@@ -1495,6 +1506,120 @@ namespace np
       else
       {
         for (std::size_t i = 0; i < n; ++i) out[i] += a * b[i];
+      }
+    }
+
+    // ── Transcendental (SLEEF-accelerated, scalar fallback) ───────────────
+    template <typename T>
+    inline void sin_vectorized(const T* in, T* out, std::size_t n) {
+      if constexpr (std::is_same_v<T, double>) {
+#if defined(NP_HAS_SLEEF) && defined(NP_SIMD_AVX)
+        std::size_t i=0;
+#if defined(NP_SIMD_AVX512)
+        for (; i+8 <= n; i+=8){ __m512d v=_mm512_loadu_pd(in+i); __m512d r=Sleef_sind8_u10(v); _mm512_storeu_pd(out+i,r); }
+#endif
+        for (; i+4 <= n; i+=4){ __m256d v=_mm256_loadu_pd(in+i); __m256d r=Sleef_sind4_u10(v); _mm256_storeu_pd(out+i,r); }
+        for (; i < n; ++i) out[i]=std::sin(in[i]);
+#else
+        for (std::size_t i=0;i<n;++i) out[i]=std::sin(in[i]);
+#endif
+      } else if constexpr (std::is_same_v<T, float>) {
+#if defined(NP_HAS_SLEEF) && defined(NP_SIMD_AVX)
+        std::size_t i=0;
+#if defined(NP_SIMD_AVX512)
+        for (; i+16 <= n; i+=16){ __m512 v=_mm512_loadu_ps(in+i); __m512 r=Sleef_sinf16_u10(v); _mm512_storeu_ps(out+i,r); }
+#endif
+        for (; i+8 <= n; i+=8){ __m256 v=_mm256_loadu_ps(in+i); __m256 r=Sleef_sinf8_u10(v); _mm256_storeu_ps(out+i,r); }
+        for (; i < n; ++i) out[i]=std::sin(in[i]);
+#else
+        for (std::size_t i=0;i<n;++i) out[i]=std::sin(in[i]);
+#endif
+      } else {
+        for (std::size_t i=0;i<n;++i) out[i]=std::sin(in[i]);
+      }
+    }
+    template <typename T>
+    inline void cos_vectorized(const T* in, T* out, std::size_t n) {
+      if constexpr (std::is_same_v<T, double>) {
+#if defined(NP_HAS_SLEEF) && defined(NP_SIMD_AVX)
+        std::size_t i=0;
+#if defined(NP_SIMD_AVX512)
+        for (; i+8 <= n; i+=8){ __m512d v=_mm512_loadu_pd(in+i); __m512d r=Sleef_cosd8_u10(v); _mm512_storeu_pd(out+i,r); }
+#endif
+        for (; i+4 <= n; i+=4){ __m256d v=_mm256_loadu_pd(in+i); __m256d r=Sleef_cosd4_u10(v); _mm256_storeu_pd(out+i,r); }
+        for (; i < n; ++i) out[i]=std::cos(in[i]);
+#else
+        for (std::size_t i=0;i<n;++i) out[i]=std::cos(in[i]);
+#endif
+      } else if constexpr (std::is_same_v<T, float>) {
+#if defined(NP_HAS_SLEEF) && defined(NP_SIMD_AVX)
+        std::size_t i=0;
+#if defined(NP_SIMD_AVX512)
+        for (; i+16 <= n; i+=16){ __m512 v=_mm512_loadu_ps(in+i); __m512 r=Sleef_cosf16_u10(v); _mm512_storeu_ps(out+i,r); }
+#endif
+        for (; i+8 <= n; i+=8){ __m256 v=_mm256_loadu_ps(in+i); __m256 r=Sleef_cosf8_u10(v); _mm256_storeu_ps(out+i,r); }
+        for (; i < n; ++i) out[i]=std::cos(in[i]);
+#else
+        for (std::size_t i=0;i<n;++i) out[i]=std::cos(in[i]);
+#endif
+      } else {
+        for (std::size_t i=0;i<n;++i) out[i]=std::cos(in[i]);
+      }
+    }
+    template <typename T>
+    inline void exp_vectorized(const T* in, T* out, std::size_t n) {
+      if constexpr (std::is_same_v<T, double>) {
+#if defined(NP_HAS_SLEEF) && defined(NP_SIMD_AVX)
+        std::size_t i=0;
+#if defined(NP_SIMD_AVX512)
+        for (; i+8 <= n; i+=8){ __m512d v=_mm512_loadu_pd(in+i); __m512d r=Sleef_expd8_u10(v); _mm512_storeu_pd(out+i,r); }
+#endif
+        for (; i+4 <= n; i+=4){ __m256d v=_mm256_loadu_pd(in+i); __m256d r=Sleef_expd4_u10(v); _mm256_storeu_pd(out+i,r); }
+        for (; i < n; ++i) out[i]=std::exp(in[i]);
+#else
+        for (std::size_t i=0;i<n;++i) out[i]=std::exp(in[i]);
+#endif
+      } else if constexpr (std::is_same_v<T, float>) {
+#if defined(NP_HAS_SLEEF) && defined(NP_SIMD_AVX)
+        std::size_t i=0;
+#if defined(NP_SIMD_AVX512)
+        for (; i+16 <= n; i+=16){ __m512 v=_mm512_loadu_ps(in+i); __m512 r=Sleef_expf16_u10(v); _mm512_storeu_ps(out+i,r); }
+#endif
+        for (; i+8 <= n; i+=8){ __m256 v=_mm256_loadu_ps(in+i); __m256 r=Sleef_expf8_u10(v); _mm256_storeu_ps(out+i,r); }
+        for (; i < n; ++i) out[i]=std::exp(in[i]);
+#else
+        for (std::size_t i=0;i<n;++i) out[i]=std::exp(in[i]);
+#endif
+      } else {
+        for (std::size_t i=0;i<n;++i) out[i]=std::exp(in[i]);
+      }
+    }
+    template <typename T>
+    inline void log_vectorized(const T* in, T* out, std::size_t n) {
+      if constexpr (std::is_same_v<T, double>) {
+#if defined(NP_HAS_SLEEF) && defined(NP_SIMD_AVX)
+        std::size_t i=0;
+#if defined(NP_SIMD_AVX512)
+        for (; i+8 <= n; i+=8){ __m512d v=_mm512_loadu_pd(in+i); __m512d r=Sleef_logd8_u10(v); _mm512_storeu_pd(out+i,r); }
+#endif
+        for (; i+4 <= n; i+=4){ __m256d v=_mm256_loadu_pd(in+i); __m256d r=Sleef_logd4_u10(v); _mm256_storeu_pd(out+i,r); }
+        for (; i < n; ++i) out[i]=std::log(in[i]);
+#else
+        for (std::size_t i=0;i<n;++i) out[i]=std::log(in[i]);
+#endif
+      } else if constexpr (std::is_same_v<T, float>) {
+#if defined(NP_HAS_SLEEF) && defined(NP_SIMD_AVX)
+        std::size_t i=0;
+#if defined(NP_SIMD_AVX512)
+        for (; i+16 <= n; i+=16){ __m512 v=_mm512_loadu_ps(in+i); __m512 r=Sleef_logf16_u10(v); _mm512_storeu_ps(out+i,r); }
+#endif
+        for (; i+8 <= n; i+=8){ __m256 v=_mm256_loadu_ps(in+i); __m256 r=Sleef_logf8_u10(v); _mm256_storeu_ps(out+i,r); }
+        for (; i < n; ++i) out[i]=std::log(in[i]);
+#else
+        for (std::size_t i=0;i<n;++i) out[i]=std::log(in[i]);
+#endif
+      } else {
+        for (std::size_t i=0;i<n;++i) out[i]=std::log(in[i]);
       }
     }
 
