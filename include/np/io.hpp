@@ -21,6 +21,9 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#if __cplusplus >= 202302L && __has_include(<expected>)
+#include <expected>
+#endif
 #include <fstream>
 #if __has_include(<zlib.h>)
 #include <zlib.h>
@@ -1413,6 +1416,45 @@ namespace np
     std::reverse(s.begin(), s.end());
     return s;
   }
+
+  namespace secure
+  {
+    template <typename T>
+    NP_NODISCARD inline bool save(const std::string& filename, const ndarray<T>& arr) noexcept
+    {
+      try
+      {
+        ::np::save(filename, arr);
+        pqc::ct_barrier();
+        return true;
+      }
+      catch (...)
+      {
+        pqc::ct_barrier();
+        return false;
+      }
+    }
+    template <typename T>
+    NP_NODISCARD inline auto load(const std::string& filename)
+#if __cplusplus >= 202302L && __has_include(<expected>)
+        -> std::expected<ndarray<T>, std::string>
+    {
+      try
+      {
+        return ::np::load<T>(filename);
+      }
+      catch (const std::exception& e)
+      {
+        return std::unexpected<std::string>(e.what());
+      }
+    }
+#else
+        -> ndarray<T>
+    {
+      return ::np::load<T>(filename);
+    }
+#endif
+  } // namespace secure
 
 } // namespace np
 
