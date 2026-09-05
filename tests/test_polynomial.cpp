@@ -74,10 +74,15 @@ int main()
     auto p3 = ndarray<double>::from_data({4}, {1.0, -6.0, 11.0, -6.0});
     auto r3 = roots(p3);
     check(r3.size() == 3, "roots cubic size");
-    // Check residuals rather than exact positions (tolerates eig variation)
+    // Check residuals via Horner (complex) rather than exact positions (tolerates eig variation)
+    auto eval_poly = [](const ndarray<double>& p, std::complex<double> x) {
+      std::complex<double> y = p.at(0);
+      for (size_t i = 1; i < p.size(); ++i) y = y * x + p.at(i);
+      return y;
+    };
     bool c_ok = true;
     for (size_t i = 0; i < 3; ++i) {
-      auto v = polyval(p3, r3.at(i));
+      auto v = eval_poly(p3, r3.at(i));
       if (std::abs(v) > 1e-2) c_ok = false;
     }
     check(c_ok, "roots cubic residual");
@@ -87,7 +92,7 @@ int main()
     check(r4.size() == 4, "roots quartic size");
     bool q_ok = true;
     for (size_t i = 0; i < 4; ++i) {
-      auto v = polyval(p4, r4.at(i));
+      auto v = eval_poly(p4, r4.at(i));
       if (std::abs(v) > 1e-2) q_ok = false;
     }
     check(q_ok, "roots quartic residual");
