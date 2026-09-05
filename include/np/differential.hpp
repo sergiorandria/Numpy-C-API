@@ -63,6 +63,9 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
+#if __cplusplus >= 202302L && __has_include(<expected>)
+#include <expected>
+#endif
 
 #include "api_macros.hpp"
 #include "dtype.hpp"
@@ -486,15 +489,19 @@ namespace np::differential
       {
         std::string s;
         s.reserve(64);
-        std::function<void(const Node&)> dfs = [&](const Node& x) {
+        std::function<void(const Node&)> dfs = [&](const Node& x)
+        {
           s += std::to_string(static_cast<int>(x.type)) + ":";
           if (x.type == Node::Type::Const)
             s += std::to_string(x.cval) + ";";
           else if (x.type == Node::Type::Var)
             s += std::to_string(x.var) + ";";
-          if (x.left) dfs(*x.left);
-          if (x.right) dfs(*x.right);
-          if (x.child) dfs(*x.child);
+          if (x.left)
+            dfs(*x.left);
+          if (x.right)
+            dfs(*x.right);
+          if (x.child)
+            dfs(*x.child);
           s += "|";
         };
         dfs(n);
@@ -508,12 +515,15 @@ namespace np::differential
 
       LLVMJit()
       {
-        std::call_once(init_flag, []() {
-          llvm::InitializeNativeTarget();
-          llvm::InitializeNativeTargetAsmPrinter();
-          llvm::InitializeNativeTargetAsmParser();
-          llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
-        });
+        std::call_once(
+            init_flag,
+            []()
+            {
+              llvm::InitializeNativeTarget();
+              llvm::InitializeNativeTargetAsmPrinter();
+              llvm::InitializeNativeTargetAsmParser();
+              llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
+            });
 #if NP_HAS_LLVM_ORC
         auto jit_exp = llvm::orc::LLJITBuilder().create();
         if (jit_exp)
@@ -532,8 +542,8 @@ namespace np::differential
       static std::once_flag init_flag;
 
       // Emit LLVM IR for Node tree — recursive, handles all Node::Type
-      static llvm::Value*
-      emit_ir(const Node& n, llvm::IRBuilder<>& b, llvm::Value* args_ptr, llvm::Module& mod)
+      static llvm::Value* emit_ir(
+          const Node& n, llvm::IRBuilder<>& b, llvm::Value* args_ptr, llvm::Module& mod)
       {
         llvm::LLVMContext& ctx = b.getContext();
         (void)ctx;
@@ -563,7 +573,10 @@ namespace np::differential
           {
             llvm::Function* fn = llvm::Intrinsic::getOrInsertDeclaration(
                 &mod, llvm::Intrinsic::pow, {b.getDoubleTy()});
-            return b.CreateCall(fn, {emit_ir(*n.left, b, args_ptr, mod), emit_ir(*n.right, b, args_ptr, mod)});
+            return b.CreateCall(
+                fn,
+                {emit_ir(*n.left, b, args_ptr, mod),
+                 emit_ir(*n.right, b, args_ptr, mod)});
           }
           case Node::Type::Sin:
           {
@@ -602,7 +615,8 @@ namespace np::differential
             {
               llvm::FunctionType* ft =
                   llvm::FunctionType::get(b.getDoubleTy(), {b.getDoubleTy()}, false);
-              fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "tan", mod);
+              fn =
+                  llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "tan", mod);
             }
             return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
           }
@@ -613,7 +627,8 @@ namespace np::differential
             {
               llvm::FunctionType* ft =
                   llvm::FunctionType::get(b.getDoubleTy(), {b.getDoubleTy()}, false);
-              fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "asin", mod);
+              fn = llvm::Function::Create(
+                  ft, llvm::Function::ExternalLinkage, "asin", mod);
             }
             return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
           }
@@ -624,7 +639,8 @@ namespace np::differential
             {
               llvm::FunctionType* ft =
                   llvm::FunctionType::get(b.getDoubleTy(), {b.getDoubleTy()}, false);
-              fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "acos", mod);
+              fn = llvm::Function::Create(
+                  ft, llvm::Function::ExternalLinkage, "acos", mod);
             }
             return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
           }
@@ -635,7 +651,8 @@ namespace np::differential
             {
               llvm::FunctionType* ft =
                   llvm::FunctionType::get(b.getDoubleTy(), {b.getDoubleTy()}, false);
-              fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "atan", mod);
+              fn = llvm::Function::Create(
+                  ft, llvm::Function::ExternalLinkage, "atan", mod);
             }
             return b.CreateCall(fn, {emit_ir(*n.child, b, args_ptr, mod)});
           }
@@ -662,11 +679,12 @@ namespace np::differential
         mod->setDataLayout(jit->getDataLayout());
 
         llvm::IRBuilder<> b(*ctx);
-        llvm::FunctionType* ft = llvm::FunctionType::get(
-            b.getDoubleTy(), {b.getPtrTy()}, false);
+        llvm::FunctionType* ft =
+            llvm::FunctionType::get(b.getDoubleTy(), {b.getPtrTy()}, false);
         // unique name per content hash to avoid collision
         std::string fname = "eval_" + std::to_string(std::hash<std::string>{}(key));
-        llvm::Function* fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, fname, *mod);
+        llvm::Function* fn =
+            llvm::Function::Create(ft, llvm::Function::ExternalLinkage, fname, *mod);
         fn->setDSOLocal(true);
         llvm::BasicBlock* bb = llvm::BasicBlock::Create(*ctx, "entry", fn);
         b.SetInsertPoint(bb);
@@ -713,13 +731,14 @@ namespace np::differential
         if (!ctx_holder || !mod_holder)
           return nullptr;
         llvm::IRBuilder<> b(*ctx_holder);
-        llvm::FunctionType* ft = llvm::FunctionType::get(
-            b.getDoubleTy(), {b.getPtrTy()}, false);
+        llvm::FunctionType* ft =
+            llvm::FunctionType::get(b.getDoubleTy(), {b.getPtrTy()}, false);
         std::string fname = "eval_" + std::to_string(std::hash<std::string>{}(key));
         // avoid duplicate
         if (mod_holder->getFunction(fname))
           fname += "_" + std::to_string(cache.size());
-        llvm::Function* fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, fname, *mod_holder);
+        llvm::Function* fn = llvm::Function::Create(
+            ft, llvm::Function::ExternalLinkage, fname, *mod_holder);
         llvm::BasicBlock* bb = llvm::BasicBlock::Create(*ctx_holder, "entry", fn);
         b.SetInsertPoint(bb);
         llvm::Value* args_ptr = fn->getArg(0);
@@ -771,7 +790,8 @@ namespace np::differential
   template <Scalar T = f64_t>
   struct LLVMStrategy : IEvaluator<T>
   {
-    // For non-double types, fall back to interpreter (complex/float need separate codegen)
+    // For non-double types, fall back to interpreter (complex/float need separate
+    // codegen)
     T eval(const Node& n, const PointT<T>& p) const override
     {
       if constexpr (!std::is_same_v<T, f64_t>)
@@ -820,7 +840,8 @@ namespace np::differential
         // LLVM optimizations (constant folding, CSE, vectorization).
         Dual<T> r{};
         r.val = eval(n, p);
-        // Build derivative node, then JIT it (simplify is optional and may not be visible here)
+        // Build derivative node, then JIT it (simplify is optional and may not be visible
+        // here)
         DiffVisitor dv{var};
         NodePtr d = dv.visit(n);
         if (!d)
@@ -831,11 +852,11 @@ namespace np::differential
         // Optional: simplify if kernel is available (avoid hard dep to keep header order)
         // d = ::np::differential::kernel::simplify(d);
         if (!d || d->type == Node::Type::Const)
-        if (!d || d->type == Node::Type::Const)
-        {
-          r.dval = d ? static_cast<T>(d->cval) : T(0);
-          return r;
-        }
+          if (!d || d->type == Node::Type::Const)
+          {
+            r.dval = d ? static_cast<T>(d->cval) : T(0);
+            return r;
+          }
         // JIT the derivative
         auto* fn = detail_llvm::global_jit().compile(*d);
         if (fn)
@@ -1294,6 +1315,22 @@ namespace np::differential
     {
       return vars;
     }
+
+#if __cplusplus >= 202302L
+    // C++23 expected for recoverable parse errors (vs throw for truly exceptional)
+    [[nodiscard]] static std::expected<VM, std::string> try_create(
+        const std::string& expr, const std::vector<std::string>& vars = {"x"}) noexcept
+    {
+      try
+      {
+        return VM(expr, vars);
+      }
+      catch (const std::exception& e)
+      {
+        return std::unexpected<std::string>(e.what());
+      }
+    }
+#endif
 
     // Dual AD derivative w.r.t var index (Strategy delegates to evaluator)
     f64_t derivative(const Point& p, int var) const

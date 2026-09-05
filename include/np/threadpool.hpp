@@ -649,7 +649,7 @@ namespace np
     void (*__np_wait_ptr)(ThreadPool*);
     void (*__np_shutdown_ptr)(ThreadPool*);
     std::optional<Task> (*__np_try_steal_any_ptr)(ThreadPool*);
-    void (*__np_worker_loop_ptr)(ThreadPool*, std::size_t);
+    void (*__np_worker_loop_ptr)(ThreadPool*, std::size_t, std::stop_token);
 
     void __np_init_ptrs()
     {
@@ -692,11 +692,7 @@ namespace np
       for (std::size_t i = 0; i < n_threads; ++i)
       {
         self->__np_impl->workers.emplace_back(
-            [self, i](std::stop_token st) {
-              // jthread cooperative cancellation: check st.stop_requested() inside loop
-              (void)st;
-              self->__np_worker_loop_ptr(self, i);
-            });
+            [self, i](std::stop_token st) { self->__np_worker_loop_ptr(self, i, st); });
       }
     }
 
@@ -730,7 +726,8 @@ namespace np
             w.request_stop();
           // jthread destructor will join, but explicit wait ensures done
           for (auto& w : self->__np_impl->workers)
-            if (w.joinable()) w.join();
+            if (w.joinable())
+              w.join();
         }
         self->__np_impl.reset();
       }
@@ -858,7 +855,8 @@ namespace np
       return __np_try_steal_any_mutex(self);
     }
 
-    NP_HIDDEN static void __np_worker_loop_mutex(ThreadPool* self, std::size_t idx)
+    NP_HIDDEN static void
+    __np_worker_loop_mutex(ThreadPool* self, std::size_t idx, std::stop_token st = {})
     {
 #ifdef _WIN32
       detail::__np::__np_pin_thread_windows(idx);
@@ -866,7 +864,8 @@ namespace np
       detail::__np::__np_pin_thread_linux(idx);
 #endif
       constexpr int kSpinIters = 64;
-      while (!self->__np_impl->done.load(std::memory_order_acquire))
+      while (!self->__np_impl->done.load(std::memory_order_acquire)
+             && !st.stop_requested())
       {
         std::optional<Task> job = self->__np_impl->queues[idx]->pop_bottom();
         if (!job)
@@ -887,10 +886,10 @@ namespace np
           {
             (*job)();
           }
-          catch (...) {
+          catch (...)
+          {
 
             std::cerr << "[ThreadPool] task threw unknown exception (suppressed)\n";
-
           }
           continue;
         }
@@ -921,10 +920,10 @@ namespace np
           {
             (*job)();
           }
-          catch (...) {
+          catch (...)
+          {
 
             std::cerr << "[ThreadPool] task threw unknown exception (suppressed)\n";
-
           }
           continue;
         }
@@ -950,9 +949,10 @@ namespace np
       }
     }
 
-    NP_HIDDEN static void __np_worker_loop_lockfree(ThreadPool* self, std::size_t idx)
+    NP_HIDDEN static void
+    __np_worker_loop_lockfree(ThreadPool* self, std::size_t idx, std::stop_token st = {})
     {
-      __np_worker_loop_mutex(self, idx);
+      __np_worker_loop_mutex(self, idx, st);
     }
 
     // parallel_for internal with two impls

@@ -12,13 +12,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DNP_WERROR=ON
       - name: Build
         run: cmake --build build -j8
       - name: Test 38/38
         run: ctest --test-dir build --output-on-failure
       - name: Bench hardware (smoke)
         run: ./build/tests/bench_hardware || true
+
+  ctest-asan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (ASan+UBSan)
+        run: cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DNP_ENABLE_SANITIZERS=ON -DNP_WERROR=ON
+      - name: Build
+        run: cmake --build build-asan -j8
+      - name: Test with sanitizers
+        run: ctest --test-dir build-asan --output-on-failure
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-tidy
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy
+      - name: Configure (clang-tidy)
+        run: cmake -S . -B build-tidy -DCMAKE_BUILD_TYPE=Release -DNP_ENABLE_TIDY=ON -DNP_WERROR=ON
+      - name: Build (tidy)
+        run: cmake --build build-tidy -j8 2>&1 | tee tidy.log; test ${PIPESTATUS[0]} -eq 0
 
   isabelle:
     runs-on: ubuntu-latest

@@ -15,8 +15,8 @@ namespace np::physics
 
   struct FluidState
   {
-    ndarray<double> u, v, p;
     int nx = 0, ny = 0;
+    ndarray<double> u, v, p;
     FluidState() = default;
     FluidState(int nx_, int ny_) : nx(nx_), ny(ny_), u(std::vector<int>{ny_, nx_}), v(std::vector<int>{ny_, nx_}), p(std::vector<int>{ny_, nx_}) {}
   };

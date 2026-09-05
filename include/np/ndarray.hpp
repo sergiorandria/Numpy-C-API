@@ -4860,6 +4860,13 @@ namespace np
           std::sort(work.begin(), work.end());
         }
       }
+      else if constexpr (detail::is_complex_v<value_type>)
+      {
+        std::sort(work.begin(), work.end(), [](const value_type& a, const value_type& b) {
+          if (a.real() != b.real()) return a.real() < b.real();
+          return a.imag() < b.imag();
+        });
+      }
       else
       {
         std::sort(work.begin(), work.end());
@@ -4914,6 +4921,13 @@ namespace np
         {
           std::sort(work.begin(), work.end());
         }
+      }
+      else if constexpr (detail::is_complex_v<value_type>)
+      {
+        std::sort(work.begin(), work.end(), [](const value_type& a, const value_type& b) {
+          if (a.real() != b.real()) return a.real() < b.real();
+          return a.imag() < b.imag();
+        });
       }
       else
       {

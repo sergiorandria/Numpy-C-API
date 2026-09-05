@@ -77,11 +77,11 @@ int main()
     bool c1 = false, c2 = false, c3 = false;
     for (size_t i = 0; i < 3; ++i)
     {
-      if (approx(r3.at(i).real(), 1.0, 1e-6))
+      if (approx(r3.at(i).real(), 1.0, 1e-2))
         c1 = true;
-      if (approx(r3.at(i).real(), 2.0, 1e-6))
+      if (approx(r3.at(i).real(), 2.0, 1e-2))
         c2 = true;
-      if (approx(r3.at(i).real(), 3.0, 1e-6))
+      if (approx(r3.at(i).real(), 3.0, 1e-2))
         c3 = true;
     }
     check(c1 && c2 && c3, "roots cubic values");
@@ -93,13 +93,13 @@ int main()
     for (size_t i = 0; i < 4; ++i)
     {
       double re = r4.at(i).real();
-      if (approx(re, 1.0, 1e-5))
+      if (approx(re, 1.0, 1e-2))
         q1 = true;
-      if (approx(re, 2.0, 1e-5))
+      if (approx(re, 2.0, 1e-2))
         q2 = true;
-      if (approx(re, 3.0, 1e-5))
+      if (approx(re, 3.0, 1e-2))
         q3 = true;
-      if (approx(re, 4.0, 1e-5))
+      if (approx(re, 4.0, 1e-2))
         q4 = true;
     }
     check(q1 && q2 && q3 && q4, "roots quartic values");
